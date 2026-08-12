@@ -1,0 +1,2 @@
+-- Establishes the Flyway baseline for the Coach Gym database.
+-- Domain schema changes are introduced with subsequent feature migrations.

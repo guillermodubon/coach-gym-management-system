@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: coach-gym-management-system
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
+  config:
+    import: optional:file:./.env[.properties]
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:${POSTGRES_HOST_PORT:5433}/${POSTGRES_DB:coach_gym}}
+    username: ${DATABASE_USERNAME:${POSTGRES_USER:coach_gym_app}}
+    password: ${DATABASE_PASSWORD:${POSTGRES_PASSWORD:}}
+  docker:
+    compose:
+      enabled: ${DOCKER_COMPOSE_ENABLED:true}
+      file: compose.yaml
+      lifecycle-management: start-only
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    validate-migration-naming: true
+    validate-on-migrate: true
+    clean-disabled: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+gym:
+  time-zone: America/El_Salvador
+  currency: USD
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+server:
+  port: ${SERVER_PORT:8080}
