@@ -7,7 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(GymProperties.class)
+@EnableConfigurationProperties({GymProperties.class, InitialAdminProperties.class})
 class GymConfiguration {
 
     @Bean
