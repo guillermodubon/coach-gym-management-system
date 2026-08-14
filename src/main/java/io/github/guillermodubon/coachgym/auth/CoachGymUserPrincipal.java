@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.auth;
 
 import io.github.guillermodubon.coachgym.user.AuthenticatedUser;
+import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -49,6 +50,10 @@ public final class CoachGymUserPrincipal implements UserDetails {
 
     public String fullName() {
         return fullName;
+    }
+
+    public AuthenticatedActor authenticatedActor() {
+        return new AuthenticatedActor(id, username);
     }
 
     @Override
