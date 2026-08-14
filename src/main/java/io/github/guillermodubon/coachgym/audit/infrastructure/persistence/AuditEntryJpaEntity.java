@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
+import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -59,6 +60,26 @@ class AuditEntryJpaEntity {
         entry.resourceId = event.clientId();
         entry.resourceCodeSnapshot = event.clientCode();
         entry.summary = "Client registered.";
+        entry.metadata = Map.of();
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(PlanChanged event) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "PLAN_" + event.changeType().name();
+        entry.resourceType = "MEMBERSHIP_PLAN";
+        entry.resourceId = event.planId();
+        entry.resourceCodeSnapshot = event.planCode();
+        entry.summary = switch (event.changeType()) {
+            case CREATED -> "Membership plan created.";
+            case UPDATED -> "Membership plan updated.";
+            case DEACTIVATED -> "Membership plan deactivated.";
+            case REACTIVATED -> "Membership plan reactivated.";
+        };
         entry.metadata = Map.of();
         entry.occurredAt = event.occurredAt();
         return entry;

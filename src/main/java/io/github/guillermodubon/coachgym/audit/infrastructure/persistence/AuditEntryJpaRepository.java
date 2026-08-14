@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 import java.util.UUID;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryStore;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
+import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -20,6 +21,11 @@ class AuditEntryPersistenceAdapter implements AuditEntryStore {
 
     @Override
     public void recordClientRegistered(ClientRegistered event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    public void recordPlanChanged(PlanChanged event) {
         repository.save(AuditEntryJpaEntity.from(event));
     }
 }
