@@ -1,0 +1,25 @@
+package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
+
+import java.util.UUID;
+import io.github.guillermodubon.coachgym.audit.application.AuditEntryStore;
+import io.github.guillermodubon.coachgym.client.ClientRegistered;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+interface AuditEntryJpaRepository extends JpaRepository<AuditEntryJpaEntity, UUID> {
+}
+
+@Repository
+class AuditEntryPersistenceAdapter implements AuditEntryStore {
+
+    private final AuditEntryJpaRepository repository;
+
+    AuditEntryPersistenceAdapter(AuditEntryJpaRepository repository) {
+        this.repository = repository;
+    }
+
+    @Override
+    public void recordClientRegistered(ClientRegistered event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+}
