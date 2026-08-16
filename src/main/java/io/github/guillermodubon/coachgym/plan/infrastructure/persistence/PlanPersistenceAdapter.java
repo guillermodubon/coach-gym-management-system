@@ -13,7 +13,9 @@ import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.OptimisticLockException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
@@ -129,5 +131,16 @@ class PlanPersistenceAdapter implements PlanStore {
                 ? Sort.Direction.ASC
                 : Sort.Direction.DESC;
         return Sort.by(direction, property);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PlanDetails> findByIds(
+            Set<UUID> planIds) {
+
+        return planRepository.findAllById(planIds)
+                .stream()
+                .map(MembershipPlanJpaEntity::toDetails)
+                .toList();
     }
 }

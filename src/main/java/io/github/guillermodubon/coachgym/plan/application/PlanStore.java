@@ -4,7 +4,9 @@ import io.github.guillermodubon.coachgym.plan.PlanDetails;
 import io.github.guillermodubon.coachgym.plan.domain.PlanDefinition;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public interface PlanStore {
@@ -28,4 +30,7 @@ public interface PlanStore {
             long expectedVersion,
             AuthenticatedActor actor,
             Instant occurredAt);
+
+    List<PlanDetails> findByIds(
+            Set<UUID> planIds);
 }

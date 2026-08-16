@@ -1,14 +1,13 @@
 package io.github.guillermodubon.coachgym.plan.application;
 
-import io.github.guillermodubon.coachgym.plan.PlanChangeType;
-import io.github.guillermodubon.coachgym.plan.PlanChanged;
-import io.github.guillermodubon.coachgym.plan.PlanDetails;
-import io.github.guillermodubon.coachgym.plan.PlanQuery;
+import io.github.guillermodubon.coachgym.plan.*;
 import io.github.guillermodubon.coachgym.plan.domain.PlanDefinition;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class PlanApplicationService implements PlanQuery {
+public class PlanApplicationService implements PlanQuery, PlanCatalogQuery {
 
     private final PlanStore planStore;
     private final ApplicationEventPublisher eventPublisher;
@@ -138,5 +137,17 @@ public class PlanApplicationService implements PlanQuery {
                 command.durationUnit(),
                 command.listPrice(),
                 command.currency());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<PlanDetails> findByIds(
+            Set<UUID> planIds) {
+
+        if (planIds == null || planIds.isEmpty()) {
+            return List.of();
+        }
+
+        return planStore.findByIds(planIds);
     }
 }

@@ -2,6 +2,8 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
+import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
+import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -47,8 +49,7 @@ class AuditEntryJpaEntity {
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
 
-    protected AuditEntryJpaEntity() {
-    }
+    protected AuditEntryJpaEntity() {}
 
     static AuditEntryJpaEntity from(ClientRegistered event) {
         AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
@@ -83,5 +84,122 @@ class AuditEntryJpaEntity {
         entry.metadata = Map.of();
         entry.occurredAt = event.occurredAt();
         return entry;
+    }
+
+    static AuditEntryJpaEntity from(PromotionChanged event) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode =
+                "PROMOTION_" + event.changeType().name();
+        entry.resourceType = "PROMOTION";
+        entry.resourceId = event.promotionId();
+        entry.resourceCodeSnapshot = event.promotionCode();
+        entry.summary = promotionSummary(event);
+        entry.metadata = Map.of();
+        entry.occurredAt = event.occurredAt();
+
+        return entry;
+    }
+
+    private static String promotionSummary(
+            PromotionChanged event) {
+
+        return switch (event.changeType()) {
+            case CREATED ->
+                    "Promotion created.";
+
+            case UPDATED ->
+                    "Promotion updated.";
+
+            case DEACTIVATED ->
+                    "Promotion deactivated.";
+
+            case REACTIVATED ->
+                    "Promotion reactivated.";
+
+            case ELIGIBLE_PLANS_CHANGED ->
+                    "Promotion eligible plans changed.";
+        };
+    }
+
+    static AuditEntryJpaEntity from(
+            PromotionPlanEligibilityChanged event) {
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id = UUID.randomUUID();
+        entry.actorUserId =
+                event.actorUserId();
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+        entry.actionCode =
+                "PROMOTION_ELIGIBLE_PLANS_CHANGED";
+        entry.resourceType =
+                "PROMOTION";
+        entry.resourceId =
+                event.promotionId();
+        entry.resourceCodeSnapshot =
+                event.promotionCode();
+        entry.summary =
+                "Promotion eligible plans changed.";
+        entry.metadata =
+                Map.of(
+                        "eligiblePlanIds",
+                        event.eligiblePlanIds()
+                                .stream()
+                                .map(UUID::toString)
+                                .sorted()
+                                .toList(),
+                        "eligiblePlanCount",
+                        event.eligiblePlanIds()
+                                .size());
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    UUID id() {
+        return id;
+    }
+
+    UUID actorUserId() {
+        return actorUserId;
+    }
+
+    String actorIdentifierSnapshot() {
+        return actorIdentifierSnapshot;
+    }
+
+    String actionCode() {
+        return actionCode;
+    }
+
+    String resourceType() {
+        return resourceType;
+    }
+
+    UUID resourceId() {
+        return resourceId;
+    }
+
+    String resourceCodeSnapshot() {
+        return resourceCodeSnapshot;
+    }
+
+    String summary() {
+        return summary;
+    }
+
+    Map<String, Object> metadata() {
+        return metadata;
+    }
+
+    Instant occurredAt() {
+        return occurredAt;
     }
 }
