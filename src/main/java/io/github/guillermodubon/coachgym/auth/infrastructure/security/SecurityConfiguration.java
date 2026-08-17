@@ -76,6 +76,8 @@ class SecurityConfiguration {
                         .authenticated()
                         .requestMatchers("/api/v1/promotions/**")
                         .authenticated()
+                        .requestMatchers("/api/v1/memberships/**")
+                        .authenticated()
                         .anyRequest()
                         .denyAll())
                 .build();
