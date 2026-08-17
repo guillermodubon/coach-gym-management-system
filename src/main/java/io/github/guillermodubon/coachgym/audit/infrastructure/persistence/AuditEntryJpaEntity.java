@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
+import io.github.guillermodubon.coachgym.membership.MembershipCreated;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -161,6 +162,105 @@ class AuditEntryJpaEntity {
                 event.occurredAt();
 
         return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            MembershipCreated event) {
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id =
+                UUID.randomUUID();
+
+        entry.actorUserId =
+                event.actorUserId();
+
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+
+        entry.actionCode =
+                "MEMBERSHIP_CREATED";
+
+        entry.resourceType =
+                "MEMBERSHIP";
+
+        entry.resourceId =
+                event.membershipId();
+
+        entry.resourceCodeSnapshot =
+                event.membershipCode();
+
+        entry.summary =
+                "Membership created.";
+
+        entry.metadata =
+                membershipCreatedMetadata(event);
+
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    private static Map<String, Object>
+    membershipCreatedMetadata(
+            MembershipCreated event) {
+
+        Map<String, Object> metadata =
+                new java.util.LinkedHashMap<>();
+
+        metadata.put(
+                "clientId",
+                event.clientId().toString());
+
+        metadata.put(
+                "membershipPeriodId",
+                event.membershipPeriodId()
+                        .toString());
+
+        metadata.put(
+                "membershipPlanId",
+                event.membershipPlanId()
+                        .toString());
+
+        if (event.promotionId() != null) {
+            metadata.put(
+                    "promotionId",
+                    event.promotionId()
+                            .toString());
+        }
+
+        metadata.put(
+                "listPrice",
+                event.listPrice()
+                        .toPlainString());
+
+        metadata.put(
+                "discountAmount",
+                event.discountAmount()
+                        .toPlainString());
+
+        metadata.put(
+                "finalPrice",
+                event.finalPrice()
+                        .toPlainString());
+
+        metadata.put(
+                "currency",
+                event.currency());
+
+        metadata.put(
+                "startsOn",
+                event.startsOn()
+                        .toString());
+
+        metadata.put(
+                "effectiveEndsOn",
+                event.effectiveEndsOn()
+                        .toString());
+
+        return Map.copyOf(metadata);
     }
 
     UUID id() {
