@@ -22,4 +22,26 @@ class LayeringArchitectureTests {
                 .allowEmptyShould(true)
                 .check(PROJECT_CLASSES);
     }
+
+    @Test
+    void membershipDoesNotDependOnInternalPackagesOfOtherModules() {
+        noClasses()
+                .that()
+                .resideInAPackage(
+                        "..membership..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAnyPackage(
+                        "..client.application..",
+                        "..client.infrastructure..",
+                        "..client.web..",
+                        "..plan.application..",
+                        "..plan.infrastructure..",
+                        "..plan.web..",
+                        "..promotion.application..",
+                        "..promotion.infrastructure..",
+                        "..promotion.web..")
+                .allowEmptyShould(true)
+                .check(PROJECT_CLASSES);
+    }
 }

@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.client.application;
 
 import io.github.guillermodubon.coachgym.client.ClientDetails;
+import io.github.guillermodubon.coachgym.client.ClientQuery;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.client.domain.ClientRegistration;
 import io.github.guillermodubon.coachgym.client.domain.EmergencyContactRegistration;
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class ClientApplicationService {
+public class ClientApplicationService implements ClientQuery {
 
     private final ClientStore clientStore;
     private final ApplicationEventPublisher eventPublisher;
@@ -60,6 +61,18 @@ public class ClientApplicationService {
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public ClientDetails findById(UUID id) {
         return clientStore.findById(id).orElseThrow(() -> new ClientNotFoundException(id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ClientDetails> findClientById(
+            UUID clientId) {
+
+        if (clientId == null) {
+            return Optional.empty();
+        }
+
+        return clientStore.findById(clientId);
     }
 
     private ClientRegistration toRegistration(RegisterClientCommand command) {
