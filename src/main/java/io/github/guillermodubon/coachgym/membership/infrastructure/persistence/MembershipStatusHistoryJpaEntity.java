@@ -91,4 +91,52 @@ class MembershipStatusHistoryJpaEntity {
 
         return history;
     }
+
+    static MembershipStatusHistoryJpaEntity renewalTransition(
+            UUID membershipId,
+            UUID membershipPeriodId,
+            MembershipStatus previousStatus,
+            MembershipStatus resultingStatus,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        if (previousStatus == null) {
+            throw new IllegalArgumentException(
+                    "Previous membership status must be provided.");
+        }
+
+        if (resultingStatus == null) {
+            throw new IllegalArgumentException(
+                    "Resulting membership status must be provided.");
+        }
+
+        MembershipStatusHistoryJpaEntity history =
+                new MembershipStatusHistoryJpaEntity();
+
+        history.id =
+                UUID.randomUUID();
+
+        history.membershipId =
+                membershipId;
+
+        history.membershipPeriodId =
+                membershipPeriodId;
+
+        history.previousStatus =
+                previousStatus;
+
+        history.newStatus =
+                resultingStatus;
+
+        history.reason =
+                "Membership reactivated by renewal.";
+
+        history.occurredAt =
+                occurredAt;
+
+        history.changedByUserId =
+                actor.id();
+
+        return history;
+    }
 }

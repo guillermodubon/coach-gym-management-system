@@ -160,4 +160,60 @@ class MembershipPeriodJpaEntityTest {
                 LocalDate.of(2026, 10, 1),
                 LocalDate.of(2026, 10, 1));
     }
+
+    @Test
+    void mapsRenewalPeriod() {
+        MembershipPricingSnapshot pricing =
+                MembershipPricingSnapshot.withoutPromotion(
+                        PLAN_ID,
+                        "PLAN-000001",
+                        "Monthly Access",
+                        1,
+                        DurationUnit.MONTH,
+                        new BigDecimal("25.00"),
+                        "USD");
+
+        io.github.guillermodubon.coachgym.membership.domain
+                .MembershipRenewal renewal =
+                new io.github.guillermodubon.coachgym.membership.domain
+                        .MembershipRenewal(
+                        (short) 2,
+                        io.github.guillermodubon.coachgym.membership
+                                .MembershipStatus.ACTIVE,
+                        io.github.guillermodubon.coachgym.membership
+                                .MembershipStatus.ACTIVE,
+                        new MembershipPeriodDates(
+                                LocalDate.of(2026, 10, 1),
+                                LocalDate.of(2026, 11, 1),
+                                LocalDate.of(2026, 11, 1)),
+                        pricing);
+
+        MembershipPeriodJpaEntity entity =
+                MembershipPeriodJpaEntity.renewal(
+                        MEMBERSHIP_ID,
+                        renewal,
+                        ACTOR,
+                        NOW);
+
+        MembershipPeriodDetails details =
+                entity.toDetails();
+
+        assertThat(details.periodNumber())
+                .isEqualTo((short) 2);
+
+        assertThat(details.source())
+                .isEqualTo(
+                        MembershipPeriodSource.RENEWAL);
+
+        assertThat(details.startsOn())
+                .isEqualTo(
+                        LocalDate.of(2026, 10, 1));
+
+        assertThat(details.baseEndsOn())
+                .isEqualTo(
+                        LocalDate.of(2026, 11, 1));
+
+        assertThat(details.pricing().finalPrice())
+                .isEqualByComparingTo("25.00");
+    }
 }

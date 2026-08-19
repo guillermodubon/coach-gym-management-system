@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryStore;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.membership.MembershipCreated;
+import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import java.util.UUID;
@@ -65,5 +66,14 @@ class AuditEntryPersistenceAdapter
 
         repository.save(
                 AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    public void recordMembershipRenewed(
+            MembershipRenewed event) {
+
+        repository.save(
+                AuditEntryJpaEntity.from(
+                        event));
     }
 }

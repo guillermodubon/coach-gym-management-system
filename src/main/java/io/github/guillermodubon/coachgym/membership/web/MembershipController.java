@@ -2,12 +2,7 @@ package io.github.guillermodubon.coachgym.membership.web;
 
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
-import io.github.guillermodubon.coachgym.membership.application.CurrentMembershipAlreadyExistsException;
-import io.github.guillermodubon.coachgym.membership.application.InactiveMembershipClientException;
-import io.github.guillermodubon.coachgym.membership.application.MembershipApplicationService;
-import io.github.guillermodubon.coachgym.membership.application.MembershipClientNotFoundException;
-import io.github.guillermodubon.coachgym.membership.application.MembershipNotFoundException;
-import io.github.guillermodubon.coachgym.membership.application.MembershipPlanNotAvailableException;
+import io.github.guillermodubon.coachgym.membership.application.*;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipValidationException;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationException;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationFailure;
@@ -118,6 +113,71 @@ class MembershipController {
                 .body(
                         MembershipResponse.from(
                                 membership));
+    }
+
+    @PostMapping("/{id}/renew")
+    @Operation(
+            summary = "Renew a membership",
+            description = """
+                Creates a new commercial period for an existing
+                membership.
+
+                An active membership is renewed from the current
+                period's effective end date. A requested start date is
+                ignored for an active membership.
+
+                An expired membership requires a start date that is
+                not before the current operational date. A successful
+                expired-membership renewal changes its status back to
+                ACTIVE.
+
+                Frozen and cancelled memberships cannot be renewed.
+
+                The selected plan must be active. An optional promotion
+                must be active, valid on the effective renewal start
+                date and explicitly eligible for the selected plan.
+
+                The request must contain the current optimistic-lock
+                version of the membership.
+
+                Administrators and receptionists can execute this
+                operation.
+                """)
+    @ApiResponse(
+            responseCode = "200",
+            description = "Membership renewed")
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid membership renewal request")
+    @ApiResponse(
+            responseCode = "401",
+            description = "Authentication required")
+    @ApiResponse(
+            responseCode = "403",
+            description = "Insufficient permissions")
+    @ApiResponse(
+            responseCode = "404",
+            description =
+                    "Membership, client or promotion not found")
+    @ApiResponse(
+            responseCode = "409",
+            description = """
+                Membership version conflict, non-renewable state,
+                inactive client, unavailable plan or promotion
+                evaluation conflict
+                """)
+    MembershipResponse renew(
+            @PathVariable UUID id,
+            @Valid
+            @RequestBody
+            RenewMembershipRequest request,
+            Authentication authentication) {
+
+        return MembershipResponse.from(
+                membershipApplicationService.renew(
+                        id,
+                        request.toCommand(),
+                        actor(authentication)));
     }
 
     @GetMapping("/{id}")
@@ -305,5 +365,27 @@ class MembershipController {
                                 status,
                                 code,
                                 detail));
+    }
+
+    @ExceptionHandler(
+            MembershipNotRenewableException.class)
+    ResponseEntity<ProblemDetail> handleNotRenewable(
+            MembershipNotRenewableException exception) {
+
+        return problem(
+                HttpStatus.CONFLICT,
+                "MEMBERSHIP_NOT_RENEWABLE",
+                exception.getMessage());
+    }
+
+    @ExceptionHandler(
+            MembershipVersionConflictException.class)
+    ResponseEntity<ProblemDetail> handleVersionConflict(
+            MembershipVersionConflictException exception) {
+
+        return problem(
+                HttpStatus.CONFLICT,
+                "MEMBERSHIP_VERSION_CONFLICT",
+                exception.getMessage());
     }
 }
