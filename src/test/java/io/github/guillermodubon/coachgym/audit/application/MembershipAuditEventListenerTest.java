@@ -7,6 +7,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+
+import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
+import io.github.guillermodubon.coachgym.membership.MembershipStatus;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -62,6 +65,23 @@ class MembershipAuditEventListenerTest {
                 .recordMembershipCreated(event);
     }
 
+    @Test
+    void forwardsMembershipRenewedEvent() {
+        MembershipRenewed event =
+                membershipRenewed(
+                        PROMOTION_ID);
+
+        MembershipAuditEventListener listener =
+                new MembershipAuditEventListener(
+                        auditEntryStore);
+
+        listener.record(event);
+
+        verify(auditEntryStore)
+                .recordMembershipRenewed(
+                        event);
+    }
+
     private static MembershipCreated membershipCreated(
             UUID promotionId) {
 
@@ -82,4 +102,30 @@ class MembershipAuditEventListenerTest {
                 "coach-admin",
                 NOW);
     }
+
+    private static MembershipRenewed membershipRenewed(
+            UUID promotionId) {
+
+        return new MembershipRenewed(
+                MEMBERSHIP_ID,
+                "MEM-000001",
+                CLIENT_ID,
+                PERIOD_ID,
+                (short) 2,
+                PLAN_ID,
+                promotionId,
+                new BigDecimal("25.00"),
+                new BigDecimal("2.50"),
+                new BigDecimal("22.50"),
+                "USD",
+                LocalDate.of(2026, 10, 1),
+                LocalDate.of(2026, 11, 1),
+                MembershipStatus.ACTIVE,
+                MembershipStatus.ACTIVE,
+                ACTOR_ID,
+                "coach-admin",
+                NOW);
+    }
+
+
 }

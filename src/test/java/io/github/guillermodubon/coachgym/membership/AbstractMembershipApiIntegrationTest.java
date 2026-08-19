@@ -9,7 +9,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,10 +19,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Testcontainers(disabledWithoutDocker = true)
 @SpringBootTest(
         properties =
                 "spring.docker.compose.enabled=false")
@@ -48,11 +44,13 @@ abstract class AbstractMembershipApiIntegrationTest {
     protected static final String MAINTENANCE_PASSWORD =
             "M-strong-password";
 
-    @Container
-    @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>(
                     "postgres:17-alpine");
+
+    static {
+        POSTGRES.start();
+    }
 
     @Autowired
     protected MockMvc mockMvc;
@@ -66,6 +64,22 @@ abstract class AbstractMembershipApiIntegrationTest {
     @DynamicPropertySource
     static void configureBootstrapAdministrator(
             DynamicPropertyRegistry registry) {
+
+        registry.add(
+                "spring.datasource.url",
+                POSTGRES::getJdbcUrl);
+
+        registry.add(
+                "spring.datasource.username",
+                POSTGRES::getUsername);
+
+        registry.add(
+                "spring.datasource.password",
+                POSTGRES::getPassword);
+
+        registry.add(
+                "spring.datasource.driver-class-name",
+                () -> "org.postgresql.Driver");
 
         registry.add(
                 "coach-gym.bootstrap.admin.enabled",
@@ -371,7 +385,8 @@ abstract class AbstractMembershipApiIntegrationTest {
                     userId,
                     username,
                     email,
-                    passwordEncoder.encode(password),
+                    passwordEncoder.encode(
+                            password),
                     "Membership",
                     "Staff");
         } else {
@@ -389,7 +404,8 @@ abstract class AbstractMembershipApiIntegrationTest {
                     where id = ?
                     """,
                     email,
-                    passwordEncoder.encode(password),
+                    passwordEncoder.encode(
+                            password),
                     "Membership",
                     "Staff",
                     userId);
@@ -449,7 +465,8 @@ abstract class AbstractMembershipApiIntegrationTest {
             UUID... planIds) {
 
         String identifiers =
-                java.util.Arrays.stream(planIds)
+                java.util.Arrays.stream(
+                                planIds)
                         .map(
                                 planId ->
                                         "\""
