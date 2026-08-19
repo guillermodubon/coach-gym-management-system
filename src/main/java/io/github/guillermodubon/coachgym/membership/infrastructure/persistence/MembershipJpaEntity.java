@@ -115,6 +115,36 @@ class MembershipJpaEntity {
         return membership;
     }
 
+    void renew(
+            MembershipStatus resultingStatus,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        if (resultingStatus == null) {
+            throw new IllegalArgumentException(
+                    "Resulting membership status must be provided.");
+        }
+
+        if (actor == null) {
+            throw new IllegalArgumentException(
+                    "Membership renewal actor must be provided.");
+        }
+
+        if (occurredAt == null) {
+            throw new IllegalArgumentException(
+                    "Membership renewal timestamp must be provided.");
+        }
+
+        status =
+                resultingStatus;
+
+        updatedByUserId =
+                actor.id();
+
+        updatedAt =
+                occurredAt;
+    }
+
     UUID id() {
         return id;
     }

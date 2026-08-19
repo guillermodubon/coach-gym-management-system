@@ -5,6 +5,7 @@ import io.github.guillermodubon.coachgym.membership.MembershipPeriodSource;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipCreation;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipPricingSnapshot;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipPromotionSnapshot;
+import io.github.guillermodubon.coachgym.membership.domain.MembershipRenewal;
 import io.github.guillermodubon.coachgym.plan.DurationUnit;
 import io.github.guillermodubon.coachgym.promotion.DiscountType;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
@@ -175,6 +176,10 @@ class MembershipPeriodJpaEntity {
     protected MembershipPeriodJpaEntity() {
     }
 
+    short periodNumber() {
+        return periodNumber;
+    }
+
     static MembershipPeriodJpaEntity initial(
             UUID membershipId,
             MembershipCreation creation,
@@ -237,6 +242,84 @@ class MembershipPeriodJpaEntity {
 
         period.effectiveEndsOn =
                 creation.dates().effectiveEndsOn();
+
+        period.createdByUserId =
+                actor.id();
+
+        period.updatedByUserId =
+                actor.id();
+
+        period.createdAt =
+                occurredAt;
+
+        period.updatedAt =
+                occurredAt;
+
+        return period;
+    }
+
+    static MembershipPeriodJpaEntity renewal(
+            UUID membershipId,
+            MembershipRenewal renewal,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        MembershipPricingSnapshot pricing =
+                renewal.pricing();
+
+        MembershipPeriodJpaEntity period =
+                new MembershipPeriodJpaEntity();
+
+        period.id =
+                UUID.randomUUID();
+
+        period.membershipId =
+                membershipId;
+
+        period.periodNumber =
+                renewal.periodNumber();
+
+        period.periodSource =
+                MembershipPeriodSource.RENEWAL;
+
+        period.membershipPlanId =
+                pricing.membershipPlanId();
+
+        period.planCodeSnapshot =
+                pricing.planCode();
+
+        period.planNameSnapshot =
+                pricing.planName();
+
+        period.durationValueSnapshot =
+                (short) pricing.durationValue();
+
+        period.durationUnitSnapshot =
+                pricing.durationUnit();
+
+        period.listPrice =
+                pricing.listPrice();
+
+        period.currency =
+                pricing.currency();
+
+        period.applyPromotion(
+                pricing.promotion());
+
+        period.discountAmount =
+                pricing.discountAmount();
+
+        period.finalPrice =
+                pricing.finalPrice();
+
+        period.startsOn =
+                renewal.dates().startsOn();
+
+        period.baseEndsOn =
+                renewal.dates().baseEndsOn();
+
+        period.effectiveEndsOn =
+                renewal.dates().effectiveEndsOn();
 
         period.createdByUserId =
                 actor.id();

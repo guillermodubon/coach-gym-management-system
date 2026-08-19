@@ -4,8 +4,11 @@ import io.github.guillermodubon.coachgym.membership.MembershipDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipPeriodDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
 import io.github.guillermodubon.coachgym.membership.application.CurrentMembershipAlreadyExistsException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipNotFoundException;
 import io.github.guillermodubon.coachgym.membership.application.MembershipStore;
+import io.github.guillermodubon.coachgym.membership.application.MembershipVersionConflictException;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipCreation;
+import io.github.guillermodubon.coachgym.membership.domain.MembershipRenewal;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import jakarta.persistence.EntityManager;
 import java.sql.SQLException;
@@ -193,5 +196,121 @@ class MembershipPersistenceAdapter
         }
 
         return false;
+    }
+
+    @Override
+    @Transactional
+    public MembershipDetails renew(
+            UUID membershipId,
+            MembershipRenewal renewal,
+            long expectedVersion,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        MembershipJpaEntity membership =
+                membershipRepository.findByIdForUpdate(
+                                membershipId)
+                        .orElseThrow(
+                                () ->
+                                        new MembershipNotFoundException(
+                                                membershipId));
+
+        verifyVersion(
+                membershipId,
+                expectedVersion,
+                membership.version());
+
+        MembershipPeriodJpaEntity currentPeriod =
+                requireCurrentPeriod(
+                        membershipId);
+
+        verifyNextPeriodNumber(
+                renewal.periodNumber(),
+                currentPeriod.periodNumber());
+
+        membership.renew(
+                renewal.resultingStatus(),
+                actor,
+                occurredAt);
+
+        MembershipJpaEntity savedMembership =
+                membershipRepository.saveAndFlush(
+                        membership);
+
+        entityManager.refresh(
+                savedMembership);
+
+        MembershipPeriodJpaEntity period =
+                periodRepository.saveAndFlush(
+                        MembershipPeriodJpaEntity.renewal(
+                                membershipId,
+                                renewal,
+                                actor,
+                                occurredAt));
+
+        entityManager.refresh(
+                period);
+
+        if (renewal.changesMembershipStatus()) {
+            statusHistoryRepository.saveAndFlush(
+                    MembershipStatusHistoryJpaEntity
+                            .renewalTransition(
+                                    membershipId,
+                                    period.id(),
+                                    renewal.previousStatus(),
+                                    renewal.resultingStatus(),
+                                    actor,
+                                    occurredAt));
+        }
+
+        return toDetails(
+                savedMembership,
+                period);
+    }
+
+    private static void verifyVersion(
+            UUID membershipId,
+            long expectedVersion,
+            long currentVersion) {
+
+        if (expectedVersion != currentVersion) {
+            throw new MembershipVersionConflictException(
+                    membershipId,
+                    expectedVersion,
+                    currentVersion);
+        }
+    }
+
+    private MembershipPeriodJpaEntity requireCurrentPeriod(
+            UUID membershipId) {
+
+        return periodRepository
+                .findFirstByMembershipIdOrderByPeriodNumberDesc(
+                        membershipId)
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "Membership "
+                                                + membershipId
+                                                + " has no persisted period."));
+    }
+
+    private static void verifyNextPeriodNumber(
+            short requestedPeriodNumber,
+            short currentPeriodNumber) {
+
+        int expectedPeriodNumber =
+                currentPeriodNumber + 1;
+
+        if (requestedPeriodNumber
+                != expectedPeriodNumber) {
+
+            throw new IllegalStateException(
+                    "Renewal period number must be "
+                            + expectedPeriodNumber
+                            + " but was "
+                            + requestedPeriodNumber
+                            + ".");
+        }
     }
 }

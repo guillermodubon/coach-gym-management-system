@@ -5,12 +5,8 @@ import io.github.guillermodubon.coachgym.client.ClientQuery;
 import io.github.guillermodubon.coachgym.client.ClientStatus;
 import io.github.guillermodubon.coachgym.membership.MembershipCreated;
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
-import io.github.guillermodubon.coachgym.membership.domain.MembershipCreation;
-import io.github.guillermodubon.coachgym.membership.domain.MembershipPeriodDates;
-import io.github.guillermodubon.coachgym.membership.domain.MembershipPeriodPolicy;
-import io.github.guillermodubon.coachgym.membership.domain.MembershipPricingSnapshot;
-import io.github.guillermodubon.coachgym.membership.domain.MembershipPromotionSnapshot;
-import io.github.guillermodubon.coachgym.membership.domain.MembershipValidationException;
+import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
+import io.github.guillermodubon.coachgym.membership.domain.*;
 import io.github.guillermodubon.coachgym.plan.PlanDetails;
 import io.github.guillermodubon.coachgym.plan.PlanQuery;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationRequest;
@@ -19,6 +15,7 @@ import io.github.guillermodubon.coachgym.promotion.PromotionEvaluator;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -106,9 +103,85 @@ public class MembershipApplicationService {
         return membership;
     }
 
+    @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public MembershipDetails renew(
+            UUID membershipId,
+            RenewMembershipCommand command,
+            AuthenticatedActor actor) {
+
+        validateRenewalRequest(
+                membershipId,
+                command,
+                actor);
+
+        MembershipDetails currentMembership =
+                requireMembership(
+                        membershipId);
+
+        verifyVersion(
+                membershipId,
+                command.version(),
+                currentMembership.version());
+
+        ClientDetails client =
+                requireActiveClient(
+                        currentMembership.clientId());
+
+        PlanDetails plan =
+                requireActivePlan(
+                        command.membershipPlanId());
+
+        LocalDate today =
+                LocalDate.now(clock);
+
+        MembershipRenewalPolicy.RenewalDecision decision =
+                MembershipRenewalPolicy.evaluate(
+                        currentMembership.id(),
+                        currentMembership.status(),
+                        currentMembership.currentPeriod(),
+                        command.startsOn(),
+                        today,
+                        plan.durationValue(),
+                        plan.durationUnit());
+
+        MembershipPricingSnapshot pricing =
+                createPricingSnapshot(
+                        plan,
+                        command.promotionId(),
+                        decision.dates().startsOn());
+
+        MembershipRenewal renewal =
+                new MembershipRenewal(
+                        decision.periodNumber(),
+                        decision.previousStatus(),
+                        decision.resultingStatus(),
+                        decision.dates(),
+                        pricing);
+
+        Instant occurredAt =
+                clock.instant();
+
+        MembershipDetails renewedMembership =
+                membershipStore.renew(
+                        membershipId,
+                        renewal,
+                        command.version(),
+                        actor,
+                        occurredAt);
+
+        publishRenewed(
+                renewedMembership,
+                renewal,
+                actor,
+                occurredAt);
+
+        return renewedMembership;
+    }
+
+
     @Transactional(readOnly = true)
-    @PreAuthorize(
-            "hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public MembershipDetails findById(
             UUID membershipId) {
 
@@ -117,13 +190,10 @@ public class MembershipApplicationService {
                     "Membership identifier must be provided.");
         }
 
-        return membershipStore
-                .findById(membershipId)
-                .orElseThrow(
-                        () ->
-                                new MembershipNotFoundException(
-                                        membershipId));
+        return requireMembership(
+                membershipId);
     }
+
 
     private ClientDetails requireActiveClient(
             UUID clientId) {
@@ -171,7 +241,18 @@ public class MembershipApplicationService {
             CreateMembershipCommand command,
             PlanDetails plan) {
 
-        if (command.promotionId() == null) {
+        return createPricingSnapshot(
+                plan,
+                command.promotionId(),
+                command.startsOn());
+    }
+
+    private MembershipPricingSnapshot createPricingSnapshot(
+            PlanDetails plan,
+            UUID promotionId,
+            LocalDate applicableOn) {
+
+        if (promotionId == null) {
             return MembershipPricingSnapshot.withoutPromotion(
                     plan.id(),
                     plan.planCode(),
@@ -185,11 +266,11 @@ public class MembershipApplicationService {
         PromotionEvaluationResult evaluation =
                 promotionEvaluator.evaluate(
                         new PromotionEvaluationRequest(
-                                command.promotionId(),
+                                promotionId,
                                 plan.id(),
                                 plan.listPrice(),
                                 plan.currency(),
-                                command.startsOn()));
+                                applicableOn));
 
         MembershipPromotionSnapshot promotion =
                 new MembershipPromotionSnapshot(
@@ -293,4 +374,86 @@ public class MembershipApplicationService {
                     "Membership actor username must be provided.");
         }
     }
+
+    private MembershipDetails requireMembership(
+            UUID membershipId) {
+
+        return membershipStore.findById(
+                        membershipId)
+                .orElseThrow(
+                        () -> new MembershipNotFoundException(
+                                membershipId));
+    }
+
+    private static void verifyVersion(
+            UUID membershipId,
+            long expectedVersion,
+            long currentVersion) {
+
+        if (expectedVersion != currentVersion) {
+            throw new MembershipVersionConflictException(
+                    membershipId,
+                    expectedVersion,
+                    currentVersion);
+        }
+    }
+
+    private static void validateRenewalRequest(
+            UUID membershipId,
+            RenewMembershipCommand command,
+            AuthenticatedActor actor) {
+
+        if (membershipId == null) {
+            throw new MembershipValidationException(
+                    "Membership identifier must be provided.");
+        }
+
+        if (command == null) {
+            throw new MembershipValidationException(
+                    "Renew membership command must be provided.");
+        }
+
+        validateActor(actor);
+    }
+
+    private void publishRenewed(
+            MembershipDetails membership,
+            MembershipRenewal renewal,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        var period =
+                membership.currentPeriod();
+
+        var pricing =
+                period.pricing();
+
+        UUID promotionId =
+                pricing.promotion() == null
+                        ? null
+                        : pricing.promotion()
+                          .promotionId();
+
+        eventPublisher.publishEvent(
+                new MembershipRenewed(
+                        membership.id(),
+                        membership.membershipCode(),
+                        membership.clientId(),
+                        period.id(),
+                        period.periodNumber(),
+                        pricing.membershipPlanId(),
+                        promotionId,
+                        pricing.listPrice(),
+                        pricing.discountAmount(),
+                        pricing.finalPrice(),
+                        pricing.currency(),
+                        period.startsOn(),
+                        period.effectiveEndsOn(),
+                        renewal.previousStatus(),
+                        renewal.resultingStatus(),
+                        actor.id(),
+                        actor.username(),
+                        occurredAt));
+    }
+
 }
