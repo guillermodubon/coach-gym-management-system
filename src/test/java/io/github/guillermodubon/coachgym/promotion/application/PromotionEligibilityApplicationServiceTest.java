@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.promotion.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -345,7 +346,7 @@ class PromotionEligibilityApplicationServiceTest {
                 .replaceEligiblePlanIds(
                         any(),
                         any(),
-                        any(Long.class),
+                        anyLong(),
                         any(),
                         any());
 
@@ -391,7 +392,7 @@ class PromotionEligibilityApplicationServiceTest {
                 .replaceEligiblePlanIds(
                         any(),
                         any(),
-                        any(Long.class),
+                        anyLong(),
                         any(),
                         any());
 
@@ -429,7 +430,7 @@ class PromotionEligibilityApplicationServiceTest {
                 .replaceEligiblePlanIds(
                         any(),
                         any(),
-                        any(Long.class),
+                        anyLong(),
                         any(),
                         any());
 
@@ -478,7 +479,7 @@ class PromotionEligibilityApplicationServiceTest {
                 .replaceEligiblePlanIds(
                         any(),
                         any(),
-                        any(Long.class),
+                        anyLong(),
                         any(),
                         any());
 

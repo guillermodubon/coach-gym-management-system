@@ -185,4 +185,121 @@ class MembershipPersistenceAdapterTest {
 
         return period;
     }
+
+    @Test
+    void shouldPersistFrozenStatusAndHistory() {
+        MembershipJpaEntity membership =
+                membershipEntity(
+                        MembershipStatus.ACTIVE);
+
+        MembershipPeriodJpaEntity period =
+                period((short) 1);
+
+        when(membershipRepository.findByIdForUpdate(
+                MEMBERSHIP_ID))
+                .thenReturn(Optional.of(membership));
+
+        when(
+                periodRepository
+                        .findFirstByMembershipIdOrderByPeriodNumberDesc(
+                                MEMBERSHIP_ID))
+                .thenReturn(Optional.of(period));
+
+        when(membershipRepository.saveAndFlush(
+                membership))
+                .thenReturn(membership);
+
+        MembershipDetails result =
+                adapter.freeze(
+                        MEMBERSHIP_ID,
+                        period.id(),
+                        0L,
+                        ACTOR,
+                        NOW);
+
+        assertThat(result.status())
+                .isEqualTo(MembershipStatus.FROZEN);
+
+        assertThat(result.currentPeriod().id())
+                .isEqualTo(period.id());
+
+        verify(statusHistoryRepository)
+                .saveAndFlush(
+                        any(
+                                MembershipStatusHistoryJpaEntity.class));
+
+        verify(periodRepository, never())
+                .saveAndFlush(
+                        any(MembershipPeriodJpaEntity.class));
+    }
+
+    @Test
+    void shouldPersistReactivatedStatusAndHistory() {
+        MembershipJpaEntity membership =
+                membershipEntity(
+                        MembershipStatus.FROZEN);
+
+        MembershipPeriodJpaEntity period =
+                period((short) 1);
+
+        when(membershipRepository.findByIdForUpdate(
+                MEMBERSHIP_ID))
+                .thenReturn(Optional.of(membership));
+
+        when(
+                periodRepository
+                        .findFirstByMembershipIdOrderByPeriodNumberDesc(
+                                MEMBERSHIP_ID))
+                .thenReturn(Optional.of(period));
+
+        when(membershipRepository.saveAndFlush(
+                membership))
+                .thenReturn(membership);
+
+        MembershipDetails result =
+                adapter.reactivate(
+                        MEMBERSHIP_ID,
+                        period.id(),
+                        0L,
+                        ACTOR,
+                        NOW);
+
+        assertThat(result.status())
+                .isEqualTo(MembershipStatus.ACTIVE);
+
+        assertThat(result.currentPeriod().id())
+                .isEqualTo(period.id());
+
+        verify(statusHistoryRepository)
+                .saveAndFlush(
+                        any(
+                                MembershipStatusHistoryJpaEntity.class));
+
+        verify(periodRepository, never())
+                .saveAndFlush(
+                        any(MembershipPeriodJpaEntity.class));
+    }
+
+    private static MembershipJpaEntity membershipEntity(
+            MembershipStatus status) {
+
+        MembershipJpaEntity membership =
+                MembershipJpaEntity.create(
+                        CLIENT_ID,
+                        ACTOR,
+                        NOW.minusSeconds(3_600));
+
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                membership,
+                "id",
+                MEMBERSHIP_ID);
+
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                membership,
+                "status",
+                status);
+
+        return membership;
+    }
+
 }

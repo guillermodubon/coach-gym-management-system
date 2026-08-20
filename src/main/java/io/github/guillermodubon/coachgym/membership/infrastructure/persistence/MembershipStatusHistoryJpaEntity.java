@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.membership.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
+import io.github.guillermodubon.coachgym.membership.domain.MembershipValidationException;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -139,4 +140,106 @@ class MembershipStatusHistoryJpaEntity {
 
         return history;
     }
-}
+
+    static MembershipStatusHistoryJpaEntity frozen(
+            UUID membershipId,
+            UUID membershipPeriodId,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        return transition(
+                membershipId,
+                membershipPeriodId,
+                MembershipStatus.ACTIVE,
+                MembershipStatus.FROZEN,
+                "Membership frozen.",
+                actor,
+                occurredAt);
+    }
+
+    static MembershipStatusHistoryJpaEntity reactivated(
+            UUID membershipId,
+            UUID membershipPeriodId,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        return transition(
+                membershipId,
+                membershipPeriodId,
+                MembershipStatus.FROZEN,
+                MembershipStatus.ACTIVE,
+                "Membership reactivated.",
+                actor,
+                occurredAt);
+    }
+
+    private static MembershipStatusHistoryJpaEntity transition(
+            UUID membershipId,
+            UUID membershipPeriodId,
+            MembershipStatus previousStatus,
+            MembershipStatus newStatus,
+            String reason,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        if (membershipId == null) {
+            throw new MembershipValidationException(
+                    "Membership identifier must be provided.");
+        }
+
+        if (membershipPeriodId == null) {
+            throw new MembershipValidationException(
+                    "Membership period identifier must be provided.");
+        }
+
+        if (previousStatus == null) {
+            throw new MembershipValidationException(
+                    "Previous membership status must be provided.");
+        }
+
+        if (newStatus == null) {
+            throw new MembershipValidationException(
+                    "New membership status must be provided.");
+        }
+
+        if (previousStatus == newStatus) {
+            throw new MembershipValidationException(
+                    "Membership status history must represent "
+                            + "a status change.");
+        }
+
+        if (reason == null || reason.isBlank()) {
+            throw new MembershipValidationException(
+                    "Membership status change reason must not be blank.");
+        }
+
+        if (actor == null || actor.id() == null) {
+            throw new MembershipValidationException(
+                    "Authenticated actor must be provided.");
+        }
+
+        if (occurredAt == null) {
+            throw new MembershipValidationException(
+                    "Membership status occurrence time must be provided.");
+        }
+
+        MembershipStatusHistoryJpaEntity history =
+                new MembershipStatusHistoryJpaEntity();
+
+        history.id = UUID.randomUUID();
+        history.membershipId = membershipId;
+        history.membershipPeriodId = membershipPeriodId;
+        history.previousStatus = previousStatus;
+        history.newStatus = newStatus;
+        history.reason = reason.trim();
+        history.occurredAt = occurredAt;
+        history.changedByUserId = actor.id();
+
+        return history;
+    }
+
+
+
+
+
+    }

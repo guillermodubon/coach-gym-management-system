@@ -24,6 +24,20 @@ public interface MembershipStore {
             AuthenticatedActor actor,
             Instant occurredAt);
 
+    MembershipDetails freeze(
+            UUID membershipId,
+            UUID membershipPeriodId,
+            long expectedVersion,
+            AuthenticatedActor actor,
+            Instant occurredAt);
+
+    MembershipDetails reactivate(
+            UUID membershipId,
+            UUID membershipPeriodId,
+            long expectedVersion,
+            AuthenticatedActor actor,
+            Instant occurredAt);
+
     Optional<MembershipDetails> findById(UUID membershipId);
 }
 

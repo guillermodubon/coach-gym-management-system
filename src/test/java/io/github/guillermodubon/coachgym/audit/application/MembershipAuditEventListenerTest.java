@@ -3,13 +3,15 @@ package io.github.guillermodubon.coachgym.audit.application;
 import static org.mockito.Mockito.verify;
 
 import io.github.guillermodubon.coachgym.membership.MembershipCreated;
+import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
+import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
+import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
+import io.github.guillermodubon.coachgym.membership.MembershipStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
-
-import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
-import io.github.guillermodubon.coachgym.membership.MembershipStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -42,6 +44,10 @@ class MembershipAuditEventListenerTest {
             UUID.fromString(
                     "d58dcc34-f37a-4449-b8b4-1a46bb417ea7");
 
+    private static final UUID FREEZE_ID =
+            UUID.fromString(
+                    "40000000-0000-0000-0000-000000000001");
+
     private static final Instant NOW =
             Instant.parse(
                     "2026-08-16T21:00:00Z");
@@ -49,15 +55,20 @@ class MembershipAuditEventListenerTest {
     @Mock
     private AuditEntryStore auditEntryStore;
 
+    private MembershipAuditEventListener listener;
+
+    @BeforeEach
+    void setUp() {
+        listener =
+                new MembershipAuditEventListener(
+                        auditEntryStore);
+    }
+
     @Test
     void forwardsMembershipCreatedEvent() {
         MembershipCreated event =
                 membershipCreated(
                         PROMOTION_ID);
-
-        MembershipAuditEventListener listener =
-                new MembershipAuditEventListener(
-                        auditEntryStore);
 
         listener.record(event);
 
@@ -71,15 +82,73 @@ class MembershipAuditEventListenerTest {
                 membershipRenewed(
                         PROMOTION_ID);
 
-        MembershipAuditEventListener listener =
-                new MembershipAuditEventListener(
-                        auditEntryStore);
+        listener.record(event);
+
+        verify(auditEntryStore)
+                .recordMembershipRenewed(event);
+    }
+
+    @Test
+    void shouldForwardMembershipFrozenEvent() {
+        MembershipFrozen event =
+                new MembershipFrozen(
+                        MEMBERSHIP_ID,
+                        "MEM-000001",
+                        CLIENT_ID,
+                        PERIOD_ID,
+                        LocalDate.of(
+                                2026,
+                                9,
+                                10),
+                        LocalDate.of(
+                                2026,
+                                9,
+                                20),
+                        "Medical leave",
+                        MembershipStatus.ACTIVE,
+                        MembershipStatus.FROZEN,
+                        ACTOR_ID,
+                        "coach-admin",
+                        NOW);
 
         listener.record(event);
 
         verify(auditEntryStore)
-                .recordMembershipRenewed(
-                        event);
+                .recordMembershipFrozen(event);
+    }
+
+    @Test
+    void shouldForwardMembershipReactivatedEvent() {
+        MembershipReactivated event =
+                new MembershipReactivated(
+                        MEMBERSHIP_ID,
+                        "MEM-000001",
+                        CLIENT_ID,
+                        PERIOD_ID,
+                        FREEZE_ID,
+                        LocalDate.of(
+                                2026,
+                                9,
+                                10),
+                        LocalDate.of(
+                                2026,
+                                9,
+                                20),
+                        LocalDate.of(
+                                2026,
+                                9,
+                                15),
+                        "Medical leave",
+                        MembershipStatus.FROZEN,
+                        MembershipStatus.ACTIVE,
+                        ACTOR_ID,
+                        "coach-admin",
+                        NOW);
+
+        listener.record(event);
+
+        verify(auditEntryStore)
+                .recordMembershipReactivated(event);
     }
 
     private static MembershipCreated membershipCreated(
@@ -96,8 +165,14 @@ class MembershipAuditEventListenerTest {
                 new BigDecimal("2.50"),
                 new BigDecimal("22.50"),
                 "USD",
-                LocalDate.of(2026, 9, 1),
-                LocalDate.of(2026, 10, 1),
+                LocalDate.of(
+                        2026,
+                        9,
+                        1),
+                LocalDate.of(
+                        2026,
+                        10,
+                        1),
                 ACTOR_ID,
                 "coach-admin",
                 NOW);
@@ -118,14 +193,18 @@ class MembershipAuditEventListenerTest {
                 new BigDecimal("2.50"),
                 new BigDecimal("22.50"),
                 "USD",
-                LocalDate.of(2026, 10, 1),
-                LocalDate.of(2026, 11, 1),
+                LocalDate.of(
+                        2026,
+                        10,
+                        1),
+                LocalDate.of(
+                        2026,
+                        11,
+                        1),
                 MembershipStatus.ACTIVE,
                 MembershipStatus.ACTIVE,
                 ACTOR_ID,
                 "coach-admin",
                 NOW);
     }
-
-
 }
