@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.membership.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
+import io.github.guillermodubon.coachgym.membership.domain.MembershipValidationException;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -143,6 +144,53 @@ class MembershipJpaEntity {
 
         updatedAt =
                 occurredAt;
+    }
+
+    void changeStatus(
+            MembershipStatus expectedStatus,
+            MembershipStatus resultingStatus,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        if (expectedStatus == null) {
+            throw new MembershipValidationException(
+                    "Expected membership status must be provided.");
+        }
+
+        if (resultingStatus == null) {
+            throw new MembershipValidationException(
+                    "Resulting membership status must be provided.");
+        }
+
+        if (actor == null || actor.id() == null) {
+            throw new MembershipValidationException(
+                    "Authenticated actor must be provided.");
+        }
+
+        if (occurredAt == null) {
+            throw new MembershipValidationException(
+                    "Membership status occurrence time must be provided.");
+        }
+
+        if (status != expectedStatus) {
+            throw new IllegalStateException(
+                    "Membership status changed unexpectedly. "
+                            + "Expected "
+                            + expectedStatus
+                            + " but found "
+                            + status
+                            + ".");
+        }
+
+        if (expectedStatus == resultingStatus) {
+            throw new MembershipValidationException(
+                    "Membership status transition must change "
+                            + "the current status.");
+        }
+
+        status = resultingStatus;
+        updatedByUserId = actor.id();
+        updatedAt = occurredAt;
     }
 
     UUID id() {

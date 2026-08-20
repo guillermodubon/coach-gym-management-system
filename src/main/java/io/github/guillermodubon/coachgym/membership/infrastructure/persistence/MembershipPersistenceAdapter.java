@@ -30,7 +30,8 @@ class MembershipPersistenceAdapter
                     MembershipStatus.ACTIVE,
                     MembershipStatus.FROZEN);
 
-    private static final String CURRENT_MEMBERSHIP_CONSTRAINT =
+    private static final String
+            CURRENT_MEMBERSHIP_CONSTRAINT =
             "uq_memberships_one_current_per_client";
 
     private final MembershipJpaRepository
@@ -132,8 +133,8 @@ class MembershipPersistenceAdapter
     public Optional<MembershipDetails> findById(
             UUID membershipId) {
 
-        return membershipRepository.findById(
-                        membershipId)
+        return membershipRepository
+                .findById(membershipId)
                 .flatMap(
                         membership ->
                                 periodRepository
@@ -146,58 +147,6 @@ class MembershipPersistenceAdapter
                                                                 period)));
     }
 
-    private static MembershipDetails toDetails(
-            MembershipJpaEntity membership,
-            MembershipPeriodJpaEntity period) {
-
-        MembershipPeriodDetails periodDetails =
-                period.toDetails();
-
-        return new MembershipDetails(
-                membership.id(),
-                membership.membershipCode(),
-                membership.clientId(),
-                membership.status(),
-                periodDetails,
-                membership.createdAt(),
-                membership.updatedAt(),
-                membership.version());
-    }
-
-    private static boolean isCurrentMembershipConflict(
-            Throwable exception) {
-
-        Throwable current =
-                exception;
-
-        while (current != null) {
-            String message =
-                    current.getMessage();
-
-            if (message != null
-                    && message.contains(
-                    CURRENT_MEMBERSHIP_CONSTRAINT)) {
-
-                return true;
-            }
-
-            if (current instanceof SQLException sqlException
-                    && "23505".equals(
-                    sqlException.getSQLState())
-                    && message != null
-                    && message.contains(
-                    CURRENT_MEMBERSHIP_CONSTRAINT)) {
-
-                return true;
-            }
-
-            current =
-                    current.getCause();
-        }
-
-        return false;
-    }
-
     @Override
     @Transactional
     public MembershipDetails renew(
@@ -208,12 +157,8 @@ class MembershipPersistenceAdapter
             Instant occurredAt) {
 
         MembershipJpaEntity membership =
-                membershipRepository.findByIdForUpdate(
-                                membershipId)
-                        .orElseThrow(
-                                () ->
-                                        new MembershipNotFoundException(
-                                                membershipId));
+                requireMembership(
+                        membershipId);
 
         verifyVersion(
                 membershipId,
@@ -268,17 +213,119 @@ class MembershipPersistenceAdapter
                 period);
     }
 
-    private static void verifyVersion(
+    @Override
+    @Transactional
+    public MembershipDetails freeze(
             UUID membershipId,
+            UUID membershipPeriodId,
             long expectedVersion,
-            long currentVersion) {
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        MembershipJpaEntity membership =
+                requireMembership(
+                        membershipId);
 
-        if (expectedVersion != currentVersion) {
-            throw new MembershipVersionConflictException(
-                    membershipId,
-                    expectedVersion,
-                    currentVersion);
-        }
+        verifyVersion(
+                membershipId,
+                expectedVersion,
+                membership.version());
+
+        MembershipPeriodJpaEntity currentPeriod =
+                requireCurrentPeriod(
+                        membershipId);
+
+        verifyCurrentPeriod(
+                membershipId,
+                membershipPeriodId,
+                currentPeriod.id());
+
+        membership.changeStatus(
+                MembershipStatus.ACTIVE,
+                MembershipStatus.FROZEN,
+                actor,
+                occurredAt);
+
+        MembershipJpaEntity savedMembership =
+                membershipRepository.saveAndFlush(
+                        membership);
+
+        entityManager.refresh(
+                savedMembership);
+
+        statusHistoryRepository.saveAndFlush(
+                MembershipStatusHistoryJpaEntity.frozen(
+                        membershipId,
+                        currentPeriod.id(),
+                        actor,
+                        occurredAt));
+
+        return toDetails(
+                savedMembership,
+                currentPeriod);
+    }
+
+    @Override
+    @Transactional
+    public MembershipDetails reactivate(
+            UUID membershipId,
+            UUID membershipPeriodId,
+            long expectedVersion,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        MembershipJpaEntity membership =
+                requireMembership(
+                        membershipId);
+
+        verifyVersion(
+                membershipId,
+                expectedVersion,
+                membership.version());
+
+        MembershipPeriodJpaEntity currentPeriod =
+                requireCurrentPeriod(
+                        membershipId);
+
+        verifyCurrentPeriod(
+                membershipId,
+                membershipPeriodId,
+                currentPeriod.id());
+
+        membership.changeStatus(
+                MembershipStatus.FROZEN,
+                MembershipStatus.ACTIVE,
+                actor,
+                occurredAt);
+
+        MembershipJpaEntity savedMembership =
+                membershipRepository.saveAndFlush(
+                        membership);
+
+        entityManager.refresh(
+                savedMembership);
+
+        statusHistoryRepository.saveAndFlush(
+                MembershipStatusHistoryJpaEntity.reactivated(
+                        membershipId,
+                        currentPeriod.id(),
+                        actor,
+                        occurredAt));
+
+        return toDetails(
+                savedMembership,
+                currentPeriod);
+    }
+
+    private MembershipJpaEntity requireMembership(
+            UUID membershipId) {
+
+        return membershipRepository
+                .findByIdForUpdate(
+                        membershipId)
+                .orElseThrow(
+                        () ->
+                                new MembershipNotFoundException(
+                                        membershipId));
     }
 
     private MembershipPeriodJpaEntity requireCurrentPeriod(
@@ -293,6 +340,41 @@ class MembershipPersistenceAdapter
                                         "Membership "
                                                 + membershipId
                                                 + " has no persisted period."));
+    }
+
+    private static void verifyCurrentPeriod(
+            UUID membershipId,
+            UUID requestedPeriodId,
+            UUID currentPeriodId) {
+
+        if (requestedPeriodId == null) {
+            throw new IllegalArgumentException(
+                    "Membership period identifier must be provided.");
+        }
+
+        if (!requestedPeriodId.equals(
+                currentPeriodId)) {
+
+            throw new IllegalStateException(
+                    "Membership period "
+                            + requestedPeriodId
+                            + " is not the current period of membership "
+                            + membershipId
+                            + ".");
+        }
+    }
+
+    private static void verifyVersion(
+            UUID membershipId,
+            long expectedVersion,
+            long currentVersion) {
+
+        if (expectedVersion != currentVersion) {
+            throw new MembershipVersionConflictException(
+                    membershipId,
+                    expectedVersion,
+                    currentVersion);
+        }
     }
 
     private static void verifyNextPeriodNumber(
@@ -312,5 +394,56 @@ class MembershipPersistenceAdapter
                             + requestedPeriodNumber
                             + ".");
         }
+    }
+
+    private static MembershipDetails toDetails(
+            MembershipJpaEntity membership,
+            MembershipPeriodJpaEntity period) {
+
+        MembershipPeriodDetails periodDetails =
+                period.toDetails();
+
+        return new MembershipDetails(
+                membership.id(),
+                membership.membershipCode(),
+                membership.clientId(),
+                membership.status(),
+                periodDetails,
+                membership.createdAt(),
+                membership.updatedAt(),
+                membership.version());
+    }
+
+    private static boolean isCurrentMembershipConflict(
+            Throwable exception) {
+
+        Throwable current =
+                exception;
+
+        while (current != null) {
+            String message =
+                    current.getMessage();
+
+            if (message != null
+                    && message.contains(
+                    CURRENT_MEMBERSHIP_CONSTRAINT)) {
+
+                return true;
+            }
+
+            if (current instanceof SQLException sqlException
+                    && "23505".equals(
+                    sqlException.getSQLState())
+                    && message != null
+                    && message.contains(
+                    CURRENT_MEMBERSHIP_CONSTRAINT)) {
+
+                return true;
+            }
+
+            current = current.getCause();
+        }
+
+        return false;
     }
 }
