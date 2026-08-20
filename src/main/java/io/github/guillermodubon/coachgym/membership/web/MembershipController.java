@@ -38,12 +38,19 @@ class MembershipController {
     private final MembershipApplicationService
             membershipApplicationService;
 
+    private final MembershipFreezeApplicationService
+            membershipFreezeApplicationService;
+
     MembershipController(
-            MembershipApplicationService
-                    membershipApplicationService) {
+            MembershipApplicationService membershipApplicationService,
+            MembershipFreezeApplicationService
+                    membershipFreezeApplicationService) {
 
         this.membershipApplicationService =
                 membershipApplicationService;
+
+        this.membershipFreezeApplicationService =
+                membershipFreezeApplicationService;
     }
 
     @PostMapping
@@ -52,15 +59,15 @@ class MembershipController {
             description = """
                     Creates an active membership and its first
                     membership period.
-
+                    
                     The client must exist and be active. The membership
                     plan must exist and be active. A client cannot have
                     another active or frozen membership.
-
+                    
                     If a promotion is supplied, it must be active,
                     valid on the membership start date and explicitly
                     eligible for the selected plan.
-
+                    
                     Administrators and receptionists can execute this
                     operation.
                     """)
@@ -119,30 +126,30 @@ class MembershipController {
     @Operation(
             summary = "Renew a membership",
             description = """
-                Creates a new commercial period for an existing
-                membership.
-
-                An active membership is renewed from the current
-                period's effective end date. A requested start date is
-                ignored for an active membership.
-
-                An expired membership requires a start date that is
-                not before the current operational date. A successful
-                expired-membership renewal changes its status back to
-                ACTIVE.
-
-                Frozen and cancelled memberships cannot be renewed.
-
-                The selected plan must be active. An optional promotion
-                must be active, valid on the effective renewal start
-                date and explicitly eligible for the selected plan.
-
-                The request must contain the current optimistic-lock
-                version of the membership.
-
-                Administrators and receptionists can execute this
-                operation.
-                """)
+                    Creates a new commercial period for an existing
+                    membership.
+                    
+                    An active membership is renewed from the current
+                    period's effective end date. A requested start date is
+                    ignored for an active membership.
+                    
+                    An expired membership requires a start date that is
+                    not before the current operational date. A successful
+                    expired-membership renewal changes its status back to
+                    ACTIVE.
+                    
+                    Frozen and cancelled memberships cannot be renewed.
+                    
+                    The selected plan must be active. An optional promotion
+                    must be active, valid on the effective renewal start
+                    date and explicitly eligible for the selected plan.
+                    
+                    The request must contain the current optimistic-lock
+                    version of the membership.
+                    
+                    Administrators and receptionists can execute this
+                    operation.
+                    """)
     @ApiResponse(
             responseCode = "200",
             description = "Membership renewed")
@@ -162,10 +169,10 @@ class MembershipController {
     @ApiResponse(
             responseCode = "409",
             description = """
-                Membership version conflict, non-renewable state,
-                inactive client, unavailable plan or promotion
-                evaluation conflict
-                """)
+                    Membership version conflict, non-renewable state,
+                    inactive client, unavailable plan or promotion
+                    evaluation conflict
+                    """)
     MembershipResponse renew(
             @PathVariable UUID id,
             @Valid
@@ -187,7 +194,7 @@ class MembershipController {
                     Returns a membership and its current commercial
                     period, including historical plan and promotion
                     snapshots.
-
+                    
                     Administrators and receptionists can execute this
                     operation.
                     """)
@@ -307,19 +314,16 @@ class MembershipController {
             PromotionEvaluationFailure failure) {
 
         return switch (failure) {
-            case PROMOTION_NOT_FOUND ->
-                    HttpStatus.NOT_FOUND;
+            case PROMOTION_NOT_FOUND -> HttpStatus.NOT_FOUND;
 
             case PROMOTION_INACTIVE,
                  PROMOTION_NOT_YET_VALID,
                  PROMOTION_EXPIRED,
                  PLAN_NOT_ELIGIBLE,
-                 CURRENCY_MISMATCH ->
-                    HttpStatus.CONFLICT;
+                 CURRENCY_MISMATCH -> HttpStatus.CONFLICT;
 
             case INVALID_PRICE,
-                 INVALID_CURRENCY ->
-                    HttpStatus.BAD_REQUEST;
+                 INVALID_CURRENCY -> HttpStatus.BAD_REQUEST;
         };
     }
 
@@ -327,29 +331,21 @@ class MembershipController {
             PromotionEvaluationFailure failure) {
 
         return switch (failure) {
-            case PROMOTION_NOT_FOUND ->
-                    "MEMBERSHIP_PROMOTION_NOT_FOUND";
+            case PROMOTION_NOT_FOUND -> "MEMBERSHIP_PROMOTION_NOT_FOUND";
 
-            case PROMOTION_INACTIVE ->
-                    "MEMBERSHIP_PROMOTION_INACTIVE";
+            case PROMOTION_INACTIVE -> "MEMBERSHIP_PROMOTION_INACTIVE";
 
-            case PROMOTION_NOT_YET_VALID ->
-                    "MEMBERSHIP_PROMOTION_NOT_YET_VALID";
+            case PROMOTION_NOT_YET_VALID -> "MEMBERSHIP_PROMOTION_NOT_YET_VALID";
 
-            case PROMOTION_EXPIRED ->
-                    "MEMBERSHIP_PROMOTION_EXPIRED";
+            case PROMOTION_EXPIRED -> "MEMBERSHIP_PROMOTION_EXPIRED";
 
-            case PLAN_NOT_ELIGIBLE ->
-                    "MEMBERSHIP_PROMOTION_PLAN_NOT_ELIGIBLE";
+            case PLAN_NOT_ELIGIBLE -> "MEMBERSHIP_PROMOTION_PLAN_NOT_ELIGIBLE";
 
-            case CURRENCY_MISMATCH ->
-                    "MEMBERSHIP_PROMOTION_CURRENCY_MISMATCH";
+            case CURRENCY_MISMATCH -> "MEMBERSHIP_PROMOTION_CURRENCY_MISMATCH";
 
-            case INVALID_PRICE ->
-                    "MEMBERSHIP_PROMOTION_INVALID_PRICE";
+            case INVALID_PRICE -> "MEMBERSHIP_PROMOTION_INVALID_PRICE";
 
-            case INVALID_CURRENCY ->
-                    "MEMBERSHIP_PROMOTION_INVALID_CURRENCY";
+            case INVALID_CURRENCY -> "MEMBERSHIP_PROMOTION_INVALID_CURRENCY";
         };
     }
 
@@ -387,5 +383,148 @@ class MembershipController {
                 HttpStatus.CONFLICT,
                 "MEMBERSHIP_VERSION_CONFLICT",
                 exception.getMessage());
+    }
+
+    @PostMapping("/{id}/freeze")
+    @Operation(
+            summary = "Freeze a membership",
+            description = """
+                    Freezes an active membership without creating a new
+                    commercial period. The request must contain the current
+                    optimistic-lock version of the membership.
+                    Administrators and receptionists can execute this operation.
+                    """)
+    @ApiResponse(
+            responseCode = "200",
+            description = "Membership frozen")
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid freeze request")
+    @ApiResponse(
+            responseCode = "401",
+            description = "Authentication required")
+    @ApiResponse(
+            responseCode = "403",
+            description = "Insufficient permissions or invalid CSRF token")
+    @ApiResponse(
+            responseCode = "404",
+            description = "Membership not found")
+    @ApiResponse(
+            responseCode = "409",
+            description = "Membership version or state conflict")
+    MembershipResponse freeze(
+            @PathVariable UUID id,
+            @Valid
+            @RequestBody
+            FreezeMembershipRequest request,
+            Authentication authentication) {
+
+        return MembershipResponse.from(
+                membershipFreezeApplicationService.freeze(
+                        id,
+                        request.toCommand(),
+                        actor(authentication)));
+    }
+
+    @PostMapping("/{id}/reactivate")
+    @Operation(
+            summary = "Reactivate a frozen membership",
+            description = """
+                    Reactivates a frozen membership without creating a new
+                    commercial period. The associated client must remain active.
+                    The request must contain the current optimistic-lock version
+                    of the membership. Administrators and receptionists can
+                    execute this operation.
+                    """)
+    @ApiResponse(
+            responseCode = "200",
+            description = "Membership reactivated")
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid reactivation request")
+    @ApiResponse(
+            responseCode = "401",
+            description = "Authentication required")
+    @ApiResponse(
+            responseCode = "403",
+            description = "Insufficient permissions or invalid CSRF token")
+    @ApiResponse(
+            responseCode = "404",
+            description = "Membership or open freeze not found")
+    @ApiResponse(
+            responseCode = "409",
+            description = "Membership version, state or client conflict")
+    MembershipResponse reactivate(
+            @PathVariable UUID id,
+            @Valid
+            @RequestBody
+            ReactivateMembershipRequest request,
+            Authentication authentication) {
+
+        return MembershipResponse.from(
+                membershipFreezeApplicationService.reactivate(
+                        id,
+                        request.toCommand(),
+                        actor(authentication)));
+    }
+
+    @ExceptionHandler(
+            MembershipAlreadyFrozenException.class)
+    ResponseEntity<ProblemDetail>
+    handleAlreadyFrozen(
+            MembershipAlreadyFrozenException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(
+                        ApiProblemFactory.create(
+                                HttpStatus.CONFLICT,
+                                "MEMBERSHIP_ALREADY_FROZEN",
+                                exception.getMessage()));
+    }
+
+    @ExceptionHandler(
+            MembershipFreezeStateConflictException.class)
+    ResponseEntity<ProblemDetail>
+    handleFreezeStateConflict(
+            MembershipFreezeStateConflictException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(
+                        ApiProblemFactory.create(
+                                HttpStatus.CONFLICT,
+                                "MEMBERSHIP_FREEZE_STATE_CONFLICT",
+                                exception.getMessage()));
+    }
+
+    @ExceptionHandler(
+            MembershipNotFrozenException.class)
+    ResponseEntity<ProblemDetail>
+    handleNotFrozen(
+            MembershipNotFrozenException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(
+                        ApiProblemFactory.create(
+                                HttpStatus.CONFLICT,
+                                "MEMBERSHIP_NOT_FROZEN",
+                                exception.getMessage()));
+    }
+
+    @ExceptionHandler(
+            MembershipFreezeNotFoundException.class)
+    ResponseEntity<ProblemDetail>
+    handleFreezeNotFound(
+            MembershipFreezeNotFoundException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(
+                        ApiProblemFactory.create(
+                                HttpStatus.NOT_FOUND,
+                                "MEMBERSHIP_FREEZE_NOT_FOUND",
+                                exception.getMessage()));
     }
 }

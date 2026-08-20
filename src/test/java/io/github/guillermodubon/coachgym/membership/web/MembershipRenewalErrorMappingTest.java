@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
 import io.github.guillermodubon.coachgym.membership.application.MembershipApplicationService;
+import io.github.guillermodubon.coachgym.membership.application.MembershipFreezeApplicationService;
 import io.github.guillermodubon.coachgym.membership.application.MembershipNotRenewableException;
 import io.github.guillermodubon.coachgym.membership.application.MembershipVersionConflictException;
 import java.util.UUID;
@@ -22,7 +23,9 @@ class MembershipRenewalErrorMappingTest {
     private final MembershipController controller =
             new MembershipController(
                     Mockito.mock(
-                            MembershipApplicationService.class));
+                            MembershipApplicationService.class),
+                    Mockito.mock(
+                            MembershipFreezeApplicationService.class));
 
     @Test
     void mapsNotRenewableStateToConflict() {
