@@ -3,6 +3,8 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryStore;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.membership.MembershipCreated;
+import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
+import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
 import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
@@ -75,5 +77,21 @@ class AuditEntryPersistenceAdapter
         repository.save(
                 AuditEntryJpaEntity.from(
                         event));
+    }
+
+    @Override
+    public void recordMembershipFrozen(
+            MembershipFrozen event) {
+
+        repository.save(
+                AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    public void recordMembershipReactivated(
+            MembershipReactivated event) {
+
+        repository.save(
+                AuditEntryJpaEntity.from(event));
     }
 }

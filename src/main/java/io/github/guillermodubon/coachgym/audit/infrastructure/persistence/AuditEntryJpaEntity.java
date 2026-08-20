@@ -2,6 +2,8 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.membership.MembershipCreated;
+import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
+import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
 import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
@@ -11,6 +13,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -382,6 +385,154 @@ class AuditEntryJpaEntity {
                         != event.resultingStatus());
 
         return Map.copyOf(metadata);
+    }
+
+    static AuditEntryJpaEntity from(
+            MembershipFrozen event) {
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+        entry.actionCode =
+                "MEMBERSHIP_FROZEN";
+        entry.resourceType =
+                "MEMBERSHIP";
+        entry.resourceId =
+                event.membershipId();
+        entry.resourceCodeSnapshot =
+                event.membershipCode();
+        entry.summary =
+                "Membership frozen.";
+        entry.metadata =
+                membershipFrozenMetadata(event);
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            MembershipReactivated event) {
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+        entry.actionCode =
+                "MEMBERSHIP_REACTIVATED";
+        entry.resourceType =
+                "MEMBERSHIP";
+        entry.resourceId =
+                event.membershipId();
+        entry.resourceCodeSnapshot =
+                event.membershipCode();
+        entry.summary =
+                "Membership reactivated.";
+        entry.metadata =
+                membershipReactivatedMetadata(event);
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    private static Map<String, Object>
+    membershipFrozenMetadata(
+            MembershipFrozen event) {
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "clientId",
+                event.clientId());
+
+        metadata.put(
+                "membershipPeriodId",
+                event.membershipPeriodId());
+
+        metadata.put(
+                "startsOn",
+                event.startsOn().toString());
+
+        metadata.put(
+                "plannedEndsOn",
+                event.plannedEndsOn().toString());
+
+        metadata.put(
+                "reason",
+                event.reason());
+
+        metadata.put(
+                "previousStatus",
+                event.previousStatus().name());
+
+        metadata.put(
+                "resultingStatus",
+                event.resultingStatus().name());
+
+        metadata.put(
+                "statusChanged",
+                true);
+
+        return metadata;
+    }
+
+    private static Map<String, Object>
+    membershipReactivatedMetadata(
+            MembershipReactivated event) {
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "clientId",
+                event.clientId());
+
+        metadata.put(
+                "membershipPeriodId",
+                event.membershipPeriodId());
+
+        metadata.put(
+                "membershipFreezeId",
+                event.membershipFreezeId());
+
+        metadata.put(
+                "freezeStartsOn",
+                event.freezeStartsOn().toString());
+
+        metadata.put(
+                "plannedEndsOn",
+                event.plannedEndsOn().toString());
+
+        metadata.put(
+                "reactivatedOn",
+                event.reactivatedOn().toString());
+
+        metadata.put(
+                "reason",
+                event.reason());
+
+        metadata.put(
+                "previousStatus",
+                event.previousStatus().name());
+
+        metadata.put(
+                "resultingStatus",
+                event.resultingStatus().name());
+
+        metadata.put(
+                "statusChanged",
+                true);
+
+        return metadata;
     }
 
     UUID id() {
