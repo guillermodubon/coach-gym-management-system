@@ -1,10 +1,7 @@
 package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
-import io.github.guillermodubon.coachgym.membership.MembershipCreated;
-import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
-import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
-import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
+import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -531,6 +528,95 @@ class AuditEntryJpaEntity {
         metadata.put(
                 "statusChanged",
                 true);
+
+        return metadata;
+    }
+
+    static AuditEntryJpaEntity from(
+            MembershipCancelled event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Membership cancelled event "
+                            + "must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id =
+                UUID.randomUUID();
+
+        entry.actorUserId =
+                event.actorUserId();
+
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+
+        entry.actionCode =
+                "MEMBERSHIP_CANCELLED";
+
+        entry.resourceType =
+                "MEMBERSHIP";
+
+        entry.resourceId =
+                event.membershipId();
+
+        entry.resourceCodeSnapshot =
+                event.membershipCode();
+
+        entry.summary =
+                "Membership cancelled.";
+
+        entry.metadata =
+                membershipCancelledMetadata(
+                        event);
+
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    private static Map<String, Object>
+    membershipCancelledMetadata(
+            MembershipCancelled event) {
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "clientId",
+                event.clientId());
+
+        metadata.put(
+                "membershipPeriodId",
+                event.membershipPeriodId());
+
+        metadata.put(
+                "cancelledOn",
+                event.cancelledOn().toString());
+
+        metadata.put(
+                "reason",
+                event.reason());
+
+        metadata.put(
+                "previousStatus",
+                event.previousStatus().name());
+
+        metadata.put(
+                "resultingStatus",
+                event.resultingStatus().name());
+
+        metadata.put(
+                "statusChanged",
+                event.previousStatus()
+                        != event.resultingStatus());
+
+        metadata.put(
+                "closedOpenFreeze",
+                event.closedOpenFreeze());
 
         return metadata;
     }

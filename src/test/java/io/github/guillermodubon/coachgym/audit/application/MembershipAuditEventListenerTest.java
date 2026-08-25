@@ -2,11 +2,8 @@ package io.github.guillermodubon.coachgym.audit.application;
 
 import static org.mockito.Mockito.verify;
 
-import io.github.guillermodubon.coachgym.membership.MembershipCreated;
-import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
-import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
-import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
-import io.github.guillermodubon.coachgym.membership.MembershipStatus;
+import io.github.guillermodubon.coachgym.membership.*;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -203,6 +200,40 @@ class MembershipAuditEventListenerTest {
                         1),
                 MembershipStatus.ACTIVE,
                 MembershipStatus.ACTIVE,
+                ACTOR_ID,
+                "coach-admin",
+                NOW);
+    }
+
+    @Test
+    void shouldRecordMembershipCancelledEvent() {
+        MembershipCancelled event =
+                membershipCancelled();
+
+        listener.record(
+                event);
+
+        verify(auditEntryStore)
+                .recordMembershipCancelled(
+                        event);
+    }
+
+    private static MembershipCancelled
+    membershipCancelled() {
+
+        return new MembershipCancelled(
+                MEMBERSHIP_ID,
+                "MEM-000001",
+                CLIENT_ID,
+                PERIOD_ID,
+                LocalDate.of(
+                        2026,
+                        9,
+                        15),
+                "Client requested cancellation",
+                MembershipStatus.ACTIVE,
+                MembershipStatus.CANCELLED,
+                false,
                 ACTOR_ID,
                 "coach-admin",
                 NOW);
