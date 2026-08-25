@@ -33,13 +33,30 @@ class MembershipFreezePolicyTest {
                     "40000000-0000-0000-0000-000000000001");
 
     private static final LocalDate STARTS_ON =
-            LocalDate.of(2026, 9, 1);
+            LocalDate.of(
+                    2026,
+                    9,
+                    1);
 
     private static final LocalDate PLANNED_ENDS_ON =
-            LocalDate.of(2026, 9, 15);
+            LocalDate.of(
+                    2026,
+                    9,
+                    15);
+
+    private static final LocalDate REACTIVATED_ON =
+            LocalDate.of(
+                    2026,
+                    9,
+                    10);
 
     private static final Instant OCCURRED_AT =
-            Instant.parse("2026-09-01T14:00:00Z");
+            Instant.parse(
+                    "2026-09-01T14:00:00Z");
+
+    private static final Instant REACTIVATED_AT =
+            Instant.parse(
+                    "2026-09-10T14:00:00Z");
 
     @Test
     void shouldAllowFreezingAnActiveMembership() {
@@ -72,14 +89,15 @@ class MembershipFreezePolicyTest {
     @Test
     void shouldRejectAFrozenMembership() {
         assertThatThrownBy(
-                () -> MembershipFreezePolicy.createFreeze(
-                        MEMBERSHIP_ID,
-                        PERIOD_ID,
-                        MembershipStatus.FROZEN,
-                        true,
-                        STARTS_ON,
-                        PLANNED_ENDS_ON,
-                        "Medical leave"))
+                () ->
+                        MembershipFreezePolicy.createFreeze(
+                                MEMBERSHIP_ID,
+                                PERIOD_ID,
+                                MembershipStatus.FROZEN,
+                                true,
+                                STARTS_ON,
+                                PLANNED_ENDS_ON,
+                                "Medical leave"))
                 .isInstanceOf(
                         MembershipAlreadyFrozenException.class)
                 .hasMessage(
@@ -91,14 +109,15 @@ class MembershipFreezePolicyTest {
     @Test
     void shouldRejectAnOpenFreezeEvenIfStatusIsActive() {
         assertThatThrownBy(
-                () -> MembershipFreezePolicy.createFreeze(
-                        MEMBERSHIP_ID,
-                        PERIOD_ID,
-                        MembershipStatus.ACTIVE,
-                        true,
-                        STARTS_ON,
-                        PLANNED_ENDS_ON,
-                        "Medical leave"))
+                () ->
+                        MembershipFreezePolicy.createFreeze(
+                                MEMBERSHIP_ID,
+                                PERIOD_ID,
+                                MembershipStatus.ACTIVE,
+                                true,
+                                STARTS_ON,
+                                PLANNED_ENDS_ON,
+                                "Medical leave"))
                 .isInstanceOf(
                         MembershipAlreadyFrozenException.class);
     }
@@ -106,14 +125,15 @@ class MembershipFreezePolicyTest {
     @Test
     void shouldRejectFreezingAnExpiredMembership() {
         assertThatThrownBy(
-                () -> MembershipFreezePolicy.createFreeze(
-                        MEMBERSHIP_ID,
-                        PERIOD_ID,
-                        MembershipStatus.EXPIRED,
-                        false,
-                        STARTS_ON,
-                        PLANNED_ENDS_ON,
-                        "Medical leave"))
+                () ->
+                        MembershipFreezePolicy.createFreeze(
+                                MEMBERSHIP_ID,
+                                PERIOD_ID,
+                                MembershipStatus.EXPIRED,
+                                false,
+                                STARTS_ON,
+                                PLANNED_ENDS_ON,
+                                "Medical leave"))
                 .isInstanceOf(
                         MembershipFreezeStateConflictException.class)
                 .hasMessage(
@@ -127,14 +147,15 @@ class MembershipFreezePolicyTest {
     @Test
     void shouldRejectFreezingACancelledMembership() {
         assertThatThrownBy(
-                () -> MembershipFreezePolicy.createFreeze(
-                        MEMBERSHIP_ID,
-                        PERIOD_ID,
-                        MembershipStatus.CANCELLED,
-                        false,
-                        STARTS_ON,
-                        PLANNED_ENDS_ON,
-                        "Medical leave"))
+                () ->
+                        MembershipFreezePolicy.createFreeze(
+                                MEMBERSHIP_ID,
+                                PERIOD_ID,
+                                MembershipStatus.CANCELLED,
+                                false,
+                                STARTS_ON,
+                                PLANNED_ENDS_ON,
+                                "Medical leave"))
                 .isInstanceOf(
                         MembershipFreezeStateConflictException.class);
     }
@@ -142,39 +163,48 @@ class MembershipFreezePolicyTest {
     @Test
     void shouldAllowReactivatingAFrozenMembership() {
         MembershipFreezeDetails openFreeze =
-                openFreeze(MEMBERSHIP_ID);
+                openFreeze(
+                        MEMBERSHIP_ID);
 
         assertThatCode(
-                () -> MembershipFreezePolicy.validateReactivation(
-                        MEMBERSHIP_ID,
-                        MembershipStatus.FROZEN,
-                        openFreeze,
-                        LocalDate.of(2026, 9, 10)))
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        MembershipStatus.FROZEN,
+                                        openFreeze,
+                                        REACTIVATED_ON))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void shouldAllowReactivationOnFreezeStartDate() {
         MembershipFreezeDetails openFreeze =
-                openFreeze(MEMBERSHIP_ID);
+                openFreeze(
+                        MEMBERSHIP_ID);
 
         assertThatCode(
-                () -> MembershipFreezePolicy.validateReactivation(
-                        MEMBERSHIP_ID,
-                        MembershipStatus.FROZEN,
-                        openFreeze,
-                        STARTS_ON))
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        MembershipStatus.FROZEN,
+                                        openFreeze,
+                                        STARTS_ON))
                 .doesNotThrowAnyException();
     }
 
     @Test
     void shouldRejectReactivatingAnActiveMembership() {
         assertThatThrownBy(
-                () -> MembershipFreezePolicy.validateReactivation(
-                        MEMBERSHIP_ID,
-                        MembershipStatus.ACTIVE,
-                        openFreeze(MEMBERSHIP_ID),
-                        LocalDate.of(2026, 9, 10)))
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        MembershipStatus.ACTIVE,
+                                        openFreeze(
+                                                MEMBERSHIP_ID),
+                                        REACTIVATED_ON))
                 .isInstanceOf(
                         MembershipNotFrozenException.class)
                 .hasMessage(
@@ -188,11 +218,13 @@ class MembershipFreezePolicyTest {
     @Test
     void shouldRejectMissingOpenFreeze() {
         assertThatThrownBy(
-                () -> MembershipFreezePolicy.validateReactivation(
-                        MEMBERSHIP_ID,
-                        MembershipStatus.FROZEN,
-                        null,
-                        LocalDate.of(2026, 9, 10)))
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        MembershipStatus.FROZEN,
+                                        null,
+                                        REACTIVATED_ON))
                 .isInstanceOf(
                         MembershipNotFrozenException.class);
     }
@@ -200,14 +232,50 @@ class MembershipFreezePolicyTest {
     @Test
     void shouldRejectAClosedFreeze() {
         MembershipFreezeDetails closedFreeze =
-                closedFreeze(MEMBERSHIP_ID);
+                closedFreeze(
+                        MEMBERSHIP_ID);
 
         assertThatThrownBy(
-                () -> MembershipFreezePolicy.validateReactivation(
-                        MEMBERSHIP_ID,
-                        MembershipStatus.FROZEN,
-                        closedFreeze,
-                        LocalDate.of(2026, 9, 12)))
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        MembershipStatus.FROZEN,
+                                        closedFreeze,
+                                        LocalDate.of(
+                                                2026,
+                                                9,
+                                                12)))
+                .isInstanceOf(
+                        MembershipNotFrozenException.class);
+    }
+
+    @Test
+    void shouldRejectAFreezeClosedByCancellation() {
+        MembershipFreezeDetails cancelledFreeze =
+                cancelledFreeze(
+                        MEMBERSHIP_ID);
+
+        assertThat(cancelledFreeze.open())
+                .isFalse();
+
+        assertThat(cancelledFreeze.reactivated())
+                .isFalse();
+
+        assertThat(cancelledFreeze.closedByCancellation())
+                .isTrue();
+
+        assertThatThrownBy(
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        MembershipStatus.FROZEN,
+                                        cancelledFreeze,
+                                        LocalDate.of(
+                                                2026,
+                                                9,
+                                                12)))
                 .isInstanceOf(
                         MembershipNotFrozenException.class);
     }
@@ -219,11 +287,14 @@ class MembershipFreezePolicyTest {
                         "10000000-0000-0000-0000-000000000099");
 
         assertThatThrownBy(
-                () -> MembershipFreezePolicy.validateReactivation(
-                        MEMBERSHIP_ID,
-                        MembershipStatus.FROZEN,
-                        openFreeze(anotherMembershipId),
-                        LocalDate.of(2026, 9, 10)))
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        MembershipStatus.FROZEN,
+                                        openFreeze(
+                                                anotherMembershipId),
+                                        REACTIVATED_ON))
                 .isInstanceOf(
                         MembershipValidationException.class)
                 .hasMessage(
@@ -234,16 +305,126 @@ class MembershipFreezePolicyTest {
     @Test
     void shouldRejectReactivationBeforeFreezeStart() {
         assertThatThrownBy(
-                () -> MembershipFreezePolicy.validateReactivation(
-                        MEMBERSHIP_ID,
-                        MembershipStatus.FROZEN,
-                        openFreeze(MEMBERSHIP_ID),
-                        STARTS_ON.minusDays(1)))
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        MembershipStatus.FROZEN,
+                                        openFreeze(
+                                                MEMBERSHIP_ID),
+                                        STARTS_ON.minusDays(1)))
                 .isInstanceOf(
                         MembershipValidationException.class)
                 .hasMessage(
                         "Membership reactivation date must not be "
                                 + "before the freeze start date.");
+    }
+
+    @Test
+    void shouldRejectMissingMembershipIdWhenFreezing() {
+        assertThatThrownBy(
+                () ->
+                        MembershipFreezePolicy.createFreeze(
+                                null,
+                                PERIOD_ID,
+                                MembershipStatus.ACTIVE,
+                                false,
+                                STARTS_ON,
+                                PLANNED_ENDS_ON,
+                                "Medical leave"))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership identifier must be provided.");
+    }
+
+    @Test
+    void shouldRejectMissingPeriodIdWhenFreezing() {
+        assertThatThrownBy(
+                () ->
+                        MembershipFreezePolicy.createFreeze(
+                                MEMBERSHIP_ID,
+                                null,
+                                MembershipStatus.ACTIVE,
+                                false,
+                                STARTS_ON,
+                                PLANNED_ENDS_ON,
+                                "Medical leave"))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership period identifier "
+                                + "must be provided.");
+    }
+
+    @Test
+    void shouldRejectMissingStatusWhenFreezing() {
+        assertThatThrownBy(
+                () ->
+                        MembershipFreezePolicy.createFreeze(
+                                MEMBERSHIP_ID,
+                                PERIOD_ID,
+                                null,
+                                false,
+                                STARTS_ON,
+                                PLANNED_ENDS_ON,
+                                "Medical leave"))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership status must be provided.");
+    }
+
+    @Test
+    void shouldRejectMissingMembershipIdWhenReactivating() {
+        assertThatThrownBy(
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        null,
+                                        MembershipStatus.FROZEN,
+                                        openFreeze(
+                                                MEMBERSHIP_ID),
+                                        REACTIVATED_ON))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership identifier must be provided.");
+    }
+
+    @Test
+    void shouldRejectMissingStatusWhenReactivating() {
+        assertThatThrownBy(
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        null,
+                                        openFreeze(
+                                                MEMBERSHIP_ID),
+                                        REACTIVATED_ON))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership status must be provided.");
+    }
+
+    @Test
+    void shouldRejectMissingReactivationDate() {
+        assertThatThrownBy(
+                () ->
+                        MembershipFreezePolicy
+                                .validateReactivation(
+                                        MEMBERSHIP_ID,
+                                        MembershipStatus.FROZEN,
+                                        openFreeze(
+                                                MEMBERSHIP_ID),
+                                        null))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership reactivation date "
+                                + "must be provided.");
     }
 
     private static MembershipFreezeDetails openFreeze(
@@ -258,6 +439,8 @@ class MembershipFreezePolicyTest {
                 "Medical leave",
                 null,
                 ACTOR_ID,
+                null,
+                null,
                 null,
                 OCCURRED_AT,
                 OCCURRED_AT,
@@ -274,11 +457,33 @@ class MembershipFreezePolicyTest {
                 STARTS_ON,
                 PLANNED_ENDS_ON,
                 "Medical leave",
-                LocalDate.of(2026, 9, 10),
+                REACTIVATED_ON,
                 ACTOR_ID,
+                ACTOR_ID,
+                null,
+                null,
+                OCCURRED_AT,
+                REACTIVATED_AT,
+                1L);
+    }
+
+    private static MembershipFreezeDetails cancelledFreeze(
+            UUID membershipId) {
+
+        return new MembershipFreezeDetails(
+                FREEZE_ID,
+                membershipId,
+                PERIOD_ID,
+                STARTS_ON,
+                PLANNED_ENDS_ON,
+                "Medical leave",
+                null,
+                ACTOR_ID,
+                null,
+                REACTIVATED_ON,
                 ACTOR_ID,
                 OCCURRED_AT,
-                OCCURRED_AT.plusSeconds(3_600),
+                REACTIVATED_AT,
                 1L);
     }
 }

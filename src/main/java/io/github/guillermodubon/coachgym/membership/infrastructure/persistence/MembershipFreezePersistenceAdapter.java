@@ -34,7 +34,7 @@ class MembershipFreezePersistenceAdapter
             UUID membershipId) {
 
         return freezeRepository
-                .findFirstByMembershipIdAndReactivatedOnIsNull(
+                .findFirstByMembershipIdAndReactivatedOnIsNullAndCancelledOnIsNull(
                         membershipId)
                 .map(MembershipFreezeJpaEntity::toDetails);
     }
@@ -45,7 +45,7 @@ class MembershipFreezePersistenceAdapter
             UUID membershipId) {
 
         return freezeRepository
-                .existsByMembershipIdAndReactivatedOnIsNull(
+                .existsByMembershipIdAndReactivatedOnIsNullAndCancelledOnIsNull(
                         membershipId);
     }
 
@@ -124,5 +124,52 @@ class MembershipFreezePersistenceAdapter
                     expectedVersion,
                     currentVersion);
         }
+    }
+
+    @Override
+    @Transactional
+    public MembershipFreezeDetails closeForCancellation(
+            UUID membershipId,
+            UUID freezeId,
+            LocalDate cancelledOn,
+            long expectedFreezeVersion,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        MembershipFreezeJpaEntity freeze =
+                freezeRepository.findById(
+                                freezeId)
+                        .orElseThrow(
+                                () ->
+                                        new MembershipFreezeNotFoundException(
+                                                membershipId));
+
+        if (!membershipId.equals(
+                freeze.membershipId())) {
+
+            throw new MembershipFreezeNotFoundException(
+                    membershipId);
+        }
+
+        verifyVersion(
+                membershipId,
+                expectedFreezeVersion,
+                freeze.version());
+
+        if (!freeze.open()) {
+            throw new MembershipFreezeNotFoundException(
+                    membershipId);
+        }
+
+        freeze.closeForCancellation(
+                cancelledOn,
+                actor,
+                occurredAt);
+
+        MembershipFreezeJpaEntity saved =
+                freezeRepository.saveAndFlush(
+                        freeze);
+
+        return saved.toDetails();
     }
 }

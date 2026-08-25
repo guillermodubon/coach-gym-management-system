@@ -31,32 +31,45 @@ class MembershipFreezeJpaEntityTest {
                     "30000000-0000-0000-0000-000000000002");
 
     private static final LocalDate STARTS_ON =
-            LocalDate.of(2026, 9, 1);
+            LocalDate.of(
+                    2026,
+                    9,
+                    1);
 
     private static final LocalDate PLANNED_ENDS_ON =
-            LocalDate.of(2026, 9, 15);
+            LocalDate.of(
+                    2026,
+                    9,
+                    15);
+
+    private static final LocalDate REACTIVATED_ON =
+            LocalDate.of(
+                    2026,
+                    9,
+                    10);
+
+    private static final LocalDate CANCELLED_ON =
+            LocalDate.of(
+                    2026,
+                    9,
+                    15);
 
     private static final Instant CREATED_AT =
-            Instant.parse("2026-09-01T14:00:00Z");
+            Instant.parse(
+                    "2026-09-01T14:00:00Z");
 
     private static final Instant REACTIVATED_AT =
-            Instant.parse("2026-09-10T15:00:00Z");
+            Instant.parse(
+                    "2026-09-10T15:00:00Z");
+
+    private static final Instant CANCELLED_AT =
+            Instant.parse(
+                    "2026-09-15T14:00:00Z");
 
     @Test
     void shouldCreateAnOpenMembershipFreeze() {
-        MembershipFreeze freeze =
-                new MembershipFreeze(
-                        MEMBERSHIP_ID,
-                        PERIOD_ID,
-                        STARTS_ON,
-                        PLANNED_ENDS_ON,
-                        "Medical leave");
-
         MembershipFreezeJpaEntity entity =
-                MembershipFreezeJpaEntity.create(
-                        freeze,
-                        actor(ACTOR_ID),
-                        CREATED_AT);
+                openFreezeEntity();
 
         MembershipFreezeDetails details =
                 entity.toDetails();
@@ -88,6 +101,12 @@ class MembershipFreezeJpaEntityTest {
         assertThat(details.reactivatedByUserId())
                 .isNull();
 
+        assertThat(details.cancelledOn())
+                .isNull();
+
+        assertThat(details.cancelledByUserId())
+                .isNull();
+
         assertThat(details.createdAt())
                 .isEqualTo(CREATED_AT);
 
@@ -96,6 +115,15 @@ class MembershipFreezeJpaEntityTest {
 
         assertThat(details.version())
                 .isZero();
+
+        assertThat(details.open())
+                .isTrue();
+
+        assertThat(details.reactivated())
+                .isFalse();
+
+        assertThat(details.closedByCancellation())
+                .isFalse();
 
         assertThat(entity.open())
                 .isTrue();
@@ -106,11 +134,8 @@ class MembershipFreezeJpaEntityTest {
         MembershipFreezeJpaEntity entity =
                 openFreezeEntity();
 
-        LocalDate reactivatedOn =
-                LocalDate.of(2026, 9, 10);
-
         entity.reactivate(
-                reactivatedOn,
+                REACTIVATED_ON,
                 actor(REACTIVATION_ACTOR_ID),
                 REACTIVATED_AT);
 
@@ -118,13 +143,28 @@ class MembershipFreezeJpaEntityTest {
                 entity.toDetails();
 
         assertThat(details.reactivatedOn())
-                .isEqualTo(reactivatedOn);
+                .isEqualTo(REACTIVATED_ON);
 
         assertThat(details.reactivatedByUserId())
                 .isEqualTo(REACTIVATION_ACTOR_ID);
 
+        assertThat(details.cancelledOn())
+                .isNull();
+
+        assertThat(details.cancelledByUserId())
+                .isNull();
+
         assertThat(details.updatedAt())
                 .isEqualTo(REACTIVATED_AT);
+
+        assertThat(details.open())
+                .isFalse();
+
+        assertThat(details.reactivated())
+                .isTrue();
+
+        assertThat(details.closedByCancellation())
+                .isFalse();
 
         assertThat(entity.open())
                 .isFalse();
@@ -140,8 +180,17 @@ class MembershipFreezeJpaEntityTest {
                 actor(REACTIVATION_ACTOR_ID),
                 REACTIVATED_AT);
 
-        assertThat(entity.toDetails().reactivatedOn())
+        MembershipFreezeDetails details =
+                entity.toDetails();
+
+        assertThat(details.reactivatedOn())
                 .isEqualTo(STARTS_ON);
+
+        assertThat(details.reactivated())
+                .isTrue();
+
+        assertThat(details.open())
+                .isFalse();
     }
 
     @Test
@@ -150,10 +199,11 @@ class MembershipFreezeJpaEntityTest {
                 openFreezeEntity();
 
         assertThatThrownBy(
-                () -> entity.reactivate(
-                        STARTS_ON.minusDays(1),
-                        actor(REACTIVATION_ACTOR_ID),
-                        REACTIVATED_AT))
+                () ->
+                        entity.reactivate(
+                                STARTS_ON.minusDays(1),
+                                actor(REACTIVATION_ACTOR_ID),
+                                REACTIVATED_AT))
                 .isInstanceOf(
                         MembershipValidationException.class)
                 .hasMessage(
@@ -167,15 +217,17 @@ class MembershipFreezeJpaEntityTest {
                 openFreezeEntity();
 
         entity.reactivate(
-                LocalDate.of(2026, 9, 10),
+                REACTIVATED_ON,
                 actor(REACTIVATION_ACTOR_ID),
                 REACTIVATED_AT);
 
         assertThatThrownBy(
-                () -> entity.reactivate(
-                        LocalDate.of(2026, 9, 11),
-                        actor(REACTIVATION_ACTOR_ID),
-                        REACTIVATED_AT.plusSeconds(3_600)))
+                () ->
+                        entity.reactivate(
+                                REACTIVATED_ON.plusDays(1),
+                                actor(REACTIVATION_ACTOR_ID),
+                                REACTIVATED_AT.plusSeconds(
+                                        3_600)))
                 .isInstanceOf(
                         MembershipValidationException.class)
                 .hasMessage(
@@ -184,19 +236,12 @@ class MembershipFreezeJpaEntityTest {
 
     @Test
     void shouldRejectMissingActorWhenCreating() {
-        MembershipFreeze freeze =
-                new MembershipFreeze(
-                        MEMBERSHIP_ID,
-                        PERIOD_ID,
-                        STARTS_ON,
-                        PLANNED_ENDS_ON,
-                        "Medical leave");
-
         assertThatThrownBy(
-                () -> MembershipFreezeJpaEntity.create(
-                        freeze,
-                        null,
-                        CREATED_AT))
+                () ->
+                        MembershipFreezeJpaEntity.create(
+                                membershipFreeze(),
+                                null,
+                                CREATED_AT))
                 .isInstanceOf(
                         MembershipValidationException.class)
                 .hasMessage(
@@ -204,20 +249,223 @@ class MembershipFreezeJpaEntityTest {
     }
 
     @Test
-    void shouldRejectMissingOccurrenceTime() {
-        MembershipFreeze freeze =
-                new MembershipFreeze(
-                        MEMBERSHIP_ID,
-                        PERIOD_ID,
-                        STARTS_ON,
-                        PLANNED_ENDS_ON,
-                        "Medical leave");
+    void shouldRejectMissingOccurrenceTimeWhenCreating() {
+        assertThatThrownBy(
+                () ->
+                        MembershipFreezeJpaEntity.create(
+                                membershipFreeze(),
+                                actor(ACTOR_ID),
+                                null))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership freeze occurrence time "
+                                + "must be provided.");
+    }
+
+    @Test
+    void shouldCloseFreezeForCancellation() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        AuthenticatedActor cancellationActor =
+                actor(ACTOR_ID);
+
+        entity.closeForCancellation(
+                CANCELLED_ON,
+                cancellationActor,
+                CANCELLED_AT);
+
+        MembershipFreezeDetails details =
+                entity.toDetails();
+
+        assertThat(details.open())
+                .isFalse();
+
+        assertThat(details.reactivated())
+                .isFalse();
+
+        assertThat(details.closedByCancellation())
+                .isTrue();
+
+        assertThat(details.cancelledOn())
+                .isEqualTo(CANCELLED_ON);
+
+        assertThat(details.cancelledByUserId())
+                .isEqualTo(ACTOR_ID);
+
+        assertThat(details.reactivatedOn())
+                .isNull();
+
+        assertThat(details.reactivatedByUserId())
+                .isNull();
+
+        assertThat(details.updatedAt())
+                .isEqualTo(CANCELLED_AT);
+
+        assertThat(entity.open())
+                .isFalse();
+    }
+
+    @Test
+    void shouldAllowCancellationOnFreezeStartDate() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        entity.closeForCancellation(
+                STARTS_ON,
+                actor(ACTOR_ID),
+                REACTIVATED_AT);
+
+        MembershipFreezeDetails details =
+                entity.toDetails();
+
+        assertThat(details.cancelledOn())
+                .isEqualTo(STARTS_ON);
+
+        assertThat(details.cancelledByUserId())
+                .isEqualTo(ACTOR_ID);
+
+        assertThat(details.closedByCancellation())
+                .isTrue();
+
+        assertThat(details.open())
+                .isFalse();
+    }
+
+    @Test
+    void shouldRejectCancellationBeforeFreezeStart() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
 
         assertThatThrownBy(
-                () -> MembershipFreezeJpaEntity.create(
-                        freeze,
-                        actor(ACTOR_ID),
-                        null))
+                () ->
+                        entity.closeForCancellation(
+                                STARTS_ON.minusDays(1),
+                                actor(ACTOR_ID),
+                                REACTIVATED_AT))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership cancellation date must not be "
+                                + "before the freeze start date.");
+    }
+
+    @Test
+    void shouldRejectASecondCancellationClosure() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        entity.closeForCancellation(
+                REACTIVATED_ON,
+                actor(ACTOR_ID),
+                REACTIVATED_AT);
+
+        assertThatThrownBy(
+                () ->
+                        entity.closeForCancellation(
+                                REACTIVATED_ON.plusDays(1),
+                                actor(ACTOR_ID),
+                                REACTIVATED_AT.plusSeconds(
+                                        3_600)))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership freeze is already closed.");
+    }
+
+    @Test
+    void shouldRejectCancellationAfterReactivation() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        entity.reactivate(
+                REACTIVATED_ON,
+                actor(REACTIVATION_ACTOR_ID),
+                REACTIVATED_AT);
+
+        assertThatThrownBy(
+                () ->
+                        entity.closeForCancellation(
+                                REACTIVATED_ON.plusDays(1),
+                                actor(ACTOR_ID),
+                                REACTIVATED_AT.plusSeconds(
+                                        3_600)))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership freeze is already closed.");
+    }
+
+    @Test
+    void shouldRejectReactivationAfterCancellation() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        entity.closeForCancellation(
+                CANCELLED_ON,
+                actor(ACTOR_ID),
+                CANCELLED_AT);
+
+        assertThatThrownBy(
+                () ->
+                        entity.reactivate(
+                                CANCELLED_ON,
+                                actor(REACTIVATION_ACTOR_ID),
+                                CANCELLED_AT.plusSeconds(
+                                        3_600)))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership freeze is already closed.");
+    }
+
+    @Test
+    void shouldRejectMissingCancellationDate() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        assertThatThrownBy(
+                () ->
+                        entity.closeForCancellation(
+                                null,
+                                actor(ACTOR_ID),
+                                CANCELLED_AT))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Membership cancellation date "
+                                + "must be provided.");
+    }
+
+    @Test
+    void shouldRejectMissingActorWhenClosingForCancellation() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        assertThatThrownBy(
+                () ->
+                        entity.closeForCancellation(
+                                CANCELLED_ON,
+                                null,
+                                CANCELLED_AT))
+                .isInstanceOf(
+                        MembershipValidationException.class)
+                .hasMessage(
+                        "Authenticated actor must be provided.");
+    }
+
+    @Test
+    void shouldRejectMissingOccurrenceTimeWhenClosingForCancellation() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        assertThatThrownBy(
+                () ->
+                        entity.closeForCancellation(
+                                CANCELLED_ON,
+                                actor(ACTOR_ID),
+                                null))
                 .isInstanceOf(
                         MembershipValidationException.class)
                 .hasMessage(
@@ -228,18 +476,19 @@ class MembershipFreezeJpaEntityTest {
     private static MembershipFreezeJpaEntity
     openFreezeEntity() {
 
-        MembershipFreeze freeze =
-                new MembershipFreeze(
-                        MEMBERSHIP_ID,
-                        PERIOD_ID,
-                        STARTS_ON,
-                        PLANNED_ENDS_ON,
-                        "Medical leave");
-
         return MembershipFreezeJpaEntity.create(
-                freeze,
+                membershipFreeze(),
                 actor(ACTOR_ID),
                 CREATED_AT);
+    }
+
+    private static MembershipFreeze membershipFreeze() {
+        return new MembershipFreeze(
+                MEMBERSHIP_ID,
+                PERIOD_ID,
+                STARTS_ON,
+                PLANNED_ENDS_ON,
+                "Medical leave");
     }
 
     private static AuthenticatedActor actor(

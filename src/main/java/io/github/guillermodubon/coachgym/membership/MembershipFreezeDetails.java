@@ -14,11 +14,22 @@ public record MembershipFreezeDetails(
         LocalDate reactivatedOn,
         UUID createdByUserId,
         UUID reactivatedByUserId,
+        LocalDate cancelledOn,
+        UUID cancelledByUserId,
         Instant createdAt,
         Instant updatedAt,
         long version) {
 
     public boolean open() {
-        return reactivatedOn == null;
+        return reactivatedOn == null
+                && cancelledOn == null;
+    }
+
+    public boolean reactivated() {
+        return reactivatedOn != null;
+    }
+
+    public boolean closedByCancellation() {
+        return cancelledOn != null;
     }
 }

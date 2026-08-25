@@ -11,7 +11,12 @@ import static org.mockito.Mockito.when;
 import io.github.guillermodubon.coachgym.client.ClientDetails;
 import io.github.guillermodubon.coachgym.client.ClientQuery;
 import io.github.guillermodubon.coachgym.client.ClientStatus;
-import io.github.guillermodubon.coachgym.membership.*;
+import io.github.guillermodubon.coachgym.membership.MembershipDetails;
+import io.github.guillermodubon.coachgym.membership.MembershipFreezeDetails;
+import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodDetails;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodSource;
+import io.github.guillermodubon.coachgym.membership.MembershipStatus;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipFreeze;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipPricingSnapshot;
 import io.github.guillermodubon.coachgym.plan.DurationUnit;
@@ -58,19 +63,38 @@ class MembershipFreezeApplicationServiceTest {
                     "60000000-0000-0000-0000-000000000001");
 
     private static final LocalDate PERIOD_STARTS_ON =
-            LocalDate.of(2026, 9, 1);
+            LocalDate.of(
+                    2026,
+                    9,
+                    1);
 
     private static final LocalDate PERIOD_ENDS_ON =
-            LocalDate.of(2026, 10, 1);
+            LocalDate.of(
+                    2026,
+                    10,
+                    1);
 
     private static final LocalDate FREEZE_STARTS_ON =
-            LocalDate.of(2026, 9, 10);
+            LocalDate.of(
+                    2026,
+                    9,
+                    10);
 
     private static final LocalDate PLANNED_ENDS_ON =
-            LocalDate.of(2026, 9, 20);
+            LocalDate.of(
+                    2026,
+                    9,
+                    20);
+
+    private static final LocalDate REACTIVATED_ON =
+            LocalDate.of(
+                    2026,
+                    9,
+                    15);
 
     private static final Instant NOW =
-            Instant.parse("2026-09-10T14:00:00Z");
+            Instant.parse(
+                    "2026-09-10T14:00:00Z");
 
     @Mock
     private MembershipStore membershipStore;
@@ -119,11 +143,16 @@ class MembershipFreezeApplicationServiceTest {
                         MembershipStatus.FROZEN,
                         1L);
 
-        when(membershipStore.findById(MEMBERSHIP_ID))
+        when(
+                membershipStore.findById(
+                        MEMBERSHIP_ID))
                 .thenReturn(
-                        Optional.of(activeMembership));
+                        Optional.of(
+                                activeMembership));
 
-        when(freezeStore.hasOpenFreeze(MEMBERSHIP_ID))
+        when(
+                freezeStore.hasOpenFreeze(
+                        MEMBERSHIP_ID))
                 .thenReturn(false);
 
         when(
@@ -131,7 +160,8 @@ class MembershipFreezeApplicationServiceTest {
                         any(MembershipFreeze.class),
                         any(AuthenticatedActor.class),
                         any(Instant.class)))
-                .thenReturn(openFreeze());
+                .thenReturn(
+                        openFreeze());
 
         when(
                 membershipStore.freeze(
@@ -140,7 +170,8 @@ class MembershipFreezeApplicationServiceTest {
                         0L,
                         actor,
                         NOW))
-                .thenReturn(frozenMembership);
+                .thenReturn(
+                        frozenMembership);
 
         MembershipDetails result =
                 service.freeze(
@@ -153,7 +184,8 @@ class MembershipFreezeApplicationServiceTest {
                         actor);
 
         assertThat(result.status())
-                .isEqualTo(MembershipStatus.FROZEN);
+                .isEqualTo(
+                        MembershipStatus.FROZEN);
 
         assertThat(result.version())
                 .isEqualTo(1L);
@@ -184,19 +216,23 @@ class MembershipFreezeApplicationServiceTest {
                         MembershipStatus.ACTIVE,
                         2L);
 
-        when(membershipStore.findById(MEMBERSHIP_ID))
+        when(
+                membershipStore.findById(
+                        MEMBERSHIP_ID))
                 .thenReturn(
-                        Optional.of(activeMembership));
+                        Optional.of(
+                                activeMembership));
 
         assertThatThrownBy(
-                () -> service.freeze(
-                        MEMBERSHIP_ID,
-                        new FreezeMembershipCommand(
-                                FREEZE_STARTS_ON,
-                                PLANNED_ENDS_ON,
-                                "Medical leave",
-                                1L),
-                        actor))
+                () ->
+                        service.freeze(
+                                MEMBERSHIP_ID,
+                                new FreezeMembershipCommand(
+                                        FREEZE_STARTS_ON,
+                                        PLANNED_ENDS_ON,
+                                        "Medical leave",
+                                        1L),
+                                actor))
                 .isInstanceOf(
                         MembershipVersionConflictException.class);
 
@@ -205,6 +241,17 @@ class MembershipFreezeApplicationServiceTest {
                         any(),
                         any(),
                         any());
+
+        verify(membershipStore, never())
+                .freeze(
+                        any(),
+                        any(),
+                        anyLong(),
+                        any(),
+                        any());
+
+        verify(eventPublisher, never())
+                .publishEvent(any());
     }
 
     @Test
@@ -214,22 +261,28 @@ class MembershipFreezeApplicationServiceTest {
                         MembershipStatus.FROZEN,
                         1L);
 
-        when(membershipStore.findById(MEMBERSHIP_ID))
+        when(
+                membershipStore.findById(
+                        MEMBERSHIP_ID))
                 .thenReturn(
-                        Optional.of(frozenMembership));
+                        Optional.of(
+                                frozenMembership));
 
-        when(freezeStore.hasOpenFreeze(MEMBERSHIP_ID))
+        when(
+                freezeStore.hasOpenFreeze(
+                        MEMBERSHIP_ID))
                 .thenReturn(true);
 
         assertThatThrownBy(
-                () -> service.freeze(
-                        MEMBERSHIP_ID,
-                        new FreezeMembershipCommand(
-                                FREEZE_STARTS_ON,
-                                PLANNED_ENDS_ON,
-                                "Medical leave",
-                                1L),
-                        actor))
+                () ->
+                        service.freeze(
+                                MEMBERSHIP_ID,
+                                new FreezeMembershipCommand(
+                                        FREEZE_STARTS_ON,
+                                        PLANNED_ENDS_ON,
+                                        "Medical leave",
+                                        1L),
+                                actor))
                 .isInstanceOf(
                         MembershipAlreadyFrozenException.class);
 
@@ -240,6 +293,9 @@ class MembershipFreezeApplicationServiceTest {
                         anyLong(),
                         any(),
                         any());
+
+        verify(eventPublisher, never())
+                .publishEvent(any());
     }
 
     @Test
@@ -257,25 +313,32 @@ class MembershipFreezeApplicationServiceTest {
         MembershipFreezeDetails openFreeze =
                 openFreeze();
 
-        when(membershipStore.findById(MEMBERSHIP_ID))
+        when(
+                membershipStore.findById(
+                        MEMBERSHIP_ID))
                 .thenReturn(
-                        Optional.of(frozenMembership));
+                        Optional.of(
+                                frozenMembership));
 
-        when(clientQuery.findClientById(CLIENT_ID))
+        when(
+                clientQuery.findClientById(
+                        CLIENT_ID))
                 .thenReturn(
-                        Optional.of(activeClient()));
+                        Optional.of(
+                                activeClient()));
 
         when(
                 freezeStore.findOpenByMembershipId(
                         MEMBERSHIP_ID))
                 .thenReturn(
-                        Optional.of(openFreeze));
+                        Optional.of(
+                                openFreeze));
 
         when(
                 freezeStore.reactivate(
                         MEMBERSHIP_ID,
                         FREEZE_ID,
-                        LocalDate.of(2026, 9, 15),
+                        REACTIVATED_ON,
                         0L,
                         actor,
                         NOW))
@@ -289,18 +352,20 @@ class MembershipFreezeApplicationServiceTest {
                         1L,
                         actor,
                         NOW))
-                .thenReturn(activeMembership);
+                .thenReturn(
+                        activeMembership);
 
         MembershipDetails result =
                 service.reactivate(
                         MEMBERSHIP_ID,
                         new ReactivateMembershipCommand(
-                                LocalDate.of(2026, 9, 15),
+                                REACTIVATED_ON,
                                 1L),
                         actor);
 
         assertThat(result.status())
-                .isEqualTo(MembershipStatus.ACTIVE);
+                .isEqualTo(
+                        MembershipStatus.ACTIVE);
 
         assertThat(result.version())
                 .isEqualTo(2L);
@@ -309,7 +374,7 @@ class MembershipFreezeApplicationServiceTest {
                 .reactivate(
                         MEMBERSHIP_ID,
                         FREEZE_ID,
-                        LocalDate.of(2026, 9, 15),
+                        REACTIVATED_ON,
                         0L,
                         actor,
                         NOW);
@@ -330,21 +395,28 @@ class MembershipFreezeApplicationServiceTest {
                         MembershipStatus.FROZEN,
                         1L);
 
-        when(membershipStore.findById(MEMBERSHIP_ID))
+        when(
+                membershipStore.findById(
+                        MEMBERSHIP_ID))
                 .thenReturn(
-                        Optional.of(frozenMembership));
+                        Optional.of(
+                                frozenMembership));
 
-        when(clientQuery.findClientById(CLIENT_ID))
+        when(
+                clientQuery.findClientById(
+                        CLIENT_ID))
                 .thenReturn(
-                        Optional.of(inactiveClient()));
+                        Optional.of(
+                                inactiveClient()));
 
         assertThatThrownBy(
-                () -> service.reactivate(
-                        MEMBERSHIP_ID,
-                        new ReactivateMembershipCommand(
-                                LocalDate.of(2026, 9, 15),
-                                1L),
-                        actor))
+                () ->
+                        service.reactivate(
+                                MEMBERSHIP_ID,
+                                new ReactivateMembershipCommand(
+                                        REACTIVATED_ON,
+                                        1L),
+                                actor))
                 .isInstanceOf(
                         InactiveMembershipClientException.class)
                 .hasMessageContaining(
@@ -358,6 +430,17 @@ class MembershipFreezeApplicationServiceTest {
                         anyLong(),
                         any(),
                         any());
+
+        verify(membershipStore, never())
+                .reactivate(
+                        any(),
+                        any(),
+                        anyLong(),
+                        any(),
+                        any());
+
+        verify(eventPublisher, never())
+                .publishEvent(any());
     }
 
     @Test
@@ -367,28 +450,56 @@ class MembershipFreezeApplicationServiceTest {
                         MembershipStatus.FROZEN,
                         1L);
 
-        when(membershipStore.findById(MEMBERSHIP_ID))
+        when(
+                membershipStore.findById(
+                        MEMBERSHIP_ID))
                 .thenReturn(
-                        Optional.of(frozenMembership));
+                        Optional.of(
+                                frozenMembership));
 
-        when(clientQuery.findClientById(CLIENT_ID))
+        when(
+                clientQuery.findClientById(
+                        CLIENT_ID))
                 .thenReturn(
-                        Optional.of(activeClient()));
+                        Optional.of(
+                                activeClient()));
 
         when(
                 freezeStore.findOpenByMembershipId(
                         MEMBERSHIP_ID))
-                .thenReturn(Optional.empty());
+                .thenReturn(
+                        Optional.empty());
 
         assertThatThrownBy(
-                () -> service.reactivate(
-                        MEMBERSHIP_ID,
-                        new ReactivateMembershipCommand(
-                                LocalDate.of(2026, 9, 15),
-                                1L),
-                        actor))
+                () ->
+                        service.reactivate(
+                                MEMBERSHIP_ID,
+                                new ReactivateMembershipCommand(
+                                        REACTIVATED_ON,
+                                        1L),
+                                actor))
                 .isInstanceOf(
                         MembershipFreezeNotFoundException.class);
+
+        verify(freezeStore, never())
+                .reactivate(
+                        any(),
+                        any(),
+                        any(),
+                        anyLong(),
+                        any(),
+                        any());
+
+        verify(membershipStore, never())
+                .reactivate(
+                        any(),
+                        any(),
+                        anyLong(),
+                        any(),
+                        any());
+
+        verify(eventPublisher, never())
+                .publishEvent(any());
     }
 
     private static MembershipDetails membership(
@@ -441,6 +552,8 @@ class MembershipFreezeApplicationServiceTest {
                 null,
                 ACTOR_ID,
                 null,
+                null,
+                null,
                 NOW,
                 NOW,
                 0L);
@@ -454,20 +567,24 @@ class MembershipFreezeApplicationServiceTest {
                 FREEZE_STARTS_ON,
                 PLANNED_ENDS_ON,
                 "Medical leave",
-                LocalDate.of(2026, 9, 15),
+                REACTIVATED_ON,
                 ACTOR_ID,
                 ACTOR_ID,
+                null,
+                null,
                 NOW,
                 NOW,
                 1L);
     }
 
     private static ClientDetails activeClient() {
-        return client(ClientStatus.ACTIVE);
+        return client(
+                ClientStatus.ACTIVE);
     }
 
     private static ClientDetails inactiveClient() {
-        return client(ClientStatus.INACTIVE);
+        return client(
+                ClientStatus.INACTIVE);
     }
 
     private static ClientDetails client(
@@ -480,7 +597,10 @@ class MembershipFreezeApplicationServiceTest {
                 "Martinez",
                 "ana@example.com",
                 "+50370000000",
-                LocalDate.of(1995, 4, 12),
+                LocalDate.of(
+                        1995,
+                        4,
+                        12),
                 status,
                 NOW,
                 NOW,
