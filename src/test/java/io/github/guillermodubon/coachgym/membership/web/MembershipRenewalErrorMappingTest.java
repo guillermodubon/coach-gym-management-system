@@ -3,29 +3,49 @@ package io.github.guillermodubon.coachgym.membership.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
-import io.github.guillermodubon.coachgym.membership.application.MembershipApplicationService;
-import io.github.guillermodubon.coachgym.membership.application.MembershipFreezeApplicationService;
-import io.github.guillermodubon.coachgym.membership.application.MembershipNotRenewableException;
-import io.github.guillermodubon.coachgym.membership.application.MembershipVersionConflictException;
+import io.github.guillermodubon.coachgym.membership.application.*;
+
 import java.util.UUID;
+
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
+@ExtendWith(MockitoExtension.class)
 class MembershipRenewalErrorMappingTest {
 
     private static final UUID MEMBERSHIP_ID =
             UUID.fromString(
                     "60716b73-f2e8-4198-acd7-316e02631c4b");
 
-    private final MembershipController controller =
-            new MembershipController(
-                    Mockito.mock(
-                            MembershipApplicationService.class),
-                    Mockito.mock(
-                            MembershipFreezeApplicationService.class));
+        @Mock
+        private MembershipApplicationService
+                membershipApplicationService;
+
+        @Mock
+        private MembershipFreezeApplicationService
+                membershipFreezeApplicationService;
+
+        @Mock
+        private MembershipCancellationApplicationService
+                membershipCancellationApplicationService;
+
+        private MembershipController controller;
+
+        @BeforeEach
+        void setUp() {
+            controller =
+                    new MembershipController(
+                            membershipApplicationService,
+                            membershipFreezeApplicationService,
+                            membershipCancellationApplicationService);
+        }
 
     @Test
     void mapsNotRenewableStateToConflict() {

@@ -5,9 +5,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
+import io.github.guillermodubon.coachgym.membership.application.MembershipVersionConflictException;
+import io.github.guillermodubon.coachgym.membership.domain.MembershipCancellation;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipPeriodDates;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipPricingSnapshot;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipRenewal;
@@ -300,6 +303,223 @@ class MembershipPersistenceAdapterTest {
                 status);
 
         return membership;
+    }
+
+    @Test
+    void shouldPersistActiveMembershipCancellation() {
+        MembershipJpaEntity membership =
+                membershipEntity(
+                        MembershipStatus.ACTIVE);
+
+        MembershipPeriodJpaEntity period =
+                period((short) 1);
+
+        MembershipCancellation cancellation =
+                cancellation(
+                        period.id(),
+                        MembershipStatus.ACTIVE);
+
+        when(membershipRepository.findByIdForUpdate(
+                MEMBERSHIP_ID))
+                .thenReturn(
+                        Optional.of(membership));
+
+        when(periodRepository
+                .findFirstByMembershipIdOrderByPeriodNumberDesc(
+                        MEMBERSHIP_ID))
+                .thenReturn(
+                        Optional.of(period));
+
+        when(membershipRepository.saveAndFlush(
+                membership))
+                .thenReturn(membership);
+
+        MembershipDetails result =
+                adapter.cancel(
+                        MEMBERSHIP_ID,
+                        cancellation,
+                        0L,
+                        ACTOR,
+                        NOW);
+
+        assertThat(result.status())
+                .isEqualTo(
+                        MembershipStatus.CANCELLED);
+
+        assertThat(result.currentPeriod().id())
+                .isEqualTo(period.id());
+
+        assertThat(membership.cancellationReason())
+                .isEqualTo(
+                        "Client requested cancellation");
+
+        assertThat(membership.cancelledByUserId())
+                .isEqualTo(ACTOR_ID);
+
+        verify(statusHistoryRepository)
+                .saveAndFlush(
+                        any(
+                                MembershipStatusHistoryJpaEntity.class));
+
+        verify(periodRepository, never())
+                .saveAndFlush(
+                        any(
+                                MembershipPeriodJpaEntity.class));
+    }
+
+    @Test
+    void shouldPersistFrozenMembershipCancellation() {
+        MembershipJpaEntity membership =
+                membershipEntity(
+                        MembershipStatus.FROZEN);
+
+        MembershipPeriodJpaEntity period =
+                period((short) 1);
+
+        MembershipCancellation cancellation =
+                cancellation(
+                        period.id(),
+                        MembershipStatus.FROZEN);
+
+        when(membershipRepository.findByIdForUpdate(
+                MEMBERSHIP_ID))
+                .thenReturn(
+                        Optional.of(membership));
+
+        when(periodRepository
+                .findFirstByMembershipIdOrderByPeriodNumberDesc(
+                        MEMBERSHIP_ID))
+                .thenReturn(
+                        Optional.of(period));
+
+        when(membershipRepository.saveAndFlush(
+                membership))
+                .thenReturn(membership);
+
+        MembershipDetails result =
+                adapter.cancel(
+                        MEMBERSHIP_ID,
+                        cancellation,
+                        0L,
+                        ACTOR,
+                        NOW);
+
+        assertThat(result.status())
+                .isEqualTo(
+                        MembershipStatus.CANCELLED);
+
+        assertThat(result.currentPeriod().id())
+                .isEqualTo(period.id());
+
+        verify(statusHistoryRepository)
+                .saveAndFlush(
+                        any(
+                                MembershipStatusHistoryJpaEntity.class));
+
+        verify(periodRepository, never())
+                .saveAndFlush(
+                        any(
+                                MembershipPeriodJpaEntity.class));
+    }
+
+    @Test
+    void shouldRejectCancellationWithStaleVersion() {
+        MembershipJpaEntity membership =
+                membershipEntity(
+                        MembershipStatus.ACTIVE);
+
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                membership,
+                "version",
+                2L);
+
+        MembershipCancellation cancellation =
+                cancellation(
+                        UUID.randomUUID(),
+                        MembershipStatus.ACTIVE);
+
+        when(membershipRepository.findByIdForUpdate(
+                MEMBERSHIP_ID))
+                .thenReturn(
+                        Optional.of(membership));
+
+        assertThatThrownBy(
+                () ->
+                        adapter.cancel(
+                                MEMBERSHIP_ID,
+                                cancellation,
+                                1L,
+                                ACTOR,
+                                NOW))
+                .isInstanceOf(
+                        MembershipVersionConflictException.class);
+
+        verify(membershipRepository, never())
+                .saveAndFlush(any());
+
+        verify(statusHistoryRepository, never())
+                .saveAndFlush(any());
+    }
+
+    @Test
+    void shouldRejectCancellationForNonCurrentPeriod() {
+        MembershipJpaEntity membership =
+                membershipEntity(
+                        MembershipStatus.ACTIVE);
+
+        MembershipPeriodJpaEntity currentPeriod =
+                period((short) 1);
+
+        MembershipCancellation cancellation =
+                cancellation(
+                        UUID.fromString(
+                                "90000000-0000-0000-0000-000000000001"),
+                        MembershipStatus.ACTIVE);
+
+        when(membershipRepository.findByIdForUpdate(
+                MEMBERSHIP_ID))
+                .thenReturn(
+                        Optional.of(membership));
+
+        when(periodRepository
+                .findFirstByMembershipIdOrderByPeriodNumberDesc(
+                        MEMBERSHIP_ID))
+                .thenReturn(
+                        Optional.of(currentPeriod));
+
+        assertThatThrownBy(
+                () ->
+                        adapter.cancel(
+                                MEMBERSHIP_ID,
+                                cancellation,
+                                0L,
+                                ACTOR,
+                                NOW))
+                .isInstanceOf(
+                        IllegalStateException.class)
+                .hasMessageContaining(
+                        "is not the current period");
+
+        verify(membershipRepository, never())
+                .saveAndFlush(any());
+
+        verify(statusHistoryRepository, never())
+                .saveAndFlush(any());
+    }
+
+    private static MembershipCancellation cancellation(
+            UUID membershipPeriodId,
+            MembershipStatus previousStatus) {
+
+        return new MembershipCancellation(
+                MEMBERSHIP_ID,
+                membershipPeriodId,
+                LocalDate.of(
+                        2026,
+                        10,
+                        1),
+                "Client requested cancellation",
+                previousStatus);
     }
 
 }

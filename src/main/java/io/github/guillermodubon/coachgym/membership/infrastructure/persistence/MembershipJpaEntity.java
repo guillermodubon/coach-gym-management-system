@@ -11,6 +11,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
@@ -193,6 +194,55 @@ class MembershipJpaEntity {
         updatedAt = occurredAt;
     }
 
+    void cancel(
+            MembershipStatus expectedPreviousStatus,
+            LocalDate cancelledOn,
+            String reason,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        if (expectedPreviousStatus == null) {
+            throw new IllegalArgumentException(
+                    "Expected previous membership status must be provided.");
+        }
+
+        if (cancelledOn == null) {
+            throw new IllegalArgumentException(
+                    "Membership cancellation date must be provided.");
+        }
+
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Membership cancellation reason must not be blank.");
+        }
+
+        if (actor == null || actor.id() == null) {
+            throw new IllegalArgumentException(
+                    "Authenticated actor must be provided.");
+        }
+
+        if (occurredAt == null) {
+            throw new IllegalArgumentException(
+                    "Membership cancellation occurrence time "
+                            + "must be provided.");
+        }
+
+        changeStatus(
+                expectedPreviousStatus,
+                MembershipStatus.CANCELLED,
+                actor,
+                occurredAt);
+
+        this.cancelledAt =
+                occurredAt;
+
+        this.cancelledByUserId =
+                actor.id();
+
+        this.cancellationReason =
+                reason.trim();
+    }
+
     UUID id() {
         return id;
     }
@@ -219,5 +269,17 @@ class MembershipJpaEntity {
 
     long version() {
         return version;
+    }
+
+    Instant cancelledAt() {
+        return cancelledAt;
+    }
+
+    UUID cancelledByUserId() {
+        return cancelledByUserId;
+    }
+
+    String cancellationReason() {
+        return cancellationReason;
     }
 }

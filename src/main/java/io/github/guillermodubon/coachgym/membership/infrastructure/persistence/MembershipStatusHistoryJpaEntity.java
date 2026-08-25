@@ -238,8 +238,21 @@ class MembershipStatusHistoryJpaEntity {
         return history;
     }
 
+    static MembershipStatusHistoryJpaEntity cancelled(
+            UUID membershipId,
+            UUID membershipPeriodId,
+            MembershipStatus previousStatus,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
 
-
-
-
+        return transition(
+                membershipId,
+                membershipPeriodId,
+                previousStatus,
+                MembershipStatus.CANCELLED,
+                "Membership cancelled.",
+                actor,
+                occurredAt);
     }
+
+}

@@ -1,0 +1,38 @@
+package io.github.guillermodubon.coachgym.membership.application;
+
+import io.github.guillermodubon.coachgym.membership.MembershipStatus;
+import java.util.UUID;
+
+public class MembershipCancellationStateConflictException
+        extends RuntimeException {
+
+    private final UUID membershipId;
+
+    private final MembershipStatus status;
+
+    public MembershipCancellationStateConflictException(
+            UUID membershipId,
+            MembershipStatus status) {
+
+        super(
+                "Membership "
+                        + membershipId
+                        + " cannot be cancelled while its status is "
+                        + status
+                        + ".");
+
+        this.membershipId =
+                membershipId;
+
+        this.status =
+                status;
+    }
+
+    public UUID membershipId() {
+        return membershipId;
+    }
+
+    public MembershipStatus status() {
+        return status;
+    }
+}

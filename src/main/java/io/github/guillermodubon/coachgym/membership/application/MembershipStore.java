@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.membership.application;
 
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
+import io.github.guillermodubon.coachgym.membership.domain.MembershipCancellation;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipCreation;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipRenewal;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
@@ -34,6 +35,13 @@ public interface MembershipStore {
     MembershipDetails reactivate(
             UUID membershipId,
             UUID membershipPeriodId,
+            long expectedVersion,
+            AuthenticatedActor actor,
+            Instant occurredAt);
+
+    MembershipDetails cancel(
+            UUID membershipId,
+            MembershipCancellation cancellation,
             long expectedVersion,
             AuthenticatedActor actor,
             Instant occurredAt);

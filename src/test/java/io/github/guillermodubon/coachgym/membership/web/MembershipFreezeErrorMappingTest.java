@@ -4,36 +4,48 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
-import io.github.guillermodubon.coachgym.membership.application.MembershipAlreadyFrozenException;
-import io.github.guillermodubon.coachgym.membership.application.MembershipApplicationService;
-import io.github.guillermodubon.coachgym.membership.application.MembershipFreezeApplicationService;
-import io.github.guillermodubon.coachgym.membership.application.MembershipFreezeNotFoundException;
-import io.github.guillermodubon.coachgym.membership.application.MembershipFreezeStateConflictException;
-import io.github.guillermodubon.coachgym.membership.application.MembershipNotFrozenException;
+import io.github.guillermodubon.coachgym.membership.application.*;
+
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 
+@ExtendWith(MockitoExtension.class)
 class MembershipFreezeErrorMappingTest {
 
     private static final UUID MEMBERSHIP_ID =
             UUID.fromString(
                     "10000000-0000-0000-0000-000000000001");
 
-    private MembershipController controller;
+        @Mock
+        private MembershipApplicationService
+                membershipApplicationService;
 
-    @BeforeEach
-    void setUp() {
-        controller =
-                new MembershipController(
-                        mock(
-                                MembershipApplicationService.class),
-                        mock(
-                                MembershipFreezeApplicationService.class));
-    }
+        @Mock
+        private MembershipFreezeApplicationService
+                membershipFreezeApplicationService;
+
+        @Mock
+        private MembershipCancellationApplicationService
+                membershipCancellationApplicationService;
+
+        private MembershipController controller;
+
+        @BeforeEach
+        void setUp() {
+            controller =
+                    new MembershipController(
+                            membershipApplicationService,
+                            membershipFreezeApplicationService,
+                            membershipCancellationApplicationService);
+        }
+
 
     @Test
     void shouldMapAlreadyFrozenToConflict() {

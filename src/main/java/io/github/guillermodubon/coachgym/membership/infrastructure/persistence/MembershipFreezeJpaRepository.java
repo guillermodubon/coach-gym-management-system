@@ -10,9 +10,10 @@ interface MembershipFreezeJpaRepository
         UUID> {
 
     Optional<MembershipFreezeJpaEntity>
-    findFirstByMembershipIdAndReactivatedOnIsNull(
+    findFirstByMembershipIdAndReactivatedOnIsNullAndCancelledOnIsNull(
             UUID membershipId);
 
-    boolean existsByMembershipIdAndReactivatedOnIsNull(
+    boolean
+    existsByMembershipIdAndReactivatedOnIsNullAndCancelledOnIsNull(
             UUID membershipId);
 }

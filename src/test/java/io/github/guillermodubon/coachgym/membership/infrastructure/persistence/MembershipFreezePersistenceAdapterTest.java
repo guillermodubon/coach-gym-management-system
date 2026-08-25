@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.membership.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -35,14 +36,49 @@ class MembershipFreezePersistenceAdapterTest {
             UUID.fromString(
                     "30000000-0000-0000-0000-000000000001");
 
+    private static final UUID UNKNOWN_FREEZE_ID =
+            UUID.fromString(
+                    "90000000-0000-0000-0000-000000000001");
+
+    private static final UUID ANOTHER_MEMBERSHIP_ID =
+            UUID.fromString(
+                    "10000000-0000-0000-0000-000000000099");
+
     private static final LocalDate STARTS_ON =
-            LocalDate.of(2026, 9, 1);
+            LocalDate.of(
+                    2026,
+                    9,
+                    1);
 
     private static final LocalDate PLANNED_ENDS_ON =
-            LocalDate.of(2026, 9, 15);
+            LocalDate.of(
+                    2026,
+                    9,
+                    15);
+
+    private static final LocalDate REACTIVATED_ON =
+            LocalDate.of(
+                    2026,
+                    9,
+                    10);
+
+    private static final LocalDate CANCELLED_ON =
+            LocalDate.of(
+                    2026,
+                    9,
+                    15);
 
     private static final Instant OCCURRED_AT =
-            Instant.parse("2026-09-01T14:00:00Z");
+            Instant.parse(
+                    "2026-09-01T14:00:00Z");
+
+    private static final Instant REACTIVATED_AT =
+            Instant.parse(
+                    "2026-09-10T14:00:00Z");
+
+    private static final Instant CANCELLED_AT =
+            Instant.parse(
+                    "2026-09-15T14:00:00Z");
 
     @Mock
     private MembershipFreezeJpaRepository
@@ -65,9 +101,10 @@ class MembershipFreezePersistenceAdapterTest {
 
         when(
                 freezeRepository
-                        .findFirstByMembershipIdAndReactivatedOnIsNull(
+                        .findFirstByMembershipIdAndReactivatedOnIsNullAndCancelledOnIsNull(
                                 MEMBERSHIP_ID))
-                .thenReturn(Optional.of(entity));
+                .thenReturn(
+                        Optional.of(entity));
 
         Optional<MembershipFreezeDetails> result =
                 adapter.findOpenByMembershipId(
@@ -76,20 +113,35 @@ class MembershipFreezePersistenceAdapterTest {
         assertThat(result)
                 .isPresent();
 
-        assertThat(result.orElseThrow().membershipId())
+        assertThat(
+                result.orElseThrow()
+                        .membershipId())
                 .isEqualTo(MEMBERSHIP_ID);
 
-        assertThat(result.orElseThrow().open())
+        assertThat(
+                result.orElseThrow()
+                        .open())
                 .isTrue();
+
+        assertThat(
+                result.orElseThrow()
+                        .reactivated())
+                .isFalse();
+
+        assertThat(
+                result.orElseThrow()
+                        .closedByCancellation())
+                .isFalse();
     }
 
     @Test
     void shouldReturnEmptyWhenAnOpenFreezeDoesNotExist() {
         when(
                 freezeRepository
-                        .findFirstByMembershipIdAndReactivatedOnIsNull(
+                        .findFirstByMembershipIdAndReactivatedOnIsNullAndCancelledOnIsNull(
                                 MEMBERSHIP_ID))
-                .thenReturn(Optional.empty());
+                .thenReturn(
+                        Optional.empty());
 
         Optional<MembershipFreezeDetails> result =
                 adapter.findOpenByMembershipId(
@@ -103,7 +155,7 @@ class MembershipFreezePersistenceAdapterTest {
     void shouldReportWhetherAnOpenFreezeExists() {
         when(
                 freezeRepository
-                        .existsByMembershipIdAndReactivatedOnIsNull(
+                        .existsByMembershipIdAndReactivatedOnIsNullAndCancelledOnIsNull(
                                 MEMBERSHIP_ID))
                 .thenReturn(true);
 
@@ -120,11 +172,13 @@ class MembershipFreezePersistenceAdapterTest {
         MembershipFreeze freeze =
                 membershipFreeze();
 
-        when(freezeRepository.saveAndFlush(
-                org.mockito.ArgumentMatchers.any(
-                        MembershipFreezeJpaEntity.class)))
-                .thenAnswer(invocation ->
-                        invocation.getArgument(0));
+        when(
+                freezeRepository.saveAndFlush(
+                        any(
+                                MembershipFreezeJpaEntity.class)))
+                .thenAnswer(
+                        invocation ->
+                                invocation.getArgument(0));
 
         MembershipFreezeDetails result =
                 adapter.create(
@@ -144,9 +198,21 @@ class MembershipFreezePersistenceAdapterTest {
         assertThat(result.open())
                 .isTrue();
 
+        assertThat(result.reactivatedOn())
+                .isNull();
+
+        assertThat(result.reactivatedByUserId())
+                .isNull();
+
+        assertThat(result.cancelledOn())
+                .isNull();
+
+        assertThat(result.cancelledByUserId())
+                .isNull();
+
         verify(freezeRepository)
                 .saveAndFlush(
-                        org.mockito.ArgumentMatchers.any(
+                        any(
                                 MembershipFreezeJpaEntity.class));
     }
 
@@ -155,34 +221,52 @@ class MembershipFreezePersistenceAdapterTest {
         MembershipFreezeJpaEntity entity =
                 openFreezeEntity();
 
-        UUID freezeId = entity.id();
+        UUID freezeId =
+                entity.id();
 
-        when(freezeRepository.findById(freezeId))
-                .thenReturn(Optional.of(entity));
+        when(
+                freezeRepository.findById(
+                        freezeId))
+                .thenReturn(
+                        Optional.of(entity));
 
-        when(freezeRepository.saveAndFlush(entity))
+        when(
+                freezeRepository.saveAndFlush(
+                        entity))
                 .thenReturn(entity);
-
-        LocalDate reactivatedOn =
-                LocalDate.of(2026, 9, 10);
 
         MembershipFreezeDetails result =
                 adapter.reactivate(
                         MEMBERSHIP_ID,
                         freezeId,
-                        reactivatedOn,
+                        REACTIVATED_ON,
                         0L,
                         actor(),
-                        OCCURRED_AT.plusSeconds(3_600));
+                        REACTIVATED_AT);
 
         assertThat(result.reactivatedOn())
-                .isEqualTo(reactivatedOn);
+                .isEqualTo(REACTIVATED_ON);
 
         assertThat(result.reactivatedByUserId())
                 .isEqualTo(ACTOR_ID);
 
+        assertThat(result.cancelledOn())
+                .isNull();
+
+        assertThat(result.cancelledByUserId())
+                .isNull();
+
         assertThat(result.open())
                 .isFalse();
+
+        assertThat(result.reactivated())
+                .isTrue();
+
+        assertThat(result.closedByCancellation())
+                .isFalse();
+
+        assertThat(result.updatedAt())
+                .isEqualTo(REACTIVATED_AT);
 
         verify(freezeRepository)
                 .saveAndFlush(entity);
@@ -190,21 +274,21 @@ class MembershipFreezePersistenceAdapterTest {
 
     @Test
     void shouldRejectAnUnknownFreeze() {
-        UUID unknownFreezeId =
-                UUID.fromString(
-                        "90000000-0000-0000-0000-000000000001");
-
-        when(freezeRepository.findById(unknownFreezeId))
-                .thenReturn(Optional.empty());
+        when(
+                freezeRepository.findById(
+                        UNKNOWN_FREEZE_ID))
+                .thenReturn(
+                        Optional.empty());
 
         assertThatThrownBy(
-                () -> adapter.reactivate(
-                        MEMBERSHIP_ID,
-                        unknownFreezeId,
-                        LocalDate.of(2026, 9, 10),
-                        0L,
-                        actor(),
-                        OCCURRED_AT))
+                () ->
+                        adapter.reactivate(
+                                MEMBERSHIP_ID,
+                                UNKNOWN_FREEZE_ID,
+                                REACTIVATED_ON,
+                                0L,
+                                actor(),
+                                REACTIVATED_AT))
                 .isInstanceOf(
                         MembershipFreezeNotFoundException.class)
                 .hasMessage(
@@ -218,21 +302,21 @@ class MembershipFreezePersistenceAdapterTest {
         MembershipFreezeJpaEntity entity =
                 openFreezeEntity();
 
-        UUID anotherMembershipId =
-                UUID.fromString(
-                        "10000000-0000-0000-0000-000000000099");
-
-        when(freezeRepository.findById(entity.id()))
-                .thenReturn(Optional.of(entity));
+        when(
+                freezeRepository.findById(
+                        entity.id()))
+                .thenReturn(
+                        Optional.of(entity));
 
         assertThatThrownBy(
-                () -> adapter.reactivate(
-                        anotherMembershipId,
-                        entity.id(),
-                        LocalDate.of(2026, 9, 10),
-                        0L,
-                        actor(),
-                        OCCURRED_AT))
+                () ->
+                        adapter.reactivate(
+                                ANOTHER_MEMBERSHIP_ID,
+                                entity.id(),
+                                REACTIVATED_ON,
+                                0L,
+                                actor(),
+                                REACTIVATED_AT))
                 .isInstanceOf(
                         MembershipFreezeNotFoundException.class);
     }
@@ -242,17 +326,153 @@ class MembershipFreezePersistenceAdapterTest {
         MembershipFreezeJpaEntity entity =
                 openFreezeEntity();
 
-        when(freezeRepository.findById(entity.id()))
-                .thenReturn(Optional.of(entity));
+        when(
+                freezeRepository.findById(
+                        entity.id()))
+                .thenReturn(
+                        Optional.of(entity));
 
         assertThatThrownBy(
-                () -> adapter.reactivate(
+                () ->
+                        adapter.reactivate(
+                                MEMBERSHIP_ID,
+                                entity.id(),
+                                REACTIVATED_ON,
+                                1L,
+                                actor(),
+                                REACTIVATED_AT))
+                .isInstanceOf(
+                        MembershipVersionConflictException.class);
+    }
+
+    @Test
+    void shouldCloseFreezeForCancellation() {
+        AuthenticatedActor cancellationActor =
+                actor();
+
+        MembershipFreezeJpaEntity entity =
+                MembershipFreezeJpaEntity.create(
+                        membershipFreeze(),
+                        cancellationActor,
+                        OCCURRED_AT);
+
+        when(
+                freezeRepository.findById(
+                        entity.id()))
+                .thenReturn(
+                        Optional.of(entity));
+
+        when(
+                freezeRepository.saveAndFlush(
+                        entity))
+                .thenReturn(entity);
+
+        MembershipFreezeDetails result =
+                adapter.closeForCancellation(
                         MEMBERSHIP_ID,
                         entity.id(),
-                        LocalDate.of(2026, 9, 10),
-                        1L,
-                        actor(),
-                        OCCURRED_AT))
+                        CANCELLED_ON,
+                        0L,
+                        cancellationActor,
+                        CANCELLED_AT);
+
+        assertThat(result.open())
+                .isFalse();
+
+        assertThat(result.reactivated())
+                .isFalse();
+
+        assertThat(result.closedByCancellation())
+                .isTrue();
+
+        assertThat(result.cancelledOn())
+                .isEqualTo(CANCELLED_ON);
+
+        assertThat(result.cancelledByUserId())
+                .isEqualTo(ACTOR_ID);
+
+        assertThat(result.reactivatedOn())
+                .isNull();
+
+        assertThat(result.reactivatedByUserId())
+                .isNull();
+
+        assertThat(result.updatedAt())
+                .isEqualTo(CANCELLED_AT);
+
+        verify(freezeRepository)
+                .saveAndFlush(entity);
+    }
+
+    @Test
+    void shouldRejectCancellationOfAnUnknownFreeze() {
+        when(
+                freezeRepository.findById(
+                        UNKNOWN_FREEZE_ID))
+                .thenReturn(
+                        Optional.empty());
+
+        assertThatThrownBy(
+                () ->
+                        adapter.closeForCancellation(
+                                MEMBERSHIP_ID,
+                                UNKNOWN_FREEZE_ID,
+                                CANCELLED_ON,
+                                0L,
+                                actor(),
+                                CANCELLED_AT))
+                .isInstanceOf(
+                        MembershipFreezeNotFoundException.class)
+                .hasMessage(
+                        "An open freeze for membership "
+                                + MEMBERSHIP_ID
+                                + " was not found.");
+    }
+
+    @Test
+    void shouldRejectCancellationOfAFreezeFromAnotherMembership() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        when(
+                freezeRepository.findById(
+                        entity.id()))
+                .thenReturn(
+                        Optional.of(entity));
+
+        assertThatThrownBy(
+                () ->
+                        adapter.closeForCancellation(
+                                ANOTHER_MEMBERSHIP_ID,
+                                entity.id(),
+                                CANCELLED_ON,
+                                0L,
+                                actor(),
+                                CANCELLED_AT))
+                .isInstanceOf(
+                        MembershipFreezeNotFoundException.class);
+    }
+
+    @Test
+    void shouldRejectCancellationWithAStaleFreezeVersion() {
+        MembershipFreezeJpaEntity entity =
+                openFreezeEntity();
+
+        when(
+                freezeRepository.findById(
+                        entity.id()))
+                .thenReturn(
+                        Optional.of(entity));
+
+        assertThatThrownBy(
+                () ->
+                        adapter.closeForCancellation(
+                                MEMBERSHIP_ID,
+                                entity.id(),
+                                CANCELLED_ON,
+                                1L,
+                                actor(),
+                                CANCELLED_AT))
                 .isInstanceOf(
                         MembershipVersionConflictException.class);
     }

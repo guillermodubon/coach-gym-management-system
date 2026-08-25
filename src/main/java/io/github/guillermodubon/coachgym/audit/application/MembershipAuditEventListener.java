@@ -1,9 +1,6 @@
 package io.github.guillermodubon.coachgym.audit.application;
 
-import io.github.guillermodubon.coachgym.membership.MembershipCreated;
-import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
-import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
-import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
+import io.github.guillermodubon.coachgym.membership.*;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
@@ -48,6 +45,14 @@ class MembershipAuditEventListener {
             MembershipReactivated event) {
 
         auditEntryStore.recordMembershipReactivated(
+                event);
+    }
+
+    @EventListener
+    void record(
+            MembershipCancelled event) {
+
+        auditEntryStore.recordMembershipCancelled(
                 event);
     }
 }

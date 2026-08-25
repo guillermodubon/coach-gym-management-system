@@ -72,6 +72,20 @@ class MembershipFreezeJpaEntity {
     @Column(nullable = false)
     private long version;
 
+    @Column(name = "cancelled_on")
+    private LocalDate cancelledOn;
+
+    @Column(name = "cancelled_by_user_id")
+    private UUID cancelledByUserId;
+
+    LocalDate cancelledOn() {
+        return cancelledOn;
+    }
+
+    UUID cancelledByUserId() {
+        return cancelledByUserId;
+    }
+
     protected MembershipFreezeJpaEntity() {
     }
 
@@ -137,7 +151,8 @@ class MembershipFreezeJpaEntity {
     }
 
     boolean open() {
-        return reactivatedOn == null;
+        return reactivatedOn == null
+                && cancelledOn == null;
     }
 
     UUID id() {
@@ -163,6 +178,8 @@ class MembershipFreezeJpaEntity {
                 reactivatedOn,
                 createdByUserId,
                 reactivatedByUserId,
+                cancelledOn,
+                cancelledByUserId,
                 createdAt,
                 updatedAt,
                 version);
@@ -185,5 +202,40 @@ class MembershipFreezeJpaEntity {
                     "Membership freeze occurrence time "
                             + "must be provided.");
         }
+    }
+
+    void closeForCancellation(
+            LocalDate cancelledOn,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        if (cancelledOn == null) {
+            throw new MembershipValidationException(
+                    "Membership cancellation date "
+                            + "must be provided.");
+        }
+
+        validateActor(actor);
+        validateOccurredAt(occurredAt);
+
+        if (!open()) {
+            throw new MembershipValidationException(
+                    "Membership freeze is already closed.");
+        }
+
+        if (cancelledOn.isBefore(startsOn)) {
+            throw new MembershipValidationException(
+                    "Membership cancellation date must not be "
+                            + "before the freeze start date.");
+        }
+
+        this.cancelledOn =
+                cancelledOn;
+
+        this.cancelledByUserId =
+                actor.id();
+
+        this.updatedAt =
+                occurredAt;
     }
 }
