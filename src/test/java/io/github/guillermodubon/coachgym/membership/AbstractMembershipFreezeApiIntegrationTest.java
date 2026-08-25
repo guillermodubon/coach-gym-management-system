@@ -10,7 +10,7 @@ import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
 
-abstract class AbstractMembershipFreezeApiIntegrationTest
+public abstract class AbstractMembershipFreezeApiIntegrationTest
         extends AbstractMembershipApiIntegrationTest {
 
     protected UUID createActiveMembership(
