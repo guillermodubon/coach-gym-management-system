@@ -7,6 +7,7 @@ import io.github.guillermodubon.coachgym.membership.application.CurrentMembershi
 import io.github.guillermodubon.coachgym.membership.application.MembershipNotFoundException;
 import io.github.guillermodubon.coachgym.membership.application.MembershipStore;
 import io.github.guillermodubon.coachgym.membership.application.MembershipVersionConflictException;
+import io.github.guillermodubon.coachgym.membership.domain.MembershipCancellation;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipCreation;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipRenewal;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
@@ -316,6 +317,74 @@ class MembershipPersistenceAdapter
                 currentPeriod);
     }
 
+    @Override
+    @Transactional
+    public MembershipDetails cancel(
+            UUID membershipId,
+            MembershipCancellation cancellation,
+            long expectedVersion,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+
+        if (cancellation == null) {
+            throw new IllegalArgumentException(
+                    "Membership cancellation must be provided.");
+        }
+
+        MembershipJpaEntity membership =
+                requireMembership(
+                        membershipId);
+
+        verifyVersion(
+                membershipId,
+                expectedVersion,
+                membership.version());
+
+        MembershipPeriodJpaEntity currentPeriod =
+                requireCurrentPeriod(
+                        membershipId);
+
+        verifyCurrentPeriod(
+                membershipId,
+                cancellation.membershipPeriodId(),
+                currentPeriod.id());
+
+        verifyCancellationMembership(
+                membershipId,
+                cancellation.membershipId());
+
+        verifyCancellationStatus(
+                membershipId,
+                membership.status(),
+                cancellation.previousStatus());
+
+        membership.cancel(
+                cancellation.previousStatus(),
+                cancellation.cancelledOn(),
+                cancellation.reason(),
+                actor,
+                occurredAt);
+
+        MembershipJpaEntity savedMembership =
+                membershipRepository.saveAndFlush(
+                        membership);
+
+        entityManager.refresh(
+                savedMembership);
+
+        statusHistoryRepository.saveAndFlush(
+                MembershipStatusHistoryJpaEntity.cancelled(
+                        membershipId,
+                        currentPeriod.id(),
+                        cancellation.previousStatus(),
+                        actor,
+                        occurredAt));
+
+        return toDetails(
+                savedMembership,
+                currentPeriod);
+    }
+
     private MembershipJpaEntity requireMembership(
             UUID membershipId) {
 
@@ -446,4 +515,52 @@ class MembershipPersistenceAdapter
 
         return false;
     }
+
+    private static void verifyCancellationMembership(
+            UUID requestedMembershipId,
+            UUID cancellationMembershipId) {
+
+        if (cancellationMembershipId == null) {
+            throw new IllegalArgumentException(
+                    "Cancellation membership identifier "
+                            + "must be provided.");
+        }
+
+        if (!requestedMembershipId.equals(
+                cancellationMembershipId)) {
+
+            throw new IllegalStateException(
+                    "Cancellation membership "
+                            + cancellationMembershipId
+                            + " does not match requested membership "
+                            + requestedMembershipId
+                            + ".");
+        }
+    }
+
+    private static void verifyCancellationStatus(
+            UUID membershipId,
+            MembershipStatus currentStatus,
+            MembershipStatus expectedPreviousStatus) {
+
+        if (expectedPreviousStatus == null) {
+            throw new IllegalArgumentException(
+                    "Cancellation previous membership status "
+                            + "must be provided.");
+        }
+
+        if (currentStatus != expectedPreviousStatus) {
+            throw new IllegalStateException(
+                    "Membership "
+                            + membershipId
+                            + " status changed before cancellation. "
+                            + "Expected "
+                            + expectedPreviousStatus
+                            + " but found "
+                            + currentStatus
+                            + ".");
+        }
+    }
+
+
 }
