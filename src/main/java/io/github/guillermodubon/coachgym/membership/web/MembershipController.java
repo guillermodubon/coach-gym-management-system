@@ -2,7 +2,22 @@ package io.github.guillermodubon.coachgym.membership.web;
 
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
-import io.github.guillermodubon.coachgym.membership.application.*;
+import io.github.guillermodubon.coachgym.membership.application.CurrentMembershipAlreadyExistsException;
+import io.github.guillermodubon.coachgym.membership.application.InactiveMembershipClientException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipAlreadyCancelledException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipAlreadyFrozenException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipApplicationService;
+import io.github.guillermodubon.coachgym.membership.application.MembershipCancellationApplicationService;
+import io.github.guillermodubon.coachgym.membership.application.MembershipCancellationStateConflictException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipClientNotFoundException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipFreezeApplicationService;
+import io.github.guillermodubon.coachgym.membership.application.MembershipFreezeNotFoundException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipFreezeStateConflictException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipNotFoundException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipNotFrozenException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipNotRenewableException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipPlanNotAvailableException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipVersionConflictException;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipValidationException;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationException;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationFailure;
@@ -31,8 +46,9 @@ import org.springframework.web.util.UriComponentsBuilder;
 @RequestMapping("/api/v1/memberships")
 @Tag(
         name = "Memberships",
-        description =
-                "Membership creation and administrative queries.")
+        description = """
+                Membership creation, renewal and lifecycle management.
+                """)
 class MembershipController {
 
     private final MembershipApplicationService
@@ -41,16 +57,25 @@ class MembershipController {
     private final MembershipFreezeApplicationService
             membershipFreezeApplicationService;
 
+    private final MembershipCancellationApplicationService
+            membershipCancellationApplicationService;
+
     MembershipController(
-            MembershipApplicationService membershipApplicationService,
+            MembershipApplicationService
+                    membershipApplicationService,
             MembershipFreezeApplicationService
-                    membershipFreezeApplicationService) {
+                    membershipFreezeApplicationService,
+            MembershipCancellationApplicationService
+                    membershipCancellationApplicationService) {
 
         this.membershipApplicationService =
                 membershipApplicationService;
 
         this.membershipFreezeApplicationService =
                 membershipFreezeApplicationService;
+
+        this.membershipCancellationApplicationService =
+                membershipCancellationApplicationService;
     }
 
     @PostMapping
@@ -59,15 +84,15 @@ class MembershipController {
             description = """
                     Creates an active membership and its first
                     membership period.
-                    
+
                     The client must exist and be active. The membership
                     plan must exist and be active. A client cannot have
                     another active or frozen membership.
-                    
+
                     If a promotion is supplied, it must be active,
                     valid on the membership start date and explicitly
                     eligible for the selected plan.
-                    
+
                     Administrators and receptionists can execute this
                     operation.
                     """)
@@ -128,25 +153,26 @@ class MembershipController {
             description = """
                     Creates a new commercial period for an existing
                     membership.
-                    
+
                     An active membership is renewed from the current
-                    period's effective end date. A requested start date is
-                    ignored for an active membership.
-                    
+                    period's effective end date. A requested start date
+                    is ignored for an active membership.
+
                     An expired membership requires a start date that is
                     not before the current operational date. A successful
-                    expired-membership renewal changes its status back to
-                    ACTIVE.
-                    
+                    expired-membership renewal changes its status back
+                    to ACTIVE.
+
                     Frozen and cancelled memberships cannot be renewed.
-                    
-                    The selected plan must be active. An optional promotion
-                    must be active, valid on the effective renewal start
-                    date and explicitly eligible for the selected plan.
-                    
+
+                    The selected plan must be active. An optional
+                    promotion must be active, valid on the effective
+                    renewal start date and explicitly eligible for the
+                    selected plan.
+
                     The request must contain the current optimistic-lock
                     version of the membership.
-                    
+
                     Administrators and receptionists can execute this
                     operation.
                     """)
@@ -155,7 +181,8 @@ class MembershipController {
             description = "Membership renewed")
     @ApiResponse(
             responseCode = "400",
-            description = "Invalid membership renewal request")
+            description =
+                    "Invalid membership renewal request")
     @ApiResponse(
             responseCode = "401",
             description = "Authentication required")
@@ -174,7 +201,8 @@ class MembershipController {
                     evaluation conflict
                     """)
     MembershipResponse renew(
-            @PathVariable UUID id,
+            @PathVariable
+            UUID id,
             @Valid
             @RequestBody
             RenewMembershipRequest request,
@@ -194,7 +222,7 @@ class MembershipController {
                     Returns a membership and its current commercial
                     period, including historical plan and promotion
                     snapshots.
-                    
+
                     Administrators and receptionists can execute this
                     operation.
                     """)
@@ -211,11 +239,175 @@ class MembershipController {
             responseCode = "404",
             description = "Membership not found")
     MembershipResponse findById(
-            @PathVariable UUID id) {
+            @PathVariable
+            UUID id) {
 
         return MembershipResponse.from(
                 membershipApplicationService
                         .findById(id));
+    }
+
+    @PostMapping("/{id}/freeze")
+    @Operation(
+            summary = "Freeze a membership",
+            description = """
+                    Freezes an active membership without creating a new
+                    commercial period.
+
+                    The request must contain the current optimistic-lock
+                    version of the membership.
+
+                    Administrators and receptionists can execute this
+                    operation.
+                    """)
+    @ApiResponse(
+            responseCode = "200",
+            description = "Membership frozen")
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid freeze request")
+    @ApiResponse(
+            responseCode = "401",
+            description = "Authentication required")
+    @ApiResponse(
+            responseCode = "403",
+            description =
+                    "Insufficient permissions or invalid CSRF token")
+    @ApiResponse(
+            responseCode = "404",
+            description = "Membership not found")
+    @ApiResponse(
+            responseCode = "409",
+            description =
+                    "Membership version or state conflict")
+    MembershipResponse freeze(
+            @PathVariable
+            UUID id,
+            @Valid
+            @RequestBody
+            FreezeMembershipRequest request,
+            Authentication authentication) {
+
+        return MembershipResponse.from(
+                membershipFreezeApplicationService.freeze(
+                        id,
+                        request.toCommand(),
+                        actor(authentication)));
+    }
+
+    @PostMapping("/{id}/reactivate")
+    @Operation(
+            summary = "Reactivate a frozen membership",
+            description = """
+                    Reactivates a frozen membership without creating a
+                    new commercial period.
+
+                    The associated client must remain active. The request
+                    must contain the current optimistic-lock version of
+                    the membership.
+
+                    Administrators and receptionists can execute this
+                    operation.
+                    """)
+    @ApiResponse(
+            responseCode = "200",
+            description = "Membership reactivated")
+    @ApiResponse(
+            responseCode = "400",
+            description = "Invalid reactivation request")
+    @ApiResponse(
+            responseCode = "401",
+            description = "Authentication required")
+    @ApiResponse(
+            responseCode = "403",
+            description =
+                    "Insufficient permissions or invalid CSRF token")
+    @ApiResponse(
+            responseCode = "404",
+            description =
+                    "Membership or open freeze not found")
+    @ApiResponse(
+            responseCode = "409",
+            description =
+                    "Membership version, state or client conflict")
+    MembershipResponse reactivate(
+            @PathVariable
+            UUID id,
+            @Valid
+            @RequestBody
+            ReactivateMembershipRequest request,
+            Authentication authentication) {
+
+        return MembershipResponse.from(
+                membershipFreezeApplicationService.reactivate(
+                        id,
+                        request.toCommand(),
+                        actor(authentication)));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @Operation(
+            summary = "Cancel a membership",
+            description = """
+                Permanently cancels an active or frozen membership.
+
+                If the membership is frozen, its open freeze is closed
+                by cancellation as part of the same transaction.
+
+                A cancelled membership cannot be renewed, reactivated
+                or cancelled again.
+
+                The cancellation date must belong to the current
+                membership period and must not be after the current
+                operational date.
+
+                The request must contain the current optimistic-lock
+                version of the membership.
+
+                Only administrators can execute this operation.
+                """)
+    @ApiResponse(
+            responseCode = "200",
+            description = "Membership cancelled")
+    @ApiResponse(
+            responseCode = "400",
+            description = """
+                Structurally invalid request or invalid cancellation
+                date
+                """)
+    @ApiResponse(
+            responseCode = "401",
+            description = "Authentication required")
+    @ApiResponse(
+            responseCode = "403",
+            description = """
+                Administrator permission required or invalid CSRF
+                token
+                """)
+    @ApiResponse(
+            responseCode = "404",
+            description = """
+                Membership or required open freeze not found
+                """)
+    @ApiResponse(
+            responseCode = "409",
+            description = """
+                Membership version conflict, membership already
+                cancelled or cancellation state conflict
+                """)
+    MembershipResponse cancel(
+            @PathVariable
+            UUID id,
+            @Valid
+            @RequestBody
+            CancelMembershipRequest request,
+            Authentication authentication) {
+
+        return MembershipResponse.from(
+                membershipCancellationApplicationService.cancel(
+                        id,
+                        request.toCommand(),
+                        actor(authentication)));
     }
 
     private static AuthenticatedActor actor(
@@ -285,82 +477,14 @@ class MembershipController {
 
     @ExceptionHandler(
             CurrentMembershipAlreadyExistsException.class)
-    ResponseEntity<ProblemDetail> handleCurrentMembershipConflict(
+    ResponseEntity<ProblemDetail>
+    handleCurrentMembershipConflict(
             CurrentMembershipAlreadyExistsException exception) {
 
         return problem(
                 HttpStatus.CONFLICT,
                 "CURRENT_MEMBERSHIP_ALREADY_EXISTS",
                 exception.getMessage());
-    }
-
-    @ExceptionHandler(
-            PromotionEvaluationException.class)
-    ResponseEntity<ProblemDetail> handlePromotionEvaluation(
-            PromotionEvaluationException exception) {
-
-        HttpStatus status =
-                promotionEvaluationStatus(
-                        exception.failure());
-
-        return problem(
-                status,
-                promotionEvaluationCode(
-                        exception.failure()),
-                exception.getMessage());
-    }
-
-    private static HttpStatus promotionEvaluationStatus(
-            PromotionEvaluationFailure failure) {
-
-        return switch (failure) {
-            case PROMOTION_NOT_FOUND -> HttpStatus.NOT_FOUND;
-
-            case PROMOTION_INACTIVE,
-                 PROMOTION_NOT_YET_VALID,
-                 PROMOTION_EXPIRED,
-                 PLAN_NOT_ELIGIBLE,
-                 CURRENCY_MISMATCH -> HttpStatus.CONFLICT;
-
-            case INVALID_PRICE,
-                 INVALID_CURRENCY -> HttpStatus.BAD_REQUEST;
-        };
-    }
-
-    private static String promotionEvaluationCode(
-            PromotionEvaluationFailure failure) {
-
-        return switch (failure) {
-            case PROMOTION_NOT_FOUND -> "MEMBERSHIP_PROMOTION_NOT_FOUND";
-
-            case PROMOTION_INACTIVE -> "MEMBERSHIP_PROMOTION_INACTIVE";
-
-            case PROMOTION_NOT_YET_VALID -> "MEMBERSHIP_PROMOTION_NOT_YET_VALID";
-
-            case PROMOTION_EXPIRED -> "MEMBERSHIP_PROMOTION_EXPIRED";
-
-            case PLAN_NOT_ELIGIBLE -> "MEMBERSHIP_PROMOTION_PLAN_NOT_ELIGIBLE";
-
-            case CURRENCY_MISMATCH -> "MEMBERSHIP_PROMOTION_CURRENCY_MISMATCH";
-
-            case INVALID_PRICE -> "MEMBERSHIP_PROMOTION_INVALID_PRICE";
-
-            case INVALID_CURRENCY -> "MEMBERSHIP_PROMOTION_INVALID_CURRENCY";
-        };
-    }
-
-    private static ResponseEntity<ProblemDetail> problem(
-            HttpStatus status,
-            String code,
-            String detail) {
-
-        return ResponseEntity
-                .status(status)
-                .body(
-                        ApiProblemFactory.create(
-                                status,
-                                code,
-                                detail));
     }
 
     @ExceptionHandler(
@@ -385,146 +509,150 @@ class MembershipController {
                 exception.getMessage());
     }
 
-    @PostMapping("/{id}/freeze")
-    @Operation(
-            summary = "Freeze a membership",
-            description = """
-                    Freezes an active membership without creating a new
-                    commercial period. The request must contain the current
-                    optimistic-lock version of the membership.
-                    Administrators and receptionists can execute this operation.
-                    """)
-    @ApiResponse(
-            responseCode = "200",
-            description = "Membership frozen")
-    @ApiResponse(
-            responseCode = "400",
-            description = "Invalid freeze request")
-    @ApiResponse(
-            responseCode = "401",
-            description = "Authentication required")
-    @ApiResponse(
-            responseCode = "403",
-            description = "Insufficient permissions or invalid CSRF token")
-    @ApiResponse(
-            responseCode = "404",
-            description = "Membership not found")
-    @ApiResponse(
-            responseCode = "409",
-            description = "Membership version or state conflict")
-    MembershipResponse freeze(
-            @PathVariable UUID id,
-            @Valid
-            @RequestBody
-            FreezeMembershipRequest request,
-            Authentication authentication) {
-
-        return MembershipResponse.from(
-                membershipFreezeApplicationService.freeze(
-                        id,
-                        request.toCommand(),
-                        actor(authentication)));
-    }
-
-    @PostMapping("/{id}/reactivate")
-    @Operation(
-            summary = "Reactivate a frozen membership",
-            description = """
-                    Reactivates a frozen membership without creating a new
-                    commercial period. The associated client must remain active.
-                    The request must contain the current optimistic-lock version
-                    of the membership. Administrators and receptionists can
-                    execute this operation.
-                    """)
-    @ApiResponse(
-            responseCode = "200",
-            description = "Membership reactivated")
-    @ApiResponse(
-            responseCode = "400",
-            description = "Invalid reactivation request")
-    @ApiResponse(
-            responseCode = "401",
-            description = "Authentication required")
-    @ApiResponse(
-            responseCode = "403",
-            description = "Insufficient permissions or invalid CSRF token")
-    @ApiResponse(
-            responseCode = "404",
-            description = "Membership or open freeze not found")
-    @ApiResponse(
-            responseCode = "409",
-            description = "Membership version, state or client conflict")
-    MembershipResponse reactivate(
-            @PathVariable UUID id,
-            @Valid
-            @RequestBody
-            ReactivateMembershipRequest request,
-            Authentication authentication) {
-
-        return MembershipResponse.from(
-                membershipFreezeApplicationService.reactivate(
-                        id,
-                        request.toCommand(),
-                        actor(authentication)));
-    }
-
     @ExceptionHandler(
             MembershipAlreadyFrozenException.class)
-    ResponseEntity<ProblemDetail>
-    handleAlreadyFrozen(
+    ResponseEntity<ProblemDetail> handleAlreadyFrozen(
             MembershipAlreadyFrozenException exception) {
 
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(
-                        ApiProblemFactory.create(
-                                HttpStatus.CONFLICT,
-                                "MEMBERSHIP_ALREADY_FROZEN",
-                                exception.getMessage()));
+        return problem(
+                HttpStatus.CONFLICT,
+                "MEMBERSHIP_ALREADY_FROZEN",
+                exception.getMessage());
     }
 
     @ExceptionHandler(
             MembershipFreezeStateConflictException.class)
-    ResponseEntity<ProblemDetail>
-    handleFreezeStateConflict(
+    ResponseEntity<ProblemDetail> handleFreezeStateConflict(
             MembershipFreezeStateConflictException exception) {
 
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(
-                        ApiProblemFactory.create(
-                                HttpStatus.CONFLICT,
-                                "MEMBERSHIP_FREEZE_STATE_CONFLICT",
-                                exception.getMessage()));
+        return problem(
+                HttpStatus.CONFLICT,
+                "MEMBERSHIP_FREEZE_STATE_CONFLICT",
+                exception.getMessage());
     }
 
     @ExceptionHandler(
             MembershipNotFrozenException.class)
-    ResponseEntity<ProblemDetail>
-    handleNotFrozen(
+    ResponseEntity<ProblemDetail> handleNotFrozen(
             MembershipNotFrozenException exception) {
 
-        return ResponseEntity
-                .status(HttpStatus.CONFLICT)
-                .body(
-                        ApiProblemFactory.create(
-                                HttpStatus.CONFLICT,
-                                "MEMBERSHIP_NOT_FROZEN",
-                                exception.getMessage()));
+        return problem(
+                HttpStatus.CONFLICT,
+                "MEMBERSHIP_NOT_FROZEN",
+                exception.getMessage());
     }
 
     @ExceptionHandler(
             MembershipFreezeNotFoundException.class)
-    ResponseEntity<ProblemDetail>
-    handleFreezeNotFound(
+    ResponseEntity<ProblemDetail> handleFreezeNotFound(
             MembershipFreezeNotFoundException exception) {
 
+        return problem(
+                HttpStatus.NOT_FOUND,
+                "MEMBERSHIP_FREEZE_NOT_FOUND",
+                exception.getMessage());
+    }
+
+    @ExceptionHandler(
+            MembershipAlreadyCancelledException.class)
+    ResponseEntity<ProblemDetail> handleAlreadyCancelled(
+            MembershipAlreadyCancelledException exception) {
+
+        return problem(
+                HttpStatus.CONFLICT,
+                "MEMBERSHIP_ALREADY_CANCELLED",
+                exception.getMessage());
+    }
+
+    @ExceptionHandler(
+            MembershipCancellationStateConflictException.class)
+    ResponseEntity<ProblemDetail>
+    handleCancellationStateConflict(
+            MembershipCancellationStateConflictException exception) {
+
+        return problem(
+                HttpStatus.CONFLICT,
+                "MEMBERSHIP_CANCELLATION_STATE_CONFLICT",
+                exception.getMessage());
+    }
+
+    @ExceptionHandler(
+            PromotionEvaluationException.class)
+    ResponseEntity<ProblemDetail> handlePromotionEvaluation(
+            PromotionEvaluationException exception) {
+
+        HttpStatus status =
+                promotionEvaluationStatus(
+                        exception.failure());
+
+        return problem(
+                status,
+                promotionEvaluationCode(
+                        exception.failure()),
+                exception.getMessage());
+    }
+
+    private static HttpStatus promotionEvaluationStatus(
+            PromotionEvaluationFailure failure) {
+
+        return switch (failure) {
+            case PROMOTION_NOT_FOUND ->
+                    HttpStatus.NOT_FOUND;
+
+            case PROMOTION_INACTIVE,
+                 PROMOTION_NOT_YET_VALID,
+                 PROMOTION_EXPIRED,
+                 PLAN_NOT_ELIGIBLE,
+                 CURRENCY_MISMATCH ->
+                    HttpStatus.CONFLICT;
+
+            case INVALID_PRICE,
+                 INVALID_CURRENCY ->
+                    HttpStatus.BAD_REQUEST;
+        };
+    }
+
+    private static String promotionEvaluationCode(
+            PromotionEvaluationFailure failure) {
+
+        return switch (failure) {
+            case PROMOTION_NOT_FOUND ->
+                    "MEMBERSHIP_PROMOTION_NOT_FOUND";
+
+            case PROMOTION_INACTIVE ->
+                    "MEMBERSHIP_PROMOTION_INACTIVE";
+
+            case PROMOTION_NOT_YET_VALID ->
+                    "MEMBERSHIP_PROMOTION_NOT_YET_VALID";
+
+            case PROMOTION_EXPIRED ->
+                    "MEMBERSHIP_PROMOTION_EXPIRED";
+
+            case PLAN_NOT_ELIGIBLE ->
+                    "MEMBERSHIP_PROMOTION_PLAN_NOT_ELIGIBLE";
+
+            case CURRENCY_MISMATCH ->
+                    "MEMBERSHIP_PROMOTION_CURRENCY_MISMATCH";
+
+            case INVALID_PRICE ->
+                    "MEMBERSHIP_PROMOTION_INVALID_PRICE";
+
+            case INVALID_CURRENCY ->
+                    "MEMBERSHIP_PROMOTION_INVALID_CURRENCY";
+        };
+    }
+
+    private static ResponseEntity<ProblemDetail> problem(
+            HttpStatus status,
+            String code,
+            String detail) {
+
         return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
+                .status(status)
                 .body(
                         ApiProblemFactory.create(
-                                HttpStatus.NOT_FOUND,
-                                "MEMBERSHIP_FREEZE_NOT_FOUND",
-                                exception.getMessage()));
+                                status,
+                                code,
+                                detail));
     }
 }
