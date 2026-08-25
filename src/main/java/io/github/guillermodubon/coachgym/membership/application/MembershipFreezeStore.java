@@ -29,4 +29,12 @@ public interface MembershipFreezeStore {
             long expectedFreezeVersion,
             AuthenticatedActor actor,
             Instant occurredAt);
+
+    MembershipFreezeDetails closeForCancellation(
+            UUID membershipId,
+            UUID freezeId,
+            LocalDate cancelledOn,
+            long expectedFreezeVersion,
+            AuthenticatedActor actor,
+            Instant occurredAt);
 }
