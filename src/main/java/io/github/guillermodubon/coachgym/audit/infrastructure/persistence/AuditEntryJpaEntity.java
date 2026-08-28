@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.membership.*;
+import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -659,5 +660,91 @@ class AuditEntryJpaEntity {
 
     Instant occurredAt() {
         return occurredAt;
+    }
+
+    static AuditEntryJpaEntity from(
+            PaymentRegistered event) {
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id =
+                UUID.randomUUID();
+
+        entry.actorUserId =
+                event.actorUserId();
+
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+
+        entry.actionCode =
+                "PAYMENT_REGISTERED";
+
+        entry.resourceType =
+                "PAYMENT";
+
+        entry.resourceId =
+                event.paymentId();
+
+        entry.resourceCodeSnapshot =
+                event.paymentCode();
+
+        entry.summary =
+                "Payment registered.";
+
+        entry.metadata =
+                paymentRegisteredMetadata(event);
+
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    private static Map<String, Object>
+    paymentRegisteredMetadata(
+            PaymentRegistered event) {
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "clientId",
+                event.clientId().toString());
+
+        metadata.put(
+                "membershipId",
+                event.membershipId().toString());
+
+        metadata.put(
+                "membershipPeriodId",
+                event.membershipPeriodId().toString());
+
+        metadata.put(
+                "amount",
+                event.amount().toPlainString());
+
+        metadata.put(
+                "currency",
+                event.currency());
+
+        metadata.put(
+                "paymentMethod",
+                event.paymentMethod().name());
+
+        metadata.put(
+                "paidAt",
+                event.paidAt().toString());
+
+        metadata.put(
+                "resultingStatus",
+                event.resultingStatus().name());
+
+        // Store only a boolean flag — never the reference value itself.
+        metadata.put(
+                "hasExternalReference",
+                event.hasExternalReference());
+
+        return Map.copyOf(metadata);
     }
 }

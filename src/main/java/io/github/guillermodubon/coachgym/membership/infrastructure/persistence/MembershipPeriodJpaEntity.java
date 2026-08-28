@@ -426,4 +426,16 @@ class MembershipPeriodJpaEntity {
     UUID id() {
         return id;
     }
+
+    UUID membershipId() {
+        return membershipId;
+    }
+
+    BigDecimal finalPrice() {
+        return finalPrice;
+    }
+
+    String currency() {
+        return currency == null ? null : currency.trim();
+    }
 }

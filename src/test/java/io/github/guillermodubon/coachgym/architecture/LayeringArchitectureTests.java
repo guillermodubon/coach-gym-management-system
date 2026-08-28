@@ -44,4 +44,23 @@ class LayeringArchitectureTests {
                 .allowEmptyShould(true)
                 .check(PROJECT_CLASSES);
     }
+
+    @Test
+    void paymentDoesNotDependOnInternalPackagesOfOtherModules() {
+        noClasses()
+                .that()
+                .resideInAPackage(
+                        "..payment..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAnyPackage(
+                        "..membership.application..",
+                        "..membership.infrastructure..",
+                        "..membership.web..",
+                        "..client.application..",
+                        "..client.infrastructure..",
+                        "..client.web..")
+                .allowEmptyShould(true)
+                .check(PROJECT_CLASSES);
+    }
 }

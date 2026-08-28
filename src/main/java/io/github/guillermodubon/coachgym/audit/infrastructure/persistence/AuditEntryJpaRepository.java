@@ -7,6 +7,7 @@ import io.github.guillermodubon.coachgym.membership.MembershipCreated;
 import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
 import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
 import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
+import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -117,6 +118,16 @@ class AuditEntryPersistenceAdapter
     @Transactional
     public void recordMembershipCancelled(
             MembershipCancelled event) {
+
+        repository.save(
+                AuditEntryJpaEntity.from(
+                        event));
+    }
+
+    @Override
+    @Transactional
+    public void recordPaymentRegistered(
+            PaymentRegistered event) {
 
         repository.save(
                 AuditEntryJpaEntity.from(

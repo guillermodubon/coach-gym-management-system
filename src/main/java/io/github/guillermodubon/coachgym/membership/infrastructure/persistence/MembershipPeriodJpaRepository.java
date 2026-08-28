@@ -12,4 +12,9 @@ interface MembershipPeriodJpaRepository
     Optional<MembershipPeriodJpaEntity>
     findFirstByMembershipIdOrderByPeriodNumberDesc(
             UUID membershipId);
+
+    Optional<MembershipPeriodJpaEntity>
+    findByIdAndMembershipId(
+            UUID id,
+            UUID membershipId);
 }
