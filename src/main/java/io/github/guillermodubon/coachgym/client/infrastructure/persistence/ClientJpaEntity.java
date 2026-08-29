@@ -124,4 +124,12 @@ class ClientJpaEntity {
     UUID id() {
         return id;
     }
+
+    String clientCode() {
+        return clientCode;
+    }
+
+    ClientStatus status() {
+        return status;
+    }
 }
