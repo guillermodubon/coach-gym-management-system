@@ -11,4 +11,6 @@ interface ClientJpaRepository extends JpaRepository<ClientJpaEntity, UUID> {
 
     @EntityGraph(attributePaths = "emergencyContacts")
     Optional<ClientJpaEntity> findWithEmergencyContactsById(UUID id);
+
+    Optional<ClientJpaEntity> findByClientCodeIgnoreCase(String clientCode);
 }

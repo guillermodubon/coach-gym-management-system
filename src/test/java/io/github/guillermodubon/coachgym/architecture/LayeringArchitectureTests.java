@@ -63,4 +63,41 @@ class LayeringArchitectureTests {
                 .allowEmptyShould(true)
                 .check(PROJECT_CLASSES);
     }
+    @Test
+    void accessDoesNotDependOnInternalPackagesOfOtherModules() {
+        noClasses()
+                .that()
+                .resideInAPackage("..access..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAnyPackage(
+                        "..client.application..",
+                        "..client.infrastructure..",
+                        "..client.web..",
+                        "..membership.application..",
+                        "..membership.infrastructure..",
+                        "..membership.web..",
+                        "..audit.application..",
+                        "..audit.infrastructure..",
+                        "..audit.web..")
+                .allowEmptyShould(true)
+                .check(PROJECT_CLASSES);
+    }
+
+    @Test
+    void auditDoesNotDependOnAccessInternals() {
+        noClasses()
+                .that()
+                .resideInAPackage("..audit..")
+                .should()
+                .dependOnClassesThat()
+                .resideInAnyPackage(
+                        "..access.application..",
+                        "..access.domain..",
+                        "..access.infrastructure..",
+                        "..access.web..")
+                .allowEmptyShould(true)
+                .check(PROJECT_CLASSES);
+    }
+
 }

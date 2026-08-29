@@ -20,6 +20,13 @@ interface MembershipJpaRepository
             UUID clientId,
             Collection<MembershipStatus> statuses);
 
+    Optional<MembershipJpaEntity> findByMembershipCodeIgnoreCase(
+            String membershipCode);
+
+    Optional<MembershipJpaEntity> findFirstByClientIdAndStatusIn(
+            UUID clientId,
+            Collection<MembershipStatus> statuses);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         select membership

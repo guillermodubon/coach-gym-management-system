@@ -80,6 +80,8 @@ class SecurityConfiguration {
                         .authenticated()
                         .requestMatchers("/api/v1/payments/**")
                         .authenticated()
+                        .requestMatchers("/api/v1/access/**")
+                        .authenticated()
                         .anyRequest()
                         .denyAll())
                 .build();
