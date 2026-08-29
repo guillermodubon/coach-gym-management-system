@@ -1,5 +1,7 @@
 package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
+import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
+import io.github.guillermodubon.coachgym.access.AccessResult;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
@@ -744,6 +746,93 @@ class AuditEntryJpaEntity {
         metadata.put(
                 "hasExternalReference",
                 event.hasExternalReference());
+
+        return Map.copyOf(metadata);
+    }
+
+    static AuditEntryJpaEntity from(
+            AccessAttemptRecorded event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Access attempt event must be provided.");
+        }
+
+        if (event.result() != AccessResult.DENIED) {
+            throw new IllegalArgumentException(
+                    "Only denied access attempts may create audit entries.");
+        }
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id =
+                UUID.randomUUID();
+
+        entry.actorUserId =
+                event.actorUserId();
+
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+
+        entry.actionCode =
+                "ACCESS_DENIED";
+
+        entry.resourceType =
+                "ACCESS_RECORD";
+
+        entry.resourceId =
+                event.accessRecordId();
+
+        entry.resourceCodeSnapshot =
+                event.presentedIdentifier();
+
+        entry.summary =
+                "Gym access denied.";
+
+        entry.metadata =
+                deniedAccessMetadata(event);
+
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    private static Map<String, Object>
+    deniedAccessMetadata(
+            AccessAttemptRecorded event) {
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "presentedIdentifierType",
+                event.presentedIdentifierType());
+
+        metadata.put(
+                "result",
+                event.result().name());
+
+        metadata.put(
+                "reasonCode",
+                event.reasonCode().name());
+
+        metadata.put(
+                "checkedInAt",
+                event.checkedInAt().toString());
+
+        if (event.clientId() != null) {
+            metadata.put(
+                    "clientId",
+                    event.clientId().toString());
+        }
+
+        if (event.membershipId() != null) {
+            metadata.put(
+                    "membershipId",
+                    event.membershipId().toString());
+        }
 
         return Map.copyOf(metadata);
     }

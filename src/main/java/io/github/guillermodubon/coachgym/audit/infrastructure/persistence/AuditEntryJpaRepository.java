@@ -1,5 +1,6 @@
 package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
+import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryStore;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.membership.MembershipCancelled;
@@ -132,5 +133,14 @@ class AuditEntryPersistenceAdapter
         repository.save(
                 AuditEntryJpaEntity.from(
                         event));
+    }
+
+    @Override
+    @Transactional
+    public void recordDeniedAccessAttempt(
+            AccessAttemptRecorded event) {
+
+        repository.save(
+                AuditEntryJpaEntity.from(event));
     }
 }

@@ -1,5 +1,6 @@
 package io.github.guillermodubon.coachgym.audit.application;
 
+import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
@@ -28,4 +29,6 @@ public interface AuditEntryStore {
     void recordMembershipCancelled(MembershipCancelled event);
 
     void recordPaymentRegistered(PaymentRegistered event);
+
+    void recordDeniedAccessAttempt(AccessAttemptRecorded event);
 }
