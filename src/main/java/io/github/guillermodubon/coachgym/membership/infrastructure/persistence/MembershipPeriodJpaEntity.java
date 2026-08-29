@@ -431,6 +431,14 @@ class MembershipPeriodJpaEntity {
         return membershipId;
     }
 
+    LocalDate startsOn() {
+        return startsOn;
+    }
+
+    LocalDate effectiveEndsOn() {
+        return effectiveEndsOn;
+    }
+
     BigDecimal finalPrice() {
         return finalPrice;
     }

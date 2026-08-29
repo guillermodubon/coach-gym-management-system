@@ -150,6 +150,14 @@ class MembershipFreezeJpaEntity {
         this.updatedAt = occurredAt;
     }
 
+    LocalDate startsOn() {
+        return startsOn;
+    }
+
+    LocalDate plannedEndsOn() {
+        return plannedEndsOn;
+    }
+
     boolean open() {
         return reactivatedOn == null
                 && cancelledOn == null;
