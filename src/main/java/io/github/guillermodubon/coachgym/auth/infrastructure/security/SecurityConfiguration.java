@@ -82,6 +82,10 @@ class SecurityConfiguration {
                         .authenticated()
                         .requestMatchers("/api/v1/access/**")
                         .authenticated()
+                        .requestMatchers("/api/v1/equipment-categories/**")
+                        .authenticated()
+                        .requestMatchers("/api/v1/equipment/**")
+                        .authenticated()
                         .anyRequest()
                         .denyAll())
                 .build();
