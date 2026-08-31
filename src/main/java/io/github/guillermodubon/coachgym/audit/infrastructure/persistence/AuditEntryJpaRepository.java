@@ -3,6 +3,13 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryStore;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
+import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryDeactivatedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryUpdatedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentRegisteredEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentStatusChangedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
 import io.github.guillermodubon.coachgym.membership.MembershipCancelled;
 import io.github.guillermodubon.coachgym.membership.MembershipCreated;
 import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
@@ -142,5 +149,47 @@ class AuditEntryPersistenceAdapter
 
         repository.save(
                 AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordEquipmentCategoryCreated(EquipmentCategoryCreatedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordEquipmentCategoryUpdated(EquipmentCategoryUpdatedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordEquipmentCategoryActivated(EquipmentCategoryActivatedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordEquipmentCategoryDeactivated(EquipmentCategoryDeactivatedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordEquipmentRegistered(EquipmentRegisteredEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordEquipmentUpdated(EquipmentUpdatedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordEquipmentStatusChanged(EquipmentStatusChangedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
     }
 }

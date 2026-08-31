@@ -3,6 +3,13 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
 import io.github.guillermodubon.coachgym.access.AccessResult;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
+import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryDeactivatedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryUpdatedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentRegisteredEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentStatusChangedEvent;
+import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
@@ -622,6 +629,250 @@ class AuditEntryJpaEntity {
                 event.closedOpenFreeze());
 
         return metadata;
+    }
+
+    public static AuditEntryJpaEntity from(EquipmentRegisteredEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Equipment registered event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "EQUIPMENT_REGISTERED";
+        entry.resourceType = "EQUIPMENT";
+        entry.resourceId = event.equipmentId();
+        entry.resourceCodeSnapshot = event.equipmentCode();
+        entry.summary = "Equipment registered.";
+
+        entry.metadata = Map.of(
+                "categoryId",
+                event.categoryId().toString()
+        );
+
+        entry.occurredAt = event.occurredAt();
+
+        return entry;
+    }
+
+
+    static AuditEntryJpaEntity from(EquipmentStatusChangedEvent event) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        // Action code encodes the new status for direct query by action.
+        entry.actionCode = "EQUIPMENT_STATUS_CHANGED_TO_" + event.newStatus().name();
+        entry.resourceType = "EQUIPMENT";
+        entry.resourceId = event.equipmentId();
+        entry.resourceCodeSnapshot = event.equipmentCode();
+        entry.summary = "Equipment status changed to " + event.newStatus().name() + ".";
+        LinkedHashMap<String, Object> meta = new LinkedHashMap<>();
+        if (event.previousStatus() != null) {
+            meta.put("previousStatus", event.previousStatus().name());
+        }
+        meta.put("newStatus", event.newStatus().name());
+        meta.put("reason", event.reason());
+        entry.metadata = Map.copyOf(meta);
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(EquipmentUpdatedEvent event) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "EQUIPMENT_UPDATED";
+        entry.resourceType = "EQUIPMENT";
+        entry.resourceId = event.equipmentId();
+        entry.resourceCodeSnapshot = event.equipmentCode();
+        entry.summary = "Equipment updated.";
+        entry.metadata = Map.of();
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            EquipmentCategoryCreatedEvent event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Equipment category created event "
+                            + "must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id =
+                UUID.randomUUID();
+
+        entry.actorUserId =
+                event.actorUserId();
+
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+
+        entry.actionCode =
+                "EQUIPMENT_CATEGORY_CREATED";
+
+        entry.resourceType =
+                "EQUIPMENT_CATEGORY";
+
+        entry.resourceId =
+                event.categoryId();
+
+        entry.resourceCodeSnapshot =
+                event.categoryName();
+
+        entry.summary =
+                "Equipment category created.";
+
+        entry.metadata =
+                Map.of();
+
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            EquipmentCategoryUpdatedEvent event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Equipment category updated event "
+                            + "must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id =
+                UUID.randomUUID();
+
+        entry.actorUserId =
+                event.actorUserId();
+
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+
+        entry.actionCode =
+                "EQUIPMENT_CATEGORY_UPDATED";
+
+        entry.resourceType =
+                "EQUIPMENT_CATEGORY";
+
+        entry.resourceId =
+                event.categoryId();
+
+        entry.resourceCodeSnapshot =
+                event.categoryName();
+
+        entry.summary =
+                "Equipment category updated.";
+
+        entry.metadata =
+                Map.of();
+
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            EquipmentCategoryActivatedEvent event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Equipment category activated event "
+                            + "must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id =
+                UUID.randomUUID();
+
+        entry.actorUserId =
+                event.actorUserId();
+
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+
+        entry.actionCode =
+                "EQUIPMENT_CATEGORY_ACTIVATED";
+
+        entry.resourceType =
+                "EQUIPMENT_CATEGORY";
+
+        entry.resourceId =
+                event.categoryId();
+
+        entry.resourceCodeSnapshot =
+                event.categoryName();
+
+        entry.summary =
+                "Equipment category activated.";
+
+        entry.metadata =
+                Map.of();
+
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            EquipmentCategoryDeactivatedEvent event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Equipment category deactivated event "
+                            + "must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id =
+                UUID.randomUUID();
+
+        entry.actorUserId =
+                event.actorUserId();
+
+        entry.actorIdentifierSnapshot =
+                event.actorIdentifier();
+
+        entry.actionCode =
+                "EQUIPMENT_CATEGORY_DEACTIVATED";
+
+        entry.resourceType =
+                "EQUIPMENT_CATEGORY";
+
+        entry.resourceId =
+                event.categoryId();
+
+        entry.resourceCodeSnapshot =
+                event.categoryName();
+
+        entry.summary =
+                "Equipment category deactivated.";
+
+        entry.metadata =
+                Map.of();
+
+        entry.occurredAt =
+                event.occurredAt();
+
+        return entry;
     }
 
     UUID id() {
