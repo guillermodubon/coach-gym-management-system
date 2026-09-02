@@ -175,7 +175,7 @@ class EquipmentController {
     @Operation(summary = "Mark equipment out of service",
             description = """
                 Transitions equipment from AVAILABLE to OUT_OF_SERVICE.
-                Permitted roles: ADMIN or MAINTENANCE.
+                Permitted roles: ADMIN.
                 Requires a non-blank reason (max 2000 chars) and current version.
                 """)
     @ApiResponse(responseCode = "200", description = "Equipment marked out of service")
@@ -199,7 +199,7 @@ class EquipmentController {
     @Operation(summary = "Mark equipment available",
             description = """
                 Transitions equipment from OUT_OF_SERVICE to AVAILABLE.
-                Permitted roles: ADMIN or MAINTENANCE.
+                Permitted roles: ADMIN.
                 Requires a non-blank reason (max 2000 chars) and current version.
                 """)
     @ApiResponse(responseCode = "200", description = "Equipment marked available")

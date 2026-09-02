@@ -13,64 +13,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 public class MembershipRenewalSecurityApiIntegrationTest extends AbstractMembershipRenewalApiIntegrationTest {
 
-    @Test
-    void maintenanceUserCannotRenewMembership()
-            throws Exception {
-
-        MockHttpSession adminSession =
-                loginAsAdmin();
-
-        UUID clientId =
-                createClient(
-                        adminSession,
-                        uniqueValue("restricted-renewal")
-                                + "@example.com");
-
-        UUID planId =
-                createPlan(
-                        adminSession,
-                        uniqueValue("Restricted Renewal Plan"),
-                        "25.00",
-                        "USD");
-
-        UUID membershipId =
-                createMembership(
-                        adminSession,
-                        clientId,
-                        planId,
-                        null,
-                        "2026-09-01");
-
-        MockHttpSession maintenanceSession =
-                loginAsMaintenance();
-
-        renewMembership(
-                maintenanceSession,
-                membershipId,
-                planId,
-                null,
-                null,
-                0)
-                .andExpect(status().isForbidden())
-                .andExpect(
-                        jsonPath("$.code")
-                                .value("ACCESS_DENIED"));
-
-        assertThat(
-                periodCount(
-                        membershipId))
-                .isEqualTo(1);
-
-        assertThat(
-                membershipVersion(
-                        membershipId))
-                .isZero();
-
-        assertThat(
-                renewalAuditCount(
-                        membershipId))
-                .isZero();
-    }
 
     @Test
     void authenticatedUserCannotRenewWithoutCsrf()

@@ -355,7 +355,7 @@ class EquipmentControllerTest {
                         post("/api/v1/equipment")
                                 .with(
                                         authenticatedAs(
-                                                "MAINTENANCE"))
+                                                "RECEPTIONIST"))
                                 .with(csrf())
                                 .contentType(
                                         MediaType.APPLICATION_JSON)
@@ -432,7 +432,7 @@ class EquipmentControllerTest {
                                 EQUIPMENT_ID)
                                 .with(
                                         authenticatedAs(
-                                                "MAINTENANCE")))
+                                                "RECEPTIONIST")))
                 .andExpect(status().isOk())
                 .andExpect(
                         jsonPath("$.id")
@@ -604,7 +604,6 @@ class EquipmentControllerTest {
                                             "/api/v1/equipment/**")
                                     .hasAnyRole(
                                             "ADMIN",
-                                            "MAINTENANCE",
                                             "RECEPTIONIST")
                                     .requestMatchers(
                                             "/api/v1/equipment/**")

@@ -4,89 +4,76 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 class EquipmentMethodSecurityContractTest {
 
-    private static final String ADMIN =
-            "hasRole('ADMIN')";
-
-    private static final String READ_ROLES =
-            "hasAnyRole('ADMIN', 'MAINTENANCE', 'RECEPTIONIST')";
-
-    private static final String OPERATIONAL_ROLES =
-            "hasAnyRole('ADMIN', 'MAINTENANCE')";
-
     @Test
     void equipmentServiceUsesApprovedSecurityMatrix() {
-        assertPreAuthorize(
-                EquipmentApplicationService.class,
+        Map<String, String> expectedExpressions = new LinkedHashMap<>();
+
+        expectedExpressions.put(
                 "register",
-                ADMIN);
-
-        assertPreAuthorize(
-                EquipmentApplicationService.class,
+                "hasRole('ADMIN')");
+        expectedExpressions.put(
                 "update",
-                ADMIN);
-
-        assertPreAuthorize(
-                EquipmentApplicationService.class,
+                "hasRole('ADMIN')");
+        expectedExpressions.put(
                 "markOutOfService",
-                OPERATIONAL_ROLES);
-
-        assertPreAuthorize(
-                EquipmentApplicationService.class,
+                "hasRole('ADMIN')");
+        expectedExpressions.put(
                 "markAvailable",
-                OPERATIONAL_ROLES);
-
-        assertPreAuthorize(
-                EquipmentApplicationService.class,
+                "hasRole('ADMIN')");
+        expectedExpressions.put(
                 "retire",
-                ADMIN);
-
-        assertPreAuthorize(
-                EquipmentApplicationService.class,
+                "hasRole('ADMIN')");
+        expectedExpressions.put(
                 "findById",
-                READ_ROLES);
-
-        assertPreAuthorize(
-                EquipmentApplicationService.class,
+                "hasAnyRole('ADMIN', 'RECEPTIONIST')");
+        expectedExpressions.put(
                 "findAll",
-                READ_ROLES);
+                "hasAnyRole('ADMIN', 'RECEPTIONIST')");
+
+        expectedExpressions.forEach(
+                (methodName, expression) ->
+                        assertPreAuthorize(
+                                EquipmentApplicationService.class,
+                                methodName,
+                                expression));
     }
 
     @Test
     void categoryServiceUsesApprovedSecurityMatrix() {
-        assertPreAuthorize(
-                EquipmentCategoryApplicationService.class,
+        Map<String, String> expectedExpressions = new LinkedHashMap<>();
+
+        expectedExpressions.put(
                 "create",
-                ADMIN);
-
-        assertPreAuthorize(
-                EquipmentCategoryApplicationService.class,
+                "hasRole('ADMIN')");
+        expectedExpressions.put(
                 "update",
-                ADMIN);
-
-        assertPreAuthorize(
-                EquipmentCategoryApplicationService.class,
+                "hasRole('ADMIN')");
+        expectedExpressions.put(
                 "activate",
-                ADMIN);
-
-        assertPreAuthorize(
-                EquipmentCategoryApplicationService.class,
+                "hasRole('ADMIN')");
+        expectedExpressions.put(
                 "deactivate",
-                ADMIN);
-
-        assertPreAuthorize(
-                EquipmentCategoryApplicationService.class,
+                "hasRole('ADMIN')");
+        expectedExpressions.put(
                 "findById",
-                READ_ROLES);
-
-        assertPreAuthorize(
-                EquipmentCategoryApplicationService.class,
+                "hasAnyRole('ADMIN', 'RECEPTIONIST')");
+        expectedExpressions.put(
                 "findAll",
-                READ_ROLES);
+                "hasAnyRole('ADMIN', 'RECEPTIONIST')");
+
+        expectedExpressions.forEach(
+                (methodName, expression) ->
+                        assertPreAuthorize(
+                                EquipmentCategoryApplicationService.class,
+                                methodName,
+                                expression));
     }
 
     private static void assertPreAuthorize(
@@ -94,23 +81,12 @@ class EquipmentMethodSecurityContractTest {
             String methodName,
             String expectedExpression) {
 
-        Method method =
-                Arrays.stream(
-                                serviceType.getDeclaredMethods())
-                        .filter(candidate ->
-                                candidate.getName()
-                                        .equals(methodName))
-                        .findFirst()
-                        .orElseThrow(() ->
-                                new AssertionError(
-                                        "Method not found: "
-                                                + serviceType.getName()
-                                                + "."
-                                                + methodName));
+        Method method = findUniqueMethod(
+                serviceType,
+                methodName);
 
         PreAuthorize annotation =
-                method.getAnnotation(
-                        PreAuthorize.class);
+                method.getAnnotation(PreAuthorize.class);
 
         assertThat(annotation)
                 .as(
@@ -120,6 +96,30 @@ class EquipmentMethodSecurityContractTest {
                 .isNotNull();
 
         assertThat(annotation.value())
+                .as(
+                        "Unexpected authorization expression on %s.%s",
+                        serviceType.getSimpleName(),
+                        methodName)
                 .isEqualTo(expectedExpression);
+    }
+
+    private static Method findUniqueMethod(
+            Class<?> serviceType,
+            String methodName) {
+
+        Method[] matchingMethods =
+                Arrays.stream(serviceType.getDeclaredMethods())
+                        .filter(method ->
+                                method.getName().equals(methodName))
+                        .toArray(Method[]::new);
+
+        assertThat(matchingMethods)
+                .as(
+                        "Expected exactly one method named %s on %s",
+                        methodName,
+                        serviceType.getSimpleName())
+                .hasSize(1);
+
+        return matchingMethods[0];
     }
 }

@@ -254,8 +254,7 @@ class EquipmentCategoryControllerTest {
                         post(
                                 "/api/v1/equipment-categories")
                                 .with(
-                                        authenticatedAs(
-                                                "MAINTENANCE"))
+                                        authenticatedAs("RECEPTIONIST"))
                                 .with(csrf())
                                 .contentType(
                                         MediaType.APPLICATION_JSON)
@@ -328,8 +327,7 @@ class EquipmentCategoryControllerTest {
                                 "/api/v1/equipment-categories/{id}",
                                 CATEGORY_ID)
                                 .with(
-                                        authenticatedAs(
-                                                "MAINTENANCE")))
+                                        authenticatedAs("RECEPTIONIST")))
                 .andExpect(status().isOk())
                 .andExpect(
                         jsonPath("$.id")
@@ -607,7 +605,6 @@ class EquipmentCategoryControllerTest {
                                             "/api/v1/equipment-categories/**")
                                     .hasAnyRole(
                                             "ADMIN",
-                                            "MAINTENANCE",
                                             "RECEPTIONIST")
                                     .requestMatchers(
                                             "/api/v1/equipment-categories/**")

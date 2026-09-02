@@ -25,19 +25,6 @@ class AccessSecurityApiIntegrationTest extends AbstractAccessApiIntegrationTest 
         org.assertj.core.api.Assertions.assertThat(countAccessAudits()).isZero();
     }
 
-    @Test
-    void maintenanceCannotPostOrRead() throws Exception {
-        MockHttpSession session = loginAsMaintenance();
-        mockMvc.perform(post("/api/v1/access/check-in").with(csrf()).session(session)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"identifier\":\"XYZ-1\"}"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
-        mockMvc.perform(get("/api/v1/access/records").session(session))
-                .andExpect(status().isForbidden());
-        org.assertj.core.api.Assertions.assertThat(countAccessRows()).isZero();
-        org.assertj.core.api.Assertions.assertThat(countAccessAudits()).isZero();
-    }
 
     @Test
     void postRequiresCsrfButGetDoesNot() throws Exception {

@@ -31,7 +31,6 @@ class EquipmentApiIntegrationTest extends AbstractEquipmentApiIntegrationTest {
         jdbcTemplate.update("delete from gym.equipment");
         jdbcTemplate.update("delete from gym.equipment_categories");
         provisionUser(ADMIN_USERNAME, "eq-admin@example.com", ADMIN_PASSWORD, "ADMIN");
-        provisionUser(MAINTENANCE_USERNAME, "eq-maint@example.com", MAINTENANCE_PASSWORD, "MAINTENANCE");
         provisionUser(RECEPTIONIST_USERNAME, "eq-recept@example.com", RECEPTIONIST_PASSWORD, "RECEPTIONIST");
 
         // Provision a known active category and an inactive one.
@@ -131,16 +130,6 @@ class EquipmentApiIntegrationTest extends AbstractEquipmentApiIntegrationTest {
     }
 
     @Test
-    void register_returns403_forMaintenance() throws Exception {
-        MockHttpSession session = loginAsMaintenance();
-        mockMvc.perform(post("/api/v1/equipment")
-                        .session(session).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(registerBody(activeCategoryId, "Bike", null)))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
     void register_returns403_missingCsrf() throws Exception {
         MockHttpSession session = loginAsAdmin();
         mockMvc.perform(post("/api/v1/equipment")
@@ -162,11 +151,11 @@ class EquipmentApiIntegrationTest extends AbstractEquipmentApiIntegrationTest {
     // ── GET ───────────────────────────────────────────────────────────────────
 
     @Test
-    void findById_returns200_forAllRoles() throws Exception {
+    void findByIdReturns200ForAdminAndReceptionist() throws Exception {
         MockHttpSession adminSession = loginAsAdmin();
         UUID id = registerEquipment(adminSession, "Rower", null);
 
-        for (MockHttpSession session : List.of(loginAsAdmin(), loginAsMaintenance(), loginAsReceptionist())) {
+        for (MockHttpSession session : List.of(loginAsAdmin(), loginAsReceptionist())) {
             mockMvc.perform(get("/api/v1/equipment/{id}", id).session(session))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.equipmentCode").value(org.hamcrest.Matchers.startsWith("EQP-")));

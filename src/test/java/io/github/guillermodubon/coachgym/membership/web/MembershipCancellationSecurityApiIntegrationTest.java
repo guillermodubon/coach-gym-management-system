@@ -107,39 +107,6 @@ class MembershipCancellationSecurityApiIntegrationTest
                 version);
     }
 
-    @Test
-    void maintenanceUserShouldNotCancelMembership()
-            throws Exception {
-
-        MockHttpSession adminSession =
-                loginAsAdmin();
-
-        UUID membershipId =
-                createActiveMembership(
-                        adminSession);
-
-        long version =
-                membershipVersion(
-                        membershipId);
-
-        MockHttpSession maintenanceSession =
-                loginAsMaintenance();
-
-        cancelMembership(
-                membershipId,
-                version,
-                maintenanceSession)
-                .andExpect(
-                        status().isForbidden())
-                .andExpect(
-                        jsonPath("$.code")
-                                .value("ACCESS_DENIED"));
-
-        assertCancellationDidNotOccur(
-                membershipId,
-                version);
-    }
-
     private void assertCancellationDidNotOccur(
             UUID membershipId,
             long originalVersion) {

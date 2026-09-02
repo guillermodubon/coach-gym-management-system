@@ -134,10 +134,6 @@ class EquipmentUpdateControllerTest {
         return authentication(userAuthentication);
     }
 
-    // -------------------------------------------------------------------------
-    // Success
-    // -------------------------------------------------------------------------
-
     @Test
     void update_returns200_withUpdatedDetails()
             throws Exception {
@@ -184,10 +180,6 @@ class EquipmentUpdateControllerTest {
                         jsonPath("$.version")
                                 .value(1));
     }
-
-    // -------------------------------------------------------------------------
-    // Business error cases
-    // -------------------------------------------------------------------------
 
     @Test
     void update_returns404_whenEquipmentNotFound()
@@ -359,10 +351,6 @@ class EquipmentUpdateControllerTest {
                                         "DUPLICATE_EQUIPMENT_SERIAL"));
     }
 
-    // -------------------------------------------------------------------------
-    // Validation
-    // -------------------------------------------------------------------------
-
     @Test
     void update_returns400_whenNameBlank()
             throws Exception {
@@ -441,10 +429,6 @@ class EquipmentUpdateControllerTest {
         verifyNoInteractions(equipmentService);
     }
 
-    // -------------------------------------------------------------------------
-    // Authorization and CSRF
-    // -------------------------------------------------------------------------
-
     @Test
     void update_returns401_unauthenticated()
             throws Exception {
@@ -476,7 +460,7 @@ class EquipmentUpdateControllerTest {
                                 EQUIPMENT_ID)
                                 .with(
                                         authenticatedAs(
-                                                "MAINTENANCE"))
+                                                "RECEPTIONIST"))
                                 .with(csrf())
                                 .contentType(
                                         MediaType.APPLICATION_JSON)
@@ -553,7 +537,6 @@ class EquipmentUpdateControllerTest {
                                             "/api/v1/equipment/**")
                                     .hasAnyRole(
                                             "ADMIN",
-                                            "MAINTENANCE",
                                             "RECEPTIONIST")
                                     .requestMatchers(
                                             "/api/v1/equipment/**")
