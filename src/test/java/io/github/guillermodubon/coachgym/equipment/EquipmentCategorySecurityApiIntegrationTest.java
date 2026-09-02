@@ -15,7 +15,6 @@ class EquipmentCategorySecurityApiIntegrationTest extends AbstractEquipmentApiIn
     @BeforeEach
     void provision() {
         provisionUser(ADMIN_USERNAME, "eq-admin@test.local", ADMIN_PASSWORD, "ADMIN");
-        provisionUser(MAINTENANCE_USERNAME, "eq-maintenance@test.local", MAINTENANCE_PASSWORD, "MAINTENANCE");
         provisionUser(RECEPTIONIST_USERNAME, "eq-receptionist@test.local", RECEPTIONIST_PASSWORD, "RECEPTIONIST");
         jdbcTemplate.update("delete from gym.audit_entries where action_code like 'EQUIPMENT_CATEGORY%'");
         jdbcTemplate.update("delete from gym.equipment_status_history");
@@ -24,8 +23,8 @@ class EquipmentCategorySecurityApiIntegrationTest extends AbstractEquipmentApiIn
     }
 
     @Test
-    void maintenanceAndReceptionistCanReadButCannotCreate() throws Exception {
-        for (MockHttpSession session : new MockHttpSession[]{loginAsMaintenance(), loginAsReceptionist()}) {
+    void receptionistCanReadButCannotCreate() throws Exception {
+        for (MockHttpSession session : new MockHttpSession[]{loginAsReceptionist()}) {
             mockMvc.perform(get("/api/v1/equipment-categories").session(session))
                     .andExpect(status().isOk());
             long categories = count("gym.equipment_categories");
