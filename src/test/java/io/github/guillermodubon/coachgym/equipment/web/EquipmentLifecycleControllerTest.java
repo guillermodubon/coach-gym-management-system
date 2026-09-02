@@ -131,9 +131,6 @@ class EquipmentLifecycleControllerTest {
         return authentication(userAuthentication);
     }
 
-    // -------------------------------------------------------------------------
-    // Out of service
-    // -------------------------------------------------------------------------
 
     @Test
     void outOfService_returns200_forAdmin()
@@ -185,7 +182,7 @@ class EquipmentLifecycleControllerTest {
                                 EQUIPMENT_ID)
                                 .with(
                                         authenticatedAs(
-                                                "MAINTENANCE"))
+                                                "ADMIN"))
                                 .with(csrf())
                                 .contentType(
                                         MediaType.APPLICATION_JSON)
@@ -373,9 +370,6 @@ class EquipmentLifecycleControllerTest {
         verifyNoInteractions(equipmentService);
     }
 
-    // -------------------------------------------------------------------------
-    // Available
-    // -------------------------------------------------------------------------
 
     @Test
     void available_returns200_forAdmin()
@@ -426,7 +420,7 @@ class EquipmentLifecycleControllerTest {
                                 EQUIPMENT_ID)
                                 .with(
                                         authenticatedAs(
-                                                "MAINTENANCE"))
+                                                "ADMIN"))
                                 .with(csrf())
                                 .contentType(
                                         MediaType.APPLICATION_JSON)
@@ -459,9 +453,6 @@ class EquipmentLifecycleControllerTest {
         verifyNoInteractions(equipmentService);
     }
 
-    // -------------------------------------------------------------------------
-    // Retire
-    // -------------------------------------------------------------------------
 
     @Test
     void retire_returns200_forAdmin()
@@ -515,7 +506,7 @@ class EquipmentLifecycleControllerTest {
                                 EQUIPMENT_ID)
                                 .with(
                                         authenticatedAs(
-                                                "MAINTENANCE"))
+                                                "RECEPTIONIST"))
                                 .with(csrf())
                                 .contentType(
                                         MediaType.APPLICATION_JSON)
@@ -607,9 +598,7 @@ class EquipmentLifecycleControllerTest {
                                             HttpMethod.POST,
                                             "/api/v1/equipment/*/out-of-service",
                                             "/api/v1/equipment/*/available")
-                                    .hasAnyRole(
-                                            "ADMIN",
-                                            "MAINTENANCE")
+                                    .hasRole("ADMIN")
                                     .requestMatchers(
                                             HttpMethod.POST,
                                             "/api/v1/equipment/*/retire")
