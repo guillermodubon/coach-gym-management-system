@@ -133,7 +133,7 @@ public class EquipmentApplicationService {
     // ── markOutOfService ──────────────────────────────────────────────────────
 
     @Transactional
-    @PreAuthorize("hasAnyRole('ADMIN', 'MAINTENANCE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public EquipmentDetails markOutOfService(MarkOutOfServiceCommand command, AuthenticatedActor actor) {
         return applyLifecycleTransition(
                 command.equipmentId(),
@@ -146,7 +146,7 @@ public class EquipmentApplicationService {
     // ── markAvailable ─────────────────────────────────────────────────────────
 
     @Transactional
-    @PreAuthorize("hasAnyRole('ADMIN', 'MAINTENANCE')")
+    @PreAuthorize("hasRole('ADMIN')")
     public EquipmentDetails markAvailable(MarkAvailableCommand command, AuthenticatedActor actor) {
         return applyLifecycleTransition(
                 command.equipmentId(),
@@ -216,7 +216,7 @@ public class EquipmentApplicationService {
     // ── findById ──────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAnyRole('ADMIN', 'MAINTENANCE', 'RECEPTIONIST')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public EquipmentDetails findById(UUID equipmentId) {
         return equipmentStore.findById(equipmentId)
                 .orElseThrow(() -> new EquipmentNotFoundException(equipmentId));
@@ -224,8 +224,7 @@ public class EquipmentApplicationService {
 
     // ── findAll ───────────────────────────────────────────────────────────────
 
-    @Transactional(readOnly = true)
-    @PreAuthorize("hasAnyRole('ADMIN', 'MAINTENANCE', 'RECEPTIONIST')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public EquipmentPage findAll(EquipmentSearchQuery query) {
         return equipmentStore.findAll(query);
     }
