@@ -10,6 +10,10 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryUpdatedEvent
 import io.github.guillermodubon.coachgym.equipment.EquipmentRegisteredEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentStatusChangedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentInvestigationStartedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentPriorityChangedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentReportedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentResolvedEvent;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
@@ -1086,5 +1090,80 @@ class AuditEntryJpaEntity {
         }
 
         return Map.copyOf(metadata);
+    }
+
+    static AuditEntryJpaEntity from(IncidentReportedEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Incident reported event must be provided.");
+        }
+        AuditEntryJpaEntity entry = incidentEntry(
+                event.incidentId(), event.incidentCode(), event.actorUserId(),
+                event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "INCIDENT_REPORTED";
+        entry.summary = "Equipment incident reported.";
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("equipmentId", event.equipmentId().toString());
+        if (event.equipmentCode() != null) {
+            metadata.put("equipmentCode", event.equipmentCode());
+        }
+        metadata.put("priority", event.priority().name());
+        metadata.put("takenOutOfService", event.takenOutOfService());
+        entry.metadata = Map.copyOf(metadata);
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(IncidentInvestigationStartedEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Incident investigation event must be provided.");
+        }
+        AuditEntryJpaEntity entry = incidentEntry(
+                event.incidentId(), event.incidentCode(), event.actorUserId(),
+                event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "INCIDENT_INVESTIGATION_STARTED";
+        entry.summary = "Incident investigation started.";
+        entry.metadata = Map.of("equipmentId", event.equipmentId().toString());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(IncidentPriorityChangedEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Incident priority event must be provided.");
+        }
+        AuditEntryJpaEntity entry = incidentEntry(
+                event.incidentId(), event.incidentCode(), event.actorUserId(),
+                event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "INCIDENT_PRIORITY_CHANGED";
+        entry.summary = "Incident priority changed.";
+        entry.metadata = Map.of(
+                "previousPriority", event.previousPriority().name(),
+                "newPriority", event.newPriority().name());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(IncidentResolvedEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Incident resolved event must be provided.");
+        }
+        AuditEntryJpaEntity entry = incidentEntry(
+                event.incidentId(), event.incidentCode(), event.actorUserId(),
+                event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "INCIDENT_RESOLVED";
+        entry.summary = "Equipment incident resolved.";
+        entry.metadata = Map.of("equipmentId", event.equipmentId().toString());
+        return entry;
+    }
+
+    private static AuditEntryJpaEntity incidentEntry(
+            UUID incidentId, String incidentCode, UUID actorUserId,
+            String actorIdentifier, Instant occurredAt) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = actorUserId;
+        entry.actorIdentifierSnapshot = actorIdentifier;
+        entry.resourceType = "INCIDENT";
+        entry.resourceId = incidentId;
+        entry.resourceCodeSnapshot = incidentCode;
+        entry.occurredAt = occurredAt;
+        return entry;
     }
 }
