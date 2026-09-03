@@ -10,6 +10,10 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryUpdatedEvent
 import io.github.guillermodubon.coachgym.equipment.EquipmentRegisteredEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentStatusChangedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentInvestigationStartedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentPriorityChangedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentReportedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentResolvedEvent;
 import io.github.guillermodubon.coachgym.membership.MembershipCancelled;
 import io.github.guillermodubon.coachgym.membership.MembershipCreated;
 import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
@@ -190,6 +194,32 @@ class AuditEntryPersistenceAdapter
     @Override
     @Transactional
     public void recordEquipmentStatusChanged(EquipmentStatusChangedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordIncidentReported(IncidentReportedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordIncidentInvestigationStarted(
+            IncidentInvestigationStartedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordIncidentPriorityChanged(
+            IncidentPriorityChangedEvent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordIncidentResolved(IncidentResolvedEvent event) {
         repository.save(AuditEntryJpaEntity.from(event));
     }
 }

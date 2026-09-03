@@ -9,6 +9,10 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryUpdatedEvent
 import io.github.guillermodubon.coachgym.equipment.EquipmentRegisteredEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentStatusChangedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentInvestigationStartedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentPriorityChangedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentReportedEvent;
+import io.github.guillermodubon.coachgym.maintenance.IncidentResolvedEvent;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
@@ -52,5 +56,12 @@ public interface AuditEntryStore {
     void recordEquipmentUpdated(EquipmentUpdatedEvent event);
 
     void recordEquipmentStatusChanged(EquipmentStatusChangedEvent event);
-}
 
+    void recordIncidentReported(IncidentReportedEvent event);
+
+    void recordIncidentInvestigationStarted(IncidentInvestigationStartedEvent event);
+
+    void recordIncidentPriorityChanged(IncidentPriorityChangedEvent event);
+
+    void recordIncidentResolved(IncidentResolvedEvent event);
+}
