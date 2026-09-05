@@ -4,9 +4,6 @@ import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.equipment.EquipmentIncidentNotFoundException;
 import io.github.guillermodubon.coachgym.equipment.EquipmentIncidentStateConflictException;
 import io.github.guillermodubon.coachgym.equipment.EquipmentIncidentVersionConflictException;
-import io.github.guillermodubon.coachgym.equipment.application.exception.EquipmentNotFoundException;
-import io.github.guillermodubon.coachgym.equipment.application.exception.EquipmentStateConflictException;
-import io.github.guillermodubon.coachgym.equipment.application.exception.EquipmentVersionConflictException;
 import io.github.guillermodubon.coachgym.maintenance.IncidentPriority;
 import io.github.guillermodubon.coachgym.maintenance.IncidentStatus;
 import io.github.guillermodubon.coachgym.maintenance.application.IncidentApplicationService;
@@ -239,8 +236,7 @@ class IncidentController {
         return problem(
                 HttpStatus.NOT_FOUND,
                 "INCIDENT_EQUIPMENT_NOT_FOUND",
-                "The equipment selected for the incident "
-                        + "was not found.");
+                "The equipment selected for the incident was not found.");
     }
 
     @ExceptionHandler(EquipmentIncidentVersionConflictException.class)
