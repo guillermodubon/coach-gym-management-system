@@ -22,7 +22,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest(properties = "spring.docker.compose.enabled=false")
 @AutoConfigureMockMvc
-abstract class AbstractIncidentApiIntegrationTest {
+public abstract class AbstractIncidentApiIntegrationTest {
+
+    protected AbstractIncidentApiIntegrationTest() {}
 
     protected static final String ADMIN_USERNAME = "incident-admin";
     protected static final String ADMIN_PASSWORD = "Admin-strong-password";

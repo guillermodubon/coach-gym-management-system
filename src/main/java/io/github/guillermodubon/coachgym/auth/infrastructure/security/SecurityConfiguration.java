@@ -90,6 +90,8 @@ class SecurityConfiguration {
                         .authenticated()
                         .requestMatchers("/api/v1/maintenances/**")
                         .authenticated()
+                        .requestMatchers("/api/v1/notifications/**")
+                        .authenticated()
                         .anyRequest()
                         .denyAll())
                 .build();
