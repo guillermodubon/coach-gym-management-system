@@ -57,19 +57,42 @@ abstract class AbstractIncidentApiIntegrationTest {
 
     @BeforeEach
     void setUpIncidentFixtures() {
-        jdbcTemplate.update("delete from gym.audit_entries where resource_type in ('INCIDENT','EQUIPMENT')");
-        jdbcTemplate.update("delete from gym.incident_status_history");
-        jdbcTemplate.update("delete from gym.maintenances");
-        jdbcTemplate.update("delete from gym.incidents");
-        jdbcTemplate.update("delete from gym.equipment_status_history");
-        jdbcTemplate.update("delete from gym.equipment");
-        jdbcTemplate.update("delete from gym.equipment_categories");
+        jdbcTemplate.update("""
+            delete from gym.audit_entries
+            where resource_type in (
+                'INCIDENT',
+                'EQUIPMENT',
+                'MAINTENANCE'
+            )
+            """);
+
+        jdbcTemplate.update(
+                "delete from gym.maintenance_status_history");
+
+        jdbcTemplate.update(
+                "delete from gym.incident_status_history");
+
+        jdbcTemplate.update(
+                "delete from gym.maintenances");
+
+        jdbcTemplate.update(
+                "delete from gym.incidents");
+
+        jdbcTemplate.update(
+                "delete from gym.equipment_status_history");
+
+        jdbcTemplate.update(
+                "delete from gym.equipment");
+
+        jdbcTemplate.update(
+                "delete from gym.equipment_categories");
 
         adminId = provisionUser(
                 ADMIN_USERNAME,
                 "incident-admin@example.test",
                 ADMIN_PASSWORD,
                 "ADMIN");
+
         receptionistId = provisionUser(
                 RECEPTIONIST_USERNAME,
                 "incident-reception@example.test",
@@ -77,13 +100,20 @@ abstract class AbstractIncidentApiIntegrationTest {
                 "RECEPTIONIST");
 
         categoryId = UUID.randomUUID();
-        jdbcTemplate.update("""
-                insert into gym.equipment_categories
-                    (id, name, description, is_active, version)
-                values (?, ?, ?, true, 0)
-                """, categoryId, "Incident Test Category", "Integration fixtures");
 
-        equipmentId = insertEquipment("AVAILABLE", 0L);
+        jdbcTemplate.update("""
+            insert into gym.equipment_categories
+                (id, name, description, is_active, version)
+            values (?, ?, ?, true, 0)
+            """,
+                categoryId,
+                "Incident Test Category",
+                "Integration fixtures");
+
+        equipmentId =
+                insertEquipment(
+                        "AVAILABLE",
+                        0L);
     }
 
     protected UUID insertEquipment(String equipmentStatus, long version) {
