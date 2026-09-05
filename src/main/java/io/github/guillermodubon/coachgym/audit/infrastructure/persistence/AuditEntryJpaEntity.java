@@ -10,10 +10,7 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryUpdatedEvent
 import io.github.guillermodubon.coachgym.equipment.EquipmentRegisteredEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentStatusChangedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
-import io.github.guillermodubon.coachgym.maintenance.IncidentInvestigationStartedEvent;
-import io.github.guillermodubon.coachgym.maintenance.IncidentPriorityChangedEvent;
-import io.github.guillermodubon.coachgym.maintenance.IncidentReportedEvent;
-import io.github.guillermodubon.coachgym.maintenance.IncidentResolvedEvent;
+import io.github.guillermodubon.coachgym.maintenance.*;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
@@ -1153,6 +1150,126 @@ class AuditEntryJpaEntity {
         return entry;
     }
 
+    static AuditEntryJpaEntity from(
+            MaintenanceScheduledEvent event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Maintenance scheduled event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                maintenanceEntry(
+                        event.maintenanceId(),
+                        event.maintenanceCode(),
+                        event.actorUserId(),
+                        event.actorIdentifier(),
+                        event.occurredAt());
+
+        entry.actionCode =
+                "MAINTENANCE_SCHEDULED";
+
+        entry.summary =
+                "Maintenance work order scheduled.";
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "equipmentId",
+                event.equipmentId().toString());
+
+        if (event.equipmentCode() != null) {
+            metadata.put(
+                    "equipmentCode",
+                    event.equipmentCode());
+        }
+
+        if (event.incidentId() != null) {
+            metadata.put(
+                    "incidentId",
+                    event.incidentId().toString());
+        }
+
+        metadata.put(
+                "maintenanceType",
+                event.maintenanceType().name());
+
+        metadata.put(
+                "scheduledOn",
+                event.scheduledOn().toString());
+
+        if (event.estimatedCost() != null) {
+            metadata.put(
+                    "estimatedCost",
+                    event.estimatedCost());
+        }
+
+        metadata.put(
+                "currency",
+                event.currency());
+
+        entry.metadata =
+                Map.copyOf(metadata);
+
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            MaintenanceUpdatedEvent event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Maintenance updated event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                maintenanceEntry(
+                        event.maintenanceId(),
+                        event.maintenanceCode(),
+                        event.actorUserId(),
+                        event.actorIdentifier(),
+                        event.occurredAt());
+
+        entry.actionCode =
+                "MAINTENANCE_UPDATED";
+
+        entry.summary =
+                "Scheduled maintenance work order updated.";
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "equipmentId",
+                event.equipmentId().toString());
+
+        if (event.incidentId() != null) {
+            metadata.put(
+                    "incidentId",
+                    event.incidentId().toString());
+        }
+
+        metadata.put(
+                "scheduledOn",
+                event.scheduledOn().toString());
+
+        if (event.estimatedCost() != null) {
+            metadata.put(
+                    "estimatedCost",
+                    event.estimatedCost());
+        }
+
+        metadata.put(
+                "currency",
+                event.currency());
+
+        entry.metadata =
+                Map.copyOf(metadata);
+
+        return entry;
+    }
+
     private static AuditEntryJpaEntity incidentEntry(
             UUID incidentId, String incidentCode, UUID actorUserId,
             String actorIdentifier, Instant occurredAt) {
@@ -1164,6 +1281,186 @@ class AuditEntryJpaEntity {
         entry.resourceId = incidentId;
         entry.resourceCodeSnapshot = incidentCode;
         entry.occurredAt = occurredAt;
+        return entry;
+    }
+
+    private static AuditEntryJpaEntity maintenanceEntry(
+            UUID maintenanceId,
+            String maintenanceCode,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+
+        AuditEntryJpaEntity entry =
+                new AuditEntryJpaEntity();
+
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = actorUserId;
+        entry.actorIdentifierSnapshot =
+                actorIdentifier;
+        entry.resourceType = "MAINTENANCE";
+        entry.resourceId = maintenanceId;
+        entry.resourceCodeSnapshot =
+                maintenanceCode;
+        entry.occurredAt = occurredAt;
+
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            MaintenanceCompletedEvent event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Maintenance completed event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                maintenanceEntry(
+                        event.maintenanceId(),
+                        event.maintenanceCode(),
+                        event.actorUserId(),
+                        event.actorIdentifier(),
+                        event.occurredAt());
+
+        entry.actionCode =
+                "MAINTENANCE_COMPLETED";
+
+        entry.summary =
+                "Maintenance work order completed.";
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "equipmentId",
+                event.equipmentId().toString());
+
+        metadata.put(
+                "previousStatus",
+                event.previousStatus().name());
+
+        metadata.put(
+                "newStatus",
+                event.newStatus().name());
+
+        metadata.put(
+                "equipmentOutcome",
+                event.equipmentOutcome().name());
+
+        if (event.actualCost() != null) {
+            metadata.put(
+                    "actualCost",
+                    event.actualCost());
+        }
+
+        metadata.put(
+                "currency",
+                event.currency());
+
+        entry.metadata =
+                Map.copyOf(metadata);
+
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            MaintenanceCancelledEvent event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Maintenance cancelled event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                maintenanceEntry(
+                        event.maintenanceId(),
+                        event.maintenanceCode(),
+                        event.actorUserId(),
+                        event.actorIdentifier(),
+                        event.occurredAt());
+
+        entry.actionCode =
+                "MAINTENANCE_CANCELLED";
+
+        entry.summary =
+                "Maintenance work order cancelled.";
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "equipmentId",
+                event.equipmentId().toString());
+
+        metadata.put(
+                "previousStatus",
+                event.previousStatus().name());
+
+        metadata.put(
+                "newStatus",
+                event.newStatus().name());
+
+        if (event.equipmentOutcome() != null) {
+            metadata.put(
+                    "equipmentOutcome",
+                    event.equipmentOutcome().name());
+        }
+
+        entry.metadata =
+                Map.copyOf(metadata);
+
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(
+            MaintenanceStartedEvent event) {
+
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Maintenance started event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry =
+                maintenanceEntry(
+                        event.maintenanceId(),
+                        event.maintenanceCode(),
+                        event.actorUserId(),
+                        event.actorIdentifier(),
+                        event.occurredAt());
+
+        entry.actionCode = "MAINTENANCE_STARTED";
+        entry.summary = "Maintenance work started.";
+
+        Map<String, Object> metadata =
+                new LinkedHashMap<>();
+
+        metadata.put(
+                "equipmentId",
+                event.equipmentId().toString());
+
+        if (event.equipmentCode() != null) {
+            metadata.put(
+                    "equipmentCode",
+                    event.equipmentCode());
+        }
+
+        if (event.incidentId() != null) {
+            metadata.put(
+                    "incidentId",
+                    event.incidentId().toString());
+        }
+
+        metadata.put(
+                "previousStatus",
+                event.previousStatus().name());
+
+        metadata.put(
+                "newStatus",
+                event.newStatus().name());
+
+        entry.metadata = Map.copyOf(metadata);
+
         return entry;
     }
 }
