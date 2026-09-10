@@ -37,3 +37,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Client profile photos generated during local development
+/data/client-photos/
