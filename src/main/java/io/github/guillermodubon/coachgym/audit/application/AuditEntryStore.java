@@ -12,6 +12,8 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
 import io.github.guillermodubon.coachgym.maintenance.*;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
+import io.github.guillermodubon.coachgym.payment.PaymentRefunded;
+import io.github.guillermodubon.coachgym.payment.PaymentVoided;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -37,6 +39,10 @@ public interface AuditEntryStore {
     void recordMembershipCancelled(MembershipCancelled event);
 
     void recordPaymentRegistered(PaymentRegistered event);
+
+    void recordPaymentVoided(PaymentVoided event);
+
+    void recordPaymentRefunded(PaymentRefunded event);
 
     void recordDeniedAccessAttempt(AccessAttemptRecorded event);
 
