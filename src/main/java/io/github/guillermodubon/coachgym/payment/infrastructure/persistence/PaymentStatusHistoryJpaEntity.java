@@ -75,6 +75,26 @@ class PaymentStatusHistoryJpaEntity {
         return history;
     }
 
+    static PaymentStatusHistoryJpaEntity providerConfirmation(
+            UUID paymentId,
+            UUID registeredByUserId,
+            Instant occurredAt) {
+
+        PaymentStatusHistoryJpaEntity history = new PaymentStatusHistoryJpaEntity();
+
+        history.id = UUID.randomUUID();
+        history.paymentId = paymentId;
+        history.previousStatus = null;
+        history.newStatus = PaymentStatus.PAID;
+        history.reason = "Payment confirmed by a verified provider event.";
+        history.occurredAt = occurredAt;
+        // The initiating staff member is the accountable actor for the payment
+        // registration; the provider event itself remains system-verified.
+        history.changedByUserId = registeredByUserId;
+
+        return history;
+    }
+
     UUID paymentId() {
         return paymentId;
     }
