@@ -24,6 +24,7 @@ import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusCha
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatusChanged;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledged;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
+import io.github.guillermodubon.coachgym.payment.PaymentReceiptGenerated;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -222,6 +223,12 @@ class AuditEntryPersistenceAdapter
     @Transactional
     public void recordPaymentProviderPaymentConfirmed(
             PaymentProviderPaymentConfirmed event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordPaymentReceiptGenerated(PaymentReceiptGenerated event) {
         repository.save(AuditEntryJpaEntity.from(event));
     }
 

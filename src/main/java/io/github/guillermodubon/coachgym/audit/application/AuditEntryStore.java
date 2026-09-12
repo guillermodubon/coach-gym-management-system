@@ -19,6 +19,7 @@ import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusCha
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatusChanged;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledged;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
+import io.github.guillermodubon.coachgym.payment.PaymentReceiptGenerated;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -61,6 +62,8 @@ public interface AuditEntryStore {
 
     void recordPaymentProviderPaymentConfirmed(
             PaymentProviderPaymentConfirmed event);
+
+    void recordPaymentReceiptGenerated(PaymentReceiptGenerated event);
 
     void recordDeniedAccessAttempt(AccessAttemptRecorded event);
 

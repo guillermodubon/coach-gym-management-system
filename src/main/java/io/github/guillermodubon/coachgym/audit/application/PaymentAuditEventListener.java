@@ -8,8 +8,11 @@ import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusCha
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatusChanged;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledged;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
+import io.github.guillermodubon.coachgym.payment.PaymentReceiptGenerated;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 class PaymentAuditEventListener {
@@ -60,5 +63,11 @@ class PaymentAuditEventListener {
     @EventListener
     void record(PaymentProviderPaymentConfirmed event) {
         auditEntryStore.recordPaymentProviderPaymentConfirmed(event);
+    }
+
+    @EventListener
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    void record(PaymentReceiptGenerated event) {
+        auditEntryStore.recordPaymentReceiptGenerated(event);
     }
 }
