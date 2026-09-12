@@ -48,7 +48,7 @@ class ClientProfileProblemHandler {
             ClientPhotoTooLargeException exception) {
 
         return problem(
-                HttpStatus.PAYLOAD_TOO_LARGE,
+                HttpStatus.CONTENT_TOO_LARGE,
                 "CLIENT_PHOTO_TOO_LARGE",
                 "Client photo is too large",
                 exception.getMessage());
