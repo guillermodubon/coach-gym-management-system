@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.auth.infrastructure.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -14,6 +15,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 @Configuration(proxyBeanMethods = false)
 @EnableMethodSecurity
@@ -46,9 +48,15 @@ class SecurityConfiguration {
             ProblemDetailAccessDeniedHandler accessDeniedHandler) throws Exception {
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrfTokenRepository.setCookiePath("/");
+        RequestMatcher stripeWebhook = request ->
+                "POST".equals(request.getMethod())
+                        && "/api/v1/payment-provider/stripe/webhook"
+                                .equals(request.getRequestURI());
 
         return http
-                .csrf(csrf -> csrf.csrfTokenRepository(csrfTokenRepository))
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(csrfTokenRepository)
+                        .ignoringRequestMatchers(stripeWebhook))
                 .securityContext(context -> context
                         .requireExplicitSave(true)
                         .securityContextRepository(securityContextRepository))
@@ -68,6 +76,10 @@ class SecurityConfiguration {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html")
                         .permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/payment-provider/stripe/webhook")
+                        .permitAll()
                         .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout")
                         .authenticated()
                         .requestMatchers("/api/v1/clients/**")
@@ -79,6 +91,8 @@ class SecurityConfiguration {
                         .requestMatchers("/api/v1/memberships/**")
                         .authenticated()
                         .requestMatchers("/api/v1/payments/**")
+                        .authenticated()
+                        .requestMatchers("/api/v1/payment-attempts/**")
                         .authenticated()
                         .requestMatchers("/api/v1/access/**")
                         .authenticated()
