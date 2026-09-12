@@ -13,6 +13,9 @@ class OpenApiConfiguration {
     static final String SESSION_SECURITY_SCHEME =
             "sessionCookie";
 
+    static final String STRIPE_WEBHOOK_SECURITY_SCHEME =
+            "stripeWebhookSignature";
+
     @Bean
     OpenAPI coachGymOpenApi() {
         return new OpenAPI()
@@ -55,6 +58,13 @@ class OpenApiConfiguration {
                                                         Server-side authenticated
                                                         session established by
                                                         POST /api/v1/auth/login.
-                                                        """)));
+                                                        """))
+                                .addSecuritySchemes(
+                                        STRIPE_WEBHOOK_SECURITY_SCHEME,
+                                        new SecurityScheme()
+                                                .name("Stripe-Signature")
+                                                .type(SecurityScheme.Type.APIKEY)
+                                                .in(SecurityScheme.In.HEADER)
+                                                .description("Verified Stripe Test Mode webhook signature.")));
     }
 }

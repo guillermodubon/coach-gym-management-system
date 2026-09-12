@@ -19,6 +19,11 @@ import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.payment.PaymentRefunded;
 import io.github.guillermodubon.coachgym.payment.PaymentVoided;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptCreated;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusChanged;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatusChanged;
+import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledged;
+import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -185,6 +190,39 @@ class AuditEntryPersistenceAdapter
                 event.changedByUserId(), event.actorIdentifier(),
                 "PAYMENT_REFUNDED", event.paymentId(), event.paymentCode(),
                 "Payment refunded.", metadata, event.occurredAt());
+    }
+
+    @Override
+    @Transactional
+    public void recordPaymentAttemptCreated(PaymentAttemptCreated event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordPaymentAttemptStatusChanged(PaymentAttemptStatusChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordPaymentAttemptProviderStatusChanged(
+            PaymentAttemptProviderStatusChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordPaymentProviderEventAcknowledged(
+            PaymentProviderEventAcknowledged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordPaymentProviderPaymentConfirmed(
+            PaymentProviderPaymentConfirmed event) {
+        repository.save(AuditEntryJpaEntity.from(event));
     }
 
     private void insertPaymentAudit(

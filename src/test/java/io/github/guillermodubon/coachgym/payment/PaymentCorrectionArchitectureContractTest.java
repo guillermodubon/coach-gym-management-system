@@ -58,24 +58,35 @@ class PaymentCorrectionArchitectureContractTest {
     }
 
     @Test
-    void paymentProductionCodeContainsNoPrematureStripeDependency()
-            throws Exception {
+    void stripeSdkTypesAreConfinedToStripeInfrastructure() throws Exception {
         Path paymentRoot = Path.of(
                 "src/main/java/io/github/guillermodubon/coachgym/payment");
-        String source;
+        List<Path> productionFiles;
         try (var paths = Files.walk(paymentRoot)) {
-            source = paths
+            productionFiles = paths
                     .filter(path -> path.toString().endsWith(".java"))
-                    .map(PaymentCorrectionArchitectureContractTest::read)
-                    .collect(Collectors.joining("\n"))
-                    .toLowerCase(Locale.ROOT);
+                    .toList();
         }
 
-        assertThat(source)
+        String outsideStripeInfrastructure = productionFiles.stream()
+                .filter(path -> !path.toString().replace('\\', '/')
+                        .contains("/payment/infrastructure/stripe/"))
+                .map(PaymentCorrectionArchitectureContractTest::read)
+                .collect(Collectors.joining("\n"))
+                .toLowerCase(Locale.ROOT);
+
+        assertThat(outsideStripeInfrastructure)
                 .doesNotContain("import com.stripe")
-                .doesNotContain("paymentintent")
-                .doesNotContain("checkoutsession")
                 .doesNotContain("stripe-java");
+
+        String stripeInfrastructure = productionFiles.stream()
+                .filter(path -> path.toString().replace('\\', '/')
+                        .contains("/payment/infrastructure/stripe/"))
+                .map(PaymentCorrectionArchitectureContractTest::read)
+                .collect(Collectors.joining("\n"))
+                .toLowerCase(Locale.ROOT);
+
+        assertThat(stripeInfrastructure).contains("import com.stripe");
     }
 
     private static String read(Path path) {

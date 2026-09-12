@@ -36,6 +36,19 @@ gym:
   currency: USD
 
 coach-gym:
+  payment:
+    stripe:
+      enabled: ${STRIPE_ENABLED:false}
+      sandbox: ${STRIPE_SANDBOX:false}
+      secret-key: ${STRIPE_SECRET_KEY:}
+      webhook-signing-secret: ${STRIPE_WEBHOOK_SIGNING_SECRET:}
+      success-url: ${STRIPE_SUCCESS_URL:http://localhost:8080/stripe/success}
+      cancel-url: ${STRIPE_CANCEL_URL:http://localhost:8080/stripe/cancel}
+      connect-timeout: ${STRIPE_CONNECT_TIMEOUT:PT5S}
+      read-timeout: ${STRIPE_READ_TIMEOUT:PT15S}
+      webhook-tolerance: ${STRIPE_WEBHOOK_TOLERANCE:PT5M}
+      max-webhook-payload-bytes: ${STRIPE_MAX_WEBHOOK_PAYLOAD_BYTES:262144}
+      max-signature-header-length: ${STRIPE_MAX_SIGNATURE_HEADER_LENGTH:1024}
   bootstrap:
     admin:
       enabled: ${BOOTSTRAP_ADMIN_ENABLED:false}

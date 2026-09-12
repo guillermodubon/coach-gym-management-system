@@ -19,6 +19,7 @@ import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.payment.PaymentStatus;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentAmountMismatchException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentCurrencyMismatchException;
+import io.github.guillermodubon.coachgym.payment.domain.ManualCardPaymentNotAllowedException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentMembershipMismatchException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentMembershipStateConflictException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentValidationException;
@@ -140,11 +141,11 @@ class PaymentApplicationServiceTest {
     void hasExternalReferenceTrueWhenReferencePresent() {
         givenActiveMembershipAndPeriod();
         given(paymentStore.existsByMethodAndExternalReference(
-                eq(PaymentMethod.CARD), eq("REF-001")))
+                eq(PaymentMethod.BANK_TRANSFER), eq("REF-001")))
                 .willReturn(false);
         PaymentDetails withRef = new PaymentDetails(
                 PAYMENT_ID, "PAY-000001", CLIENT_ID, MEMBERSHIP_ID, PERIOD_ID,
-                AMOUNT, CURRENCY, PaymentMethod.CARD, PaymentStatus.PAID,
+                AMOUNT, CURRENCY, PaymentMethod.BANK_TRANSFER, PaymentStatus.PAID,
                 "REF-001", PAID_AT, ACTOR_ID, NOW, NOW, 0L);
         given(paymentStore.register(any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any()))
@@ -152,7 +153,7 @@ class PaymentApplicationServiceTest {
 
         RegisterPaymentCommand cmd = new RegisterPaymentCommand(
                 CLIENT_ID, MEMBERSHIP_ID, PERIOD_ID,
-                AMOUNT, CURRENCY, PaymentMethod.CARD, "REF-001", PAID_AT);
+                AMOUNT, CURRENCY, PaymentMethod.BANK_TRANSFER, "REF-001", PAID_AT);
 
         service.register(cmd, ACTOR);
 
@@ -334,12 +335,12 @@ class PaymentApplicationServiceTest {
     void throwsDuplicateReferenceWhenReferenceAlreadyUsed() {
         givenActiveMembershipAndPeriod();
         given(paymentStore.existsByMethodAndExternalReference(
-                PaymentMethod.CARD, "REF-001"))
+                PaymentMethod.CASH, "REF-001"))
                 .willReturn(true);
 
         RegisterPaymentCommand cmd = new RegisterPaymentCommand(
                 CLIENT_ID, MEMBERSHIP_ID, PERIOD_ID,
-                AMOUNT, CURRENCY, PaymentMethod.CARD, "REF-001", PAID_AT);
+                AMOUNT, CURRENCY, PaymentMethod.CASH, "REF-001", PAID_AT);
 
         assertThatThrownBy(() -> service.register(cmd, ACTOR))
                 .isInstanceOf(DuplicatePaymentReferenceException.class);
@@ -385,6 +386,22 @@ class PaymentApplicationServiceTest {
         verify(paymentStore, never()).register(
                 any(), any(), any(), any(), any(), any(),
                 any(), any(), any(), any());
+    }
+
+    @Test
+    void rejectsCardBeforeResolvingMembershipOrWritingPayment() {
+        RegisterPaymentCommand command = new RegisterPaymentCommand(
+                CLIENT_ID, MEMBERSHIP_ID, PERIOD_ID, AMOUNT, CURRENCY,
+                PaymentMethod.CARD, null, PAID_AT);
+
+        assertThatThrownBy(() -> service.register(command, ACTOR))
+                .isInstanceOf(ManualCardPaymentNotAllowedException.class);
+
+        verify(membershipPaymentQuery, never()).findMembershipForPayment(any());
+        verify(paymentStore, never()).register(
+                any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     // ------------------------------------------------------------------
