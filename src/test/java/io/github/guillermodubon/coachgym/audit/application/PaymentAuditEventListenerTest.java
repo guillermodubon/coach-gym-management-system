@@ -3,6 +3,12 @@ package io.github.guillermodubon.coachgym.audit.application;
 import static org.mockito.Mockito.verify;
 
 import io.github.guillermodubon.coachgym.payment.PaymentMethod;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptCreated;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusChanged;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatus;
+import io.github.guillermodubon.coachgym.payment.PaymentProvider;
+import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledged;
+import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.payment.PaymentStatus;
 import java.math.BigDecimal;
@@ -61,6 +67,37 @@ class PaymentAuditEventListenerTest {
         listener.record(event);
 
         verify(auditEntryStore).recordPaymentRegistered(event);
+    }
+
+    @Test
+    void forwardsPaymentAttemptLifecycleEventsToStore() {
+        PaymentAttemptCreated created = new PaymentAttemptCreated(
+                PAYMENT_ID, CLIENT_ID, MEMBERSHIP_ID, PERIOD_ID,
+                PaymentProvider.STRIPE, new BigDecimal("25.00"), "USD",
+                ACTOR_ID, "coach-admin", NOW);
+        PaymentAttemptProviderStatusChanged outcome =
+                new PaymentAttemptProviderStatusChanged(
+                        PAYMENT_ID, PaymentProvider.STRIPE,
+                        PaymentAttemptStatus.PROCESSING,
+                        PaymentAttemptStatus.FAILED,
+                        io.github.guillermodubon.coachgym.payment.PaymentAttemptFailureCode.PROVIDER_DECLINED,
+                        null, true, NOW);
+        PaymentProviderEventAcknowledged duplicate = new PaymentProviderEventAcknowledged(
+                PAYMENT_ID, PaymentProvider.STRIPE, "CHECKOUT_COMPLETED",
+                "PROCESSED", true, NOW);
+        PaymentProviderPaymentConfirmed confirmed = new PaymentProviderPaymentConfirmed(
+                PAYMENT_ID, CLIENT_ID, PaymentProvider.STRIPE,
+                new BigDecimal("25.00"), "USD", NOW);
+
+        listener.record(created);
+        listener.record(outcome);
+        listener.record(duplicate);
+        listener.record(confirmed);
+
+        verify(auditEntryStore).recordPaymentAttemptCreated(created);
+        verify(auditEntryStore).recordPaymentAttemptProviderStatusChanged(outcome);
+        verify(auditEntryStore).recordPaymentProviderEventAcknowledged(duplicate);
+        verify(auditEntryStore).recordPaymentProviderPaymentConfirmed(confirmed);
     }
 
     private static PaymentRegistered paymentRegistered(

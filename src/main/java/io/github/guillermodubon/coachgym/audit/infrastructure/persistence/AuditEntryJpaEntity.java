@@ -12,6 +12,12 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentStatusChangedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
 import io.github.guillermodubon.coachgym.maintenance.*;
 import io.github.guillermodubon.coachgym.membership.*;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptCreated;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusChanged;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatus;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatusChanged;
+import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledged;
+import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
@@ -914,6 +920,133 @@ class AuditEntryJpaEntity {
 
     Instant occurredAt() {
         return occurredAt;
+    }
+
+    static AuditEntryJpaEntity from(PaymentAttemptCreated event) {
+        AuditEntryJpaEntity entry = attemptEntry(
+                event.paymentAttemptId(), event.createdByUserId(),
+                event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "PAYMENT_ATTEMPT_CREATED";
+        entry.summary = "Payment attempt created.";
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("clientId", event.clientId().toString());
+        metadata.put("membershipId", event.membershipId().toString());
+        metadata.put("membershipPeriodId", event.membershipPeriodId().toString());
+        metadata.put("provider", event.provider().name());
+        metadata.put("expectedAmount", event.expectedAmount().toPlainString());
+        metadata.put("currency", event.currency());
+        entry.metadata = Map.copyOf(metadata);
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(PaymentAttemptStatusChanged event) {
+        AuditEntryJpaEntity entry = attemptEntry(
+                event.paymentAttemptId(), event.initiatedByUserId(),
+                null, event.occurredAt());
+        entry.actionCode = statusChangeAction(event.currentStatus());
+        entry.summary = statusChangeSummary(event.currentStatus());
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("provider", event.provider().name());
+        metadata.put("previousStatus", event.previousStatus().name());
+        metadata.put("newStatus", event.currentStatus().name());
+        if (event.failureCode() != null) {
+            metadata.put("failureCode", event.failureCode().name());
+        }
+        metadata.put("confirmedPaymentPresent", event.confirmedPaymentId() != null);
+        entry.metadata = Map.copyOf(metadata);
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(PaymentAttemptProviderStatusChanged event) {
+        AuditEntryJpaEntity entry = attemptEntry(
+                event.paymentAttemptId(), null, null, event.occurredAt());
+        boolean succeeded = event.currentStatus() == PaymentAttemptStatus.SUCCEEDED;
+        entry.actionCode = succeeded
+                ? "PAYMENT_ATTEMPT_PROVIDER_SUCCESS"
+                : "PAYMENT_ATTEMPT_PROVIDER_FAILURE";
+        entry.summary = succeeded
+                ? "Payment provider success verified."
+                : "Payment provider failure verified.";
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("provider", event.provider().name());
+        metadata.put("previousStatus", event.previousStatus().name());
+        metadata.put("newStatus", event.currentStatus().name());
+        if (event.failureCode() != null) {
+            metadata.put("failureCode", event.failureCode().name());
+        }
+        metadata.put("providerEventReferencePresent", event.providerEventReferencePresent());
+        metadata.put("confirmedPaymentPresent", event.confirmedPaymentId() != null);
+        entry.metadata = Map.copyOf(metadata);
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(PaymentProviderEventAcknowledged event) {
+        AuditEntryJpaEntity entry = attemptEntry(
+                event.paymentAttemptId(), null, null, event.occurredAt());
+        entry.actionCode = "PAYMENT_PROVIDER_EVENT_DUPLICATE_ACKNOWLEDGED";
+        entry.summary = "Duplicate payment provider event acknowledged.";
+
+        entry.metadata = Map.of(
+                "provider", event.provider().name(),
+                "eventType", event.eventType(),
+                "processingResult", event.processingResult(),
+                "duplicate", true);
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(PaymentProviderPaymentConfirmed event) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = null;
+        entry.actorIdentifierSnapshot = null;
+        entry.actionCode = "PAYMENT_PROVIDER_PAYMENT_CONFIRMED";
+        entry.resourceType = "PAYMENT";
+        entry.resourceId = event.paymentId();
+        entry.resourceCodeSnapshot = null;
+        entry.summary = "Payment materialized from verified provider confirmation.";
+        entry.metadata = Map.of(
+                "paymentAttemptId", event.paymentAttemptId().toString(),
+                "provider", event.provider().name(),
+                "amount", event.amount().toPlainString(),
+                "currency", event.currency());
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    private static AuditEntryJpaEntity attemptEntry(
+            UUID attemptId, UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = actorUserId;
+        entry.actorIdentifierSnapshot = actorIdentifier != null
+                ? actorIdentifier
+                : actorUserId == null ? null : "staff";
+        entry.resourceType = "PAYMENT_ATTEMPT";
+        entry.resourceId = attemptId;
+        entry.resourceCodeSnapshot = null;
+        entry.occurredAt = occurredAt;
+        return entry;
+    }
+
+    private static String statusChangeAction(PaymentAttemptStatus status) {
+        return switch (status) {
+            case PROCESSING -> "PAYMENT_ATTEMPT_PROCESSING";
+            case CANCELLED -> "PAYMENT_ATTEMPT_CANCELLED";
+            case FAILED -> "PAYMENT_ATTEMPT_FAILED";
+            default -> "PAYMENT_ATTEMPT_STATUS_CHANGED";
+        };
+    }
+
+    private static String statusChangeSummary(PaymentAttemptStatus status) {
+        return switch (status) {
+            case PROCESSING -> "Payment attempt moved to processing.";
+            case CANCELLED -> "Payment attempt cancelled by staff.";
+            case FAILED -> "Payment attempt failed before provider confirmation.";
+            default -> "Payment attempt status changed.";
+        };
     }
 
     static AuditEntryJpaEntity from(
