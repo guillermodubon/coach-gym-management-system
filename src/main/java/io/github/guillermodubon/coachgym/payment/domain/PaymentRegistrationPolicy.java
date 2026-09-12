@@ -68,6 +68,8 @@ public final class PaymentRegistrationPolicy {
                 periodCurrency,
                 now);
 
+        requireManualPaymentMethod(paymentMethod);
+
         // Build PaymentRegistration first — enforces field-level invariants.
         PaymentRegistration registration =
                 new PaymentRegistration(
@@ -106,6 +108,23 @@ public final class PaymentRegistrationPolicy {
                 now);
 
         return registration;
+    }
+
+    /**
+     * Guards the public/manual registration boundary. CARD rows are created
+     * exclusively by the verified provider-confirmation path.
+     */
+    public static void requireManualPaymentMethod(
+            PaymentMethod paymentMethod) {
+
+        if (paymentMethod == null) {
+            throw new PaymentValidationException(
+                    "Payment method must be provided.");
+        }
+
+        if (paymentMethod == PaymentMethod.CARD) {
+            throw new ManualCardPaymentNotAllowedException();
+        }
     }
 
     // ---------------------------------------------------------------

@@ -75,6 +75,14 @@ class PaymentRegistrationPolicyTest {
                 .hasMessageContaining("CANCELLED");
     }
 
+    @Test
+    void rejectsCardAtTheManualRegistrationPolicyBoundary() {
+        assertThatThrownBy(() -> PaymentRegistrationPolicy.requireManualPaymentMethod(
+                PaymentMethod.CARD))
+                .isInstanceOf(ManualCardPaymentNotAllowedException.class)
+                .hasMessage("Manual CARD payment registration is not allowed; use the verified provider flow.");
+    }
+
     // ------------------------------------------------------------------
     // Client–membership ownership mismatch
     // ------------------------------------------------------------------

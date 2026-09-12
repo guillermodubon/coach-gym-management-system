@@ -51,6 +51,7 @@ public class PaymentApplicationService {
 
         validateCommand(command);
         validateActor(actor);
+        PaymentRegistrationPolicy.requireManualPaymentMethod(command.paymentMethod());
 
         MembershipPaymentDetails membership =
                 membershipPaymentQuery
