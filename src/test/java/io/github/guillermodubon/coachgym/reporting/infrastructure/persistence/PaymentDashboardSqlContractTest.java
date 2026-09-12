@@ -35,6 +35,18 @@ class PaymentDashboardSqlContractTest {
                 .doesNotContain("::double");
     }
 
+    @Test
+    void providerAttemptsCannotContributeToRevenueBeforePaymentMaterialization() {
+        String sql = normalized(JdbcPaymentDashboardQuery.SQL);
+
+        assertThat(sql)
+                .contains("from gym.payments p")
+                .contains("p.status = 'paid'")
+                .doesNotContain("payment_attempts")
+                .doesNotContain("processing")
+                .doesNotContain("succeeded");
+    }
+
     private static String normalized(String sql) {
         return sql.toLowerCase(Locale.ROOT)
                 .replaceAll("\\s+", " ")
