@@ -43,6 +43,9 @@ out/
 # Client profile photos generated during local development
 /data/client-photos/
 
+# Payment receipt PDFs generated during local development
+/data/payment-receipts/
+
 # Local repository context export
 /Contexto actual de la app.xml
 /Estado actual de la app.xml
