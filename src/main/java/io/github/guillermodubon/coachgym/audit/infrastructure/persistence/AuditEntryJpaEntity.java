@@ -19,6 +19,7 @@ import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatusChanged;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledged;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
+import io.github.guillermodubon.coachgym.payment.PaymentReceiptGenerated;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -1012,6 +1013,31 @@ class AuditEntryJpaEntity {
                 "provider", event.provider().name(),
                 "amount", event.amount().toPlainString(),
                 "currency", event.currency());
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(PaymentReceiptGenerated event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Payment receipt generated event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.generatedByUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "PAYMENT_RECEIPT_GENERATED";
+        entry.resourceType = "PAYMENT_RECEIPT";
+        entry.resourceId = event.receiptId();
+        entry.resourceCodeSnapshot = event.receiptNumber();
+        entry.summary = "Payment receipt generated.";
+        entry.metadata = Map.of(
+                "paymentId", event.paymentId().toString(),
+                "paymentCode", event.paymentCode(),
+                "amount", event.amount().toPlainString(),
+                "currency", event.currency(),
+                "testMode", event.testMode());
         entry.occurredAt = event.occurredAt();
         return entry;
     }
