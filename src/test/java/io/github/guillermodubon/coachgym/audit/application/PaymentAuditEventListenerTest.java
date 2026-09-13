@@ -1,5 +1,6 @@
 package io.github.guillermodubon.coachgym.audit.application;
 
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import io.github.guillermodubon.coachgym.payment.PaymentMethod;
@@ -10,6 +11,7 @@ import io.github.guillermodubon.coachgym.payment.PaymentProvider;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledged;
 import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
+import io.github.guillermodubon.coachgym.payment.PaymentReceiptGenerated;
 import io.github.guillermodubon.coachgym.payment.PaymentStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -37,6 +39,9 @@ class PaymentAuditEventListenerTest {
 
     private static final UUID ACTOR_ID =
             UUID.fromString("50000000-0000-0000-0000-000000000001");
+
+    private static final UUID RECEIPT_ID =
+            UUID.fromString("60000000-0000-0000-0000-000000000001");
 
     private static final Instant NOW =
             Instant.parse("2026-08-25T18:35:00Z");
@@ -98,6 +103,26 @@ class PaymentAuditEventListenerTest {
         verify(auditEntryStore).recordPaymentAttemptProviderStatusChanged(outcome);
         verify(auditEntryStore).recordPaymentProviderEventAcknowledged(duplicate);
         verify(auditEntryStore).recordPaymentProviderPaymentConfirmed(confirmed);
+    }
+
+    @Test
+    void forwardsPaymentReceiptGeneratedEventToStoreOnce() {
+        PaymentReceiptGenerated event = new PaymentReceiptGenerated(
+                RECEIPT_ID,
+                "REC-000001",
+                PAYMENT_ID,
+                "PAY-000001",
+                PaymentStatus.PAID,
+                new BigDecimal("25.00"),
+                "USD",
+                ACTOR_ID,
+                "coach-admin",
+                true,
+                NOW);
+
+        listener.record(event);
+
+        verify(auditEntryStore, times(1)).recordPaymentReceiptGenerated(event);
     }
 
     private static PaymentRegistered paymentRegistered(
