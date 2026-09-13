@@ -1,6 +1,9 @@
 package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialIssued;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplaced;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialRevoked;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryStore;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
@@ -263,6 +266,24 @@ class AuditEntryPersistenceAdapter
 
         repository.save(
                 AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordAccessCredentialIssued(AccessCredentialIssued event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordAccessCredentialRevoked(AccessCredentialRevoked event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordAccessCredentialReplaced(AccessCredentialReplaced event) {
+        repository.save(AuditEntryJpaEntity.from(event));
     }
 
     @Override

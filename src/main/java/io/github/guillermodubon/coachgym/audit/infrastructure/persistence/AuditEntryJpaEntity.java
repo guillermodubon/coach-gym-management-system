@@ -2,6 +2,9 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
 import io.github.guillermodubon.coachgym.access.AccessResult;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialIssued;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplaced;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialRevoked;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
@@ -1207,6 +1210,81 @@ class AuditEntryJpaEntity {
         entry.occurredAt =
                 event.occurredAt();
 
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(AccessCredentialIssued event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Access credential issued event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = accessCredentialEntry(
+                event.credentialId(), event.credentialCode(), event.actorUserId(),
+                event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "ACCESS_CREDENTIAL_ISSUED";
+        entry.summary = "Client access credential issued.";
+        entry.metadata = Map.of(
+                "clientId", event.clientId().toString(),
+                "newStatus", "ACTIVE",
+                "payloadVersion", event.payloadVersion(),
+                "tokenSchemeVersion", event.tokenSchemeVersion());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(AccessCredentialRevoked event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Access credential revoked event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = accessCredentialEntry(
+                event.credentialId(), event.credentialCode(), event.actorUserId(),
+                event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "ACCESS_CREDENTIAL_REVOKED";
+        entry.summary = "Client access credential revoked.";
+        entry.metadata = Map.of(
+                "clientId", event.clientId().toString(),
+                "previousStatus", event.previousStatus().name(),
+                "newStatus", event.newStatus().name(),
+                "reasonPresent", event.reasonPresent());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(AccessCredentialReplaced event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Access credential replaced event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = accessCredentialEntry(
+                event.previousCredentialId(), null, event.actorUserId(),
+                event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "ACCESS_CREDENTIAL_REPLACED";
+        entry.summary = "Client access credential replaced.";
+        entry.metadata = Map.of(
+                "clientId", event.clientId().toString(),
+                "previousStatus", event.previousStatus().name(),
+                "newStatus", event.replacementStatus().name(),
+                "replacementCredentialId", event.replacementCredentialId().toString(),
+                "reasonPresent", event.reasonPresent());
+        return entry;
+    }
+
+    private static AuditEntryJpaEntity accessCredentialEntry(
+            UUID credentialId,
+            String credentialCode,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = actorUserId;
+        entry.actorIdentifierSnapshot = actorIdentifier;
+        entry.resourceType = "ACCESS_CREDENTIAL";
+        entry.resourceId = credentialId;
+        entry.resourceCodeSnapshot = credentialCode;
+        entry.occurredAt = occurredAt;
         return entry;
     }
 
