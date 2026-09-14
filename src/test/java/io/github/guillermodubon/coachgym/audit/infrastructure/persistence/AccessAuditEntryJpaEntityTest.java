@@ -28,6 +28,10 @@ class AccessAuditEntryJpaEntityTest {
             UUID.fromString(
                     "50000000-0000-0000-0000-000000000001");
 
+    private static final UUID CREDENTIAL_ID =
+            UUID.fromString(
+                    "60000000-0000-0000-0000-000000000001");
+
     private static final Instant NOW =
             Instant.parse("2026-09-15T20:00:00Z");
 
@@ -103,6 +107,23 @@ class AccessAuditEntryJpaEntityTest {
                             || normalized.contains("session")
                             || normalized.contains("birth");
                 });
+    }
+
+    @Test
+    void mapsQrDuplicateWithSafeAllowlistedMetadata() {
+        AuditEntryJpaEntity entry =
+                AuditEntryJpaEntity.from(qrDuplicateEvent());
+
+        assertThat(entry.resourceCodeSnapshot())
+                .isEqualTo("QR_CREDENTIAL");
+        assertThat(entry.metadata())
+                .containsEntry("identificationSource", "QR_CREDENTIAL")
+                .containsEntry("result", "DENIED")
+                .containsEntry("reasonCode", "DUPLICATE_CHECK_IN")
+                .containsEntry("duplicate", true)
+                .containsEntry("accessCredentialId", CREDENTIAL_ID.toString());
+        assertThat(entry.metadata().toString())
+                .doesNotContain("payload", "token", "fingerprint", "email", "phone");
     }
 
     @Test
@@ -186,6 +207,24 @@ class AccessAuditEntryJpaEntityTest {
                 "MEM-000001",
                 AccessResult.DENIED,
                 AccessReasonCode.MEMBERSHIP_FROZEN,
+                NOW,
+                ACTOR_ID,
+                "receptionist",
+                NOW);
+    }
+
+    private static AccessAttemptRecorded qrDuplicateEvent() {
+        return new AccessAttemptRecorded(
+                RECORD_ID,
+                "QR_CREDENTIAL",
+                "QR_CREDENTIAL",
+                CREDENTIAL_ID,
+                CLIENT_ID,
+                "CLI-000001",
+                MEMBERSHIP_ID,
+                "MEM-000001",
+                AccessResult.DENIED,
+                AccessReasonCode.DUPLICATE_CHECK_IN,
                 NOW,
                 ACTOR_ID,
                 "receptionist",

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.guillermodubon.coachgym.access.AccessReasonCode;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.AccessResult;
+import io.github.guillermodubon.coachgym.access.domain.AccessIdentifierType;
 import io.github.guillermodubon.coachgym.access.domain.AccessValidationException;
 import java.time.Instant;
 import java.util.UUID;
@@ -27,7 +28,11 @@ class AccessRecordJpaEntityTest {
 
     private static final UUID ACTOR_ID =
             UUID.fromString(
-                    "50000000-0000-0000-0000-000000000001");
+                "50000000-0000-0000-0000-000000000001");
+
+    private static final UUID CREDENTIAL_ID =
+            UUID.fromString(
+                    "60000000-0000-0000-0000-000000000001");
 
     private static final Instant NOW =
             Instant.parse("2026-09-15T20:00:00Z");
@@ -85,6 +90,46 @@ class AccessRecordJpaEntityTest {
         assertThat(details.clientCode()).isNull();
         assertThat(details.membershipId()).isNull();
         assertThat(details.membershipCode()).isNull();
+    }
+
+    @Test
+    void createsQrAccessRecordWithCredentialRelationAndSource() {
+        AccessRecordJpaEntity entity = AccessRecordJpaEntity.createQr(
+                "QR_CREDENTIAL",
+                CREDENTIAL_ID,
+                CLIENT_ID,
+                "CLI-000001",
+                MEMBERSHIP_ID,
+                "MEM-000001",
+                PERIOD_ID,
+                AccessResult.ALLOWED,
+                AccessReasonCode.ACCESS_ALLOWED,
+                "Membership is active and its current period is valid.",
+                NOW,
+                ACTOR_ID);
+
+        assertThat(entity.identificationSource())
+                .isEqualTo(AccessIdentifierType.QR_CREDENTIAL);
+        assertThat(entity.accessCredentialId()).isEqualTo(CREDENTIAL_ID);
+    }
+
+    @Test
+    void rejectsQrRecordWithoutCredentialRelation() {
+        assertThatThrownBy(() -> AccessRecordJpaEntity.createQr(
+                "QR_CREDENTIAL",
+                null,
+                CLIENT_ID,
+                "CLI-000001",
+                null,
+                null,
+                null,
+                AccessResult.DENIED,
+                AccessReasonCode.CLIENT_INACTIVE,
+                "The client is inactive.",
+                NOW,
+                ACTOR_ID))
+                .isInstanceOf(AccessValidationException.class)
+                .hasMessageContaining("credential and client");
     }
 
     @Test

@@ -18,6 +18,14 @@ public interface AccessCredentialQuery {
     Optional<AccessCredentialDetails> findActiveByTokenFingerprint(String tokenFingerprint);
 
     /**
+     * Resolves an active credential and locks its row for the surrounding
+     * transaction. The lock is used to serialize access decisions for one
+     * credential without introducing a database-wide lock.
+     */
+    Optional<AccessCredentialDetails> findActiveByTokenFingerprintForUpdate(
+            String tokenFingerprint);
+
+    /**
      * Returns the persisted, nonsecret artifact metadata for one credential.
      *
      * <p>Artifact bytes remain behind the storage port and are never exposed by

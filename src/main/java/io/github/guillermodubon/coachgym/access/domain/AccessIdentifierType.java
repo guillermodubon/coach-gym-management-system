@@ -23,6 +23,14 @@ public enum AccessIdentifierType {
     CLIENT_CODE,
 
     /**
+     * The identifier was supplied by a versioned QR access credential.
+     * QR payloads are classified explicitly by the QR check-in command;
+     * {@link AccessIdentifier#of(String)} intentionally does not infer this
+     * value from an opaque payload.
+     */
+    QR_CREDENTIAL,
+
+    /**
      * The prefix is not recognised. The identifier is still presented to
      * the resolvers; the policy will emit {@code IDENTIFIER_NOT_FOUND}.
      */

@@ -56,7 +56,9 @@ abstract class AbstractAccessApiIntegrationTest {
     @BeforeEach
     void prepareAccessData() {
         jdbcTemplate.update("delete from gym.audit_entries where action_code='ACCESS_DENIED'");
-        jdbcTemplate.update("delete from gym.access_records");
+        // Access attempts are append-only in production. TRUNCATE is the
+        // isolated fixture reset that does not exercise a business delete.
+        jdbcTemplate.execute("truncate table gym.access_records");
         provisionUser(ADMIN_USERNAME, "access-admin@example.com", ADMIN_PASSWORD, "ADMIN");
         provisionUser(RECEPTIONIST_USERNAME, "access-receptionist@example.com", RECEPTIONIST_PASSWORD, "RECEPTIONIST");
     }

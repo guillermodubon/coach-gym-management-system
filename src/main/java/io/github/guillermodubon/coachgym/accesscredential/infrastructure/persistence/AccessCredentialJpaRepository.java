@@ -25,6 +25,17 @@ interface AccessCredentialJpaRepository extends JpaRepository<AccessCredentialJp
     @Query("""
             select credential
             from AccessCredentialJpaEntity credential
+            where credential.tokenFingerprint = :tokenFingerprint
+              and credential.status = :status
+            """)
+    Optional<AccessCredentialJpaEntity> findByTokenFingerprintAndStatusForUpdate(
+            @Param("tokenFingerprint") String tokenFingerprint,
+            @Param("status") AccessCredentialStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select credential
+            from AccessCredentialJpaEntity credential
             where credential.id = :credentialId
             """)
     Optional<AccessCredentialJpaEntity> findByIdForUpdate(

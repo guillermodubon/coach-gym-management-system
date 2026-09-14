@@ -31,6 +31,12 @@ class AccessCredentialPersistenceIntegrationTest
     private AccessCredentialQuery credentialQuery;
 
     @Autowired
+    private AccessCredentialResolver resolver;
+
+    @Autowired
+    private AccessCredentialTokenProtector tokenProtector;
+
+    @Autowired
     private AccessCredentialHistoryStore historyStore;
 
     @Autowired
@@ -41,7 +47,8 @@ class AccessCredentialPersistenceIntegrationTest
 
     @BeforeEach
     void clearCredentialRows() {
-        jdbcTemplate.execute("truncate table gym.access_credential_history, gym.access_credentials");
+        jdbcTemplate.execute("truncate table gym.access_records, "
+                + "gym.access_credential_history, gym.access_credentials");
     }
 
     @Test
@@ -65,6 +72,24 @@ class AccessCredentialPersistenceIntegrationTest
                 .singleElement()
                 .satisfies(history -> assertThat(history.newStatus())
                         .isEqualTo(AccessCredentialStatus.ACTIVE));
+    }
+
+    @Test
+    void resolvesPersistedActiveCredentialFromTheCanonicalPayload() {
+        UUID clientId = createClient();
+        AccessCredentialQrPayload payload = AccessCredentialQrPayload.parse(
+                "cgac:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+        AccessCredentialDetails inserted = credentialStore.insert(command(
+                clientId,
+                "g",
+                tokenProtector.fingerprint(payload.value())));
+
+        assertThat(resolver.resolve(payload))
+                .hasValueSatisfying(resolved -> {
+                    assertThat(resolved.credentialId()).isEqualTo(inserted.id());
+                    assertThat(resolved.clientId()).isEqualTo(clientId);
+                    assertThat(resolved.status()).isEqualTo(AccessCredentialStatus.ACTIVE);
+                });
     }
 
     @Test
@@ -168,12 +193,19 @@ class AccessCredentialPersistenceIntegrationTest
     }
 
     private AccessCredentialPersistenceCommand command(UUID clientId, String suffix) {
+        return command(clientId, suffix, suffix.repeat(64));
+    }
+
+    private AccessCredentialPersistenceCommand command(
+            UUID clientId,
+            String suffix,
+            String fingerprint) {
         UUID id = UUID.randomUUID();
         return new AccessCredentialPersistenceCommand(
                 id,
                 clientId,
                 "CRED-" + suffix.toUpperCase() + "-" + id.toString().substring(0, 8),
-                suffix.repeat(64),
+                fingerprint,
                 "sha256-v1",
                 "v1",
                 ISSUED_AT,

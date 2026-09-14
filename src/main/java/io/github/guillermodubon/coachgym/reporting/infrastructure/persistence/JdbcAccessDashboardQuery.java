@@ -19,7 +19,7 @@ class JdbcAccessDashboardQuery implements AccessDashboardQuery {
     static final String SQL = """
         select
             count(*) filter (
-                where ar.decision = 'GRANTED'
+                where ar.decision = 'ALLOWED'
             ) as allowed_count,
             count(*) filter (
                 where ar.decision = 'DENIED'

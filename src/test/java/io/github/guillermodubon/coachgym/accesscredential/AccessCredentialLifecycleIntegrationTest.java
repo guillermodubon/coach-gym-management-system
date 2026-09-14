@@ -53,7 +53,8 @@ class AccessCredentialLifecycleIntegrationTest extends AbstractIncidentApiIntegr
     @BeforeEach
     void clearCredentialFixtures() throws IOException {
         jdbcTemplate.execute(
-                "truncate table gym.access_credential_history, gym.access_credentials");
+                "truncate table gym.access_records, "
+                        + "gym.access_credential_history, gym.access_credentials");
         jdbcTemplate.update(
                 "delete from gym.audit_entries where resource_type = 'ACCESS_CREDENTIAL'");
         clearStorage();

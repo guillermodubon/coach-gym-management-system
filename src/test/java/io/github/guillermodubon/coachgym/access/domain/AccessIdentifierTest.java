@@ -62,6 +62,22 @@ class AccessIdentifierTest {
     }
 
     @Test
+    void exposesQrCredentialTypeForExplicitQrWorkflowClassification() {
+        assertThat(AccessIdentifierType.valueOf("QR_CREDENTIAL"))
+                .isEqualTo(AccessIdentifierType.QR_CREDENTIAL);
+    }
+
+    @Test
+    void createsQrIdentifierWithASecretFreeMarker() {
+        AccessIdentifier identifier = AccessIdentifier.qrCredential();
+
+        assertThat(identifier.type())
+                .isEqualTo(AccessIdentifierType.QR_CREDENTIAL);
+        assertThat(identifier.value())
+                .isEqualTo("QR_CREDENTIAL");
+    }
+
+    @Test
     void infersUnknownTypeForUnrecognisedPrefix() {
         AccessIdentifier id = AccessIdentifier.of("XYZ-000001");
         assertThat(id.type()).isEqualTo(AccessIdentifierType.UNKNOWN);
