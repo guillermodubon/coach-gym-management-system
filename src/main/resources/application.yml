@@ -35,6 +35,8 @@ gym:
   time-zone: America/El_Salvador
   currency: USD
   storage:
+    access-credentials:
+      directory: ${ACCESS_CREDENTIALS_DIRECTORY:data/access-credentials}
     payment-receipts:
       directory: ${PAYMENT_RECEIPTS_DIRECTORY:data/payment-receipts}
 
