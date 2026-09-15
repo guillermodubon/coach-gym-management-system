@@ -189,7 +189,7 @@ class AccessRecordSearchQueryTest {
     }
 
     @Test
-    void allowsAllNineReasonCodes() {
+    void allowsAllDeclaredReasonCodes() {
         for (AccessReasonCode code : AccessReasonCode.values()) {
             AccessRecordSearchQuery q = AccessRecordSearchQuery.from(
                     null, null, null, code.name(), null, null, null,

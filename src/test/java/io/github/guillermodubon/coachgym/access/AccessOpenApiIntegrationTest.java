@@ -27,6 +27,42 @@ class AccessOpenApiIntegrationTest extends AbstractAccessApiIntegrationTest {
     }
 
     @Test
+    void documentsSecureQrCheckInContractWithoutSecretFields() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/access/qr-check-in'].post").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/access/qr-check-in'].post.responses['200']").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/access/qr-check-in'].post.responses['400']").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/access/qr-check-in'].post.responses['401']").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/access/qr-check-in'].post.responses['403']").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/access/qr-check-in'].post.responses['404']").exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/access/qr-check-in'].post.description",
+                        containsString("QR_CREDENTIAL")))
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/access/qr-check-in'].post.description",
+                        containsString("not a public")))
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/access/qr-check-in'].post.security[0].sessionCookie")
+                        .exists())
+                .andExpect(jsonPath(
+                        "$.components.schemas.QrCheckInRequest.properties.payload.maxLength")
+                        .value(51))
+                .andExpect(jsonPath(
+                        "$.components.schemas.QrCheckInRequest.properties.clientId")
+                        .doesNotExist())
+                .andExpect(jsonPath(
+                        "$.components.schemas.QrCheckInRequest.properties.paymentStatus")
+                        .doesNotExist());
+    }
+
+    @Test
     void documentsRecordQueries() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

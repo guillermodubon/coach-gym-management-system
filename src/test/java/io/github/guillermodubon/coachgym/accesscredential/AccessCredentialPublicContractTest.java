@@ -14,7 +14,8 @@ class AccessCredentialPublicContractTest {
             AccessCredentialDocument.class,
             AccessCredentialHistoryDetails.class,
             AccessCredentialQrPayload.class,
-            AccessCredentialStatus.class);
+            AccessCredentialStatus.class,
+            ResolvedAccessCredential.class);
 
     @Test
     void publicContractsDoNotLeakFrameworkOrProviderTypes() {
@@ -40,5 +41,25 @@ class AccessCredentialPublicContractTest {
                         .doesNotMatch("(?i).*(raw|token|digest|hmac|secret|storagepath).*");
             }
         }
+    }
+
+    @Test
+    void resolverIsAMinimalPublicContractWithoutProviderTypes() {
+        assertThat(AccessCredentialResolver.class.getPackageName())
+                .isEqualTo("io.github.guillermodubon.coachgym.accesscredential");
+        Arrays.stream(AccessCredentialResolver.class.getDeclaredMethods())
+                .forEach(method -> {
+                    assertThat(method.getReturnType().getName())
+                            .doesNotStartWith("org.springframework.")
+                            .doesNotStartWith("jakarta.persistence.")
+                            .doesNotStartWith("com.google.zxing.")
+                            .doesNotStartWith("com.stripe.");
+                    Arrays.stream(method.getParameterTypes())
+                            .forEach(parameter -> assertThat(parameter.getName())
+                                    .doesNotStartWith("org.springframework.")
+                                    .doesNotStartWith("jakarta.persistence.")
+                                    .doesNotStartWith("com.google.zxing.")
+                                    .doesNotStartWith("com.stripe."));
+                });
     }
 }

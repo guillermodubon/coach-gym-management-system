@@ -33,6 +33,10 @@ class AccessAuditEventListenerTest {
             UUID.fromString(
                     "50000000-0000-0000-0000-000000000001");
 
+    private static final UUID CREDENTIAL_ID =
+            UUID.fromString(
+                    "60000000-0000-0000-0000-000000000001");
+
     private static final Instant OCCURRED_AT =
             Instant.parse(
                     "2026-09-15T20:00:00Z");
@@ -65,6 +69,56 @@ class AccessAuditEventListenerTest {
     void doesNotRecordAllowedAccessAttempt() {
         AccessAttemptRecorded event =
                 allowedEvent();
+
+        listener.record(event);
+
+        verify(auditEntryStore, never())
+                .recordDeniedAccessAttempt(event);
+    }
+
+    @Test
+    void recordsDeniedQrAttemptWithoutChangingTheEstablishedPolicy() {
+        AccessAttemptRecorded event =
+                new AccessAttemptRecorded(
+                        ACCESS_RECORD_ID,
+                        "QR_CREDENTIAL",
+                        "QR_CREDENTIAL",
+                        CREDENTIAL_ID,
+                        CLIENT_ID,
+                        "CLI-000001",
+                        MEMBERSHIP_ID,
+                        "MEM-000001",
+                        AccessResult.DENIED,
+                        AccessReasonCode.DUPLICATE_CHECK_IN,
+                        OCCURRED_AT,
+                        ACTOR_USER_ID,
+                        "receptionist",
+                        OCCURRED_AT);
+
+        listener.record(event);
+
+        verify(auditEntryStore)
+                .recordDeniedAccessAttempt(event);
+    }
+
+    @Test
+    void doesNotDuplicateAnAllowedQrAttemptInTheDeniedAuditStream() {
+        AccessAttemptRecorded event =
+                new AccessAttemptRecorded(
+                        ACCESS_RECORD_ID,
+                        "QR_CREDENTIAL",
+                        "QR_CREDENTIAL",
+                        CREDENTIAL_ID,
+                        CLIENT_ID,
+                        "CLI-000001",
+                        MEMBERSHIP_ID,
+                        "MEM-000001",
+                        AccessResult.ALLOWED,
+                        AccessReasonCode.ACCESS_ALLOWED,
+                        OCCURRED_AT,
+                        ACTOR_USER_ID,
+                        "receptionist",
+                        OCCURRED_AT);
 
         listener.record(event);
 

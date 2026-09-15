@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.access.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
@@ -8,7 +9,9 @@ import static org.mockito.Mockito.verify;
 import io.github.guillermodubon.coachgym.access.AccessReasonCode;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.AccessResult;
+import io.github.guillermodubon.coachgym.access.domain.AccessIdentifierType;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordPage;
+import io.github.guillermodubon.coachgym.access.application.AccessRecordDataAccessException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordSearchQuery;
 import io.github.guillermodubon.coachgym.access.application.AccessSortDirection;
 import io.github.guillermodubon.coachgym.access.application.AccessSortField;
@@ -26,6 +29,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @ExtendWith(MockitoExtension.class)
 class AccessPersistenceAdapterTest {
@@ -44,7 +48,11 @@ class AccessPersistenceAdapterTest {
 
     private static final UUID ACTOR_ID =
             UUID.fromString(
-                    "50000000-0000-0000-0000-000000000001");
+                "50000000-0000-0000-0000-000000000001");
+
+    private static final UUID CREDENTIAL_ID =
+            UUID.fromString(
+                    "60000000-0000-0000-0000-000000000001");
 
     private static final Instant NOW =
             Instant.parse("2026-09-15T20:00:00Z");
@@ -112,6 +120,86 @@ class AccessPersistenceAdapterTest {
                 .isEqualTo(AccessResult.DENIED);
         assertThat(result.clientId()).isNull();
         assertThat(result.membershipId()).isNull();
+    }
+
+    @Test
+    void persistsQrAttemptWithSafeSourceAndCredential() {
+        given(accessRecordRepository.saveAndFlush(any()))
+                .willAnswer(invocation -> invocation.getArgument(0));
+
+        AccessRecordDetails result = adapter.persistQr(
+                "QR_CREDENTIAL",
+                CREDENTIAL_ID,
+                CLIENT_ID,
+                "CLI-000001",
+                null,
+                null,
+                null,
+                AccessResult.DENIED,
+                AccessReasonCode.CLIENT_INACTIVE,
+                "The client is inactive.",
+                NOW,
+                ACTOR_ID);
+
+        assertThat(result.presentedIdentifier()).isEqualTo("QR_CREDENTIAL");
+        ArgumentCaptor<AccessRecordJpaEntity> captor =
+                ArgumentCaptor.forClass(AccessRecordJpaEntity.class);
+        verify(accessRecordRepository).saveAndFlush(captor.capture());
+        assertThat(captor.getValue().identificationSource())
+                .isEqualTo(AccessIdentifierType.QR_CREDENTIAL);
+        assertThat(captor.getValue().accessCredentialId())
+                .isEqualTo(CREDENTIAL_ID);
+    }
+
+    @Test
+    void returnsTheMostRecentAllowedQrAttemptFromTheDatabaseQuery() {
+        AccessRecordJpaEntity entity = AccessRecordJpaEntity.createQr(
+                "QR_CREDENTIAL",
+                CREDENTIAL_ID,
+                CLIENT_ID,
+                "CLI-000001",
+                null,
+                null,
+                null,
+                AccessResult.ALLOWED,
+                AccessReasonCode.ACCESS_ALLOWED,
+                "Membership is active and its current period is valid.",
+                NOW,
+                ACTOR_ID);
+        given(accessRecordRepository
+                .findFirstByAccessCredentialIdAndIdentificationSourceAndResultAndCheckedInAtGreaterThanEqualOrderByCheckedInAtDescIdAsc(
+                        CREDENTIAL_ID,
+                        AccessIdentifierType.QR_CREDENTIAL,
+                        AccessResult.ALLOWED,
+                        NOW.minusSeconds(30)))
+                .willReturn(Optional.of(entity));
+
+        assertThat(adapter.findMostRecentAllowedQrAttempt(
+                CREDENTIAL_ID, NOW.minusSeconds(30)))
+                .hasValueSatisfying(details -> assertThat(details.id())
+                .isEqualTo(entity.id()));
+    }
+
+    @Test
+    void translatesQrPersistenceFailureWithoutLeakingProviderDetails() {
+        given(accessRecordRepository.saveAndFlush(any()))
+                .willThrow(new DataIntegrityViolationException("database detail"));
+
+        assertThatThrownBy(() -> adapter.persistQr(
+                "QR_CREDENTIAL",
+                CREDENTIAL_ID,
+                CLIENT_ID,
+                "CLI-000001",
+                null,
+                null,
+                null,
+                AccessResult.ALLOWED,
+                AccessReasonCode.ACCESS_ALLOWED,
+                "Membership is active and its current period is valid.",
+                NOW,
+                ACTOR_ID))
+                .isInstanceOf(AccessRecordDataAccessException.class)
+                .hasMessage("QR access attempt could not be persisted.");
     }
 
     @Test

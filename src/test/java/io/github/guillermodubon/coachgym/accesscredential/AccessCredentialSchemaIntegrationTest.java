@@ -25,7 +25,8 @@ class AccessCredentialSchemaIntegrationTest
         // The production history trigger is append-only; TRUNCATE clears
         // isolated test tables without exercising a business delete path.
         jdbcTemplate.execute(
-                "truncate table gym.access_credential_history, gym.access_credentials");
+                "truncate table gym.access_records, "
+                        + "gym.access_credential_history, gym.access_credentials");
     }
 
     @Test

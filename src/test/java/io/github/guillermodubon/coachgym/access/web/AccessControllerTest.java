@@ -14,6 +14,7 @@ import io.github.guillermodubon.coachgym.access.application.AccessApplicationSer
 import io.github.guillermodubon.coachgym.access.application.AccessRecordPage;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordSearchQuery;
 import io.github.guillermodubon.coachgym.access.application.CheckInCommand;
+import io.github.guillermodubon.coachgym.access.application.QrAccessCheckInCommand;
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.time.Instant;
@@ -28,6 +29,9 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 
 class AccessControllerTest {
+
+    private static final String VALID_QR_PAYLOAD =
+            "cgac:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     private static final UUID RECORD_ID =
             UUID.fromString(
@@ -80,6 +84,26 @@ class AccessControllerTest {
         assertThat(response.getBody().reasonCode())
                 .isEqualTo(
                         AccessReasonCode.IDENTIFIER_NOT_FOUND);
+    }
+
+    @Test
+    void returnsOkForDeniedQrBusinessDecisionAndDelegatesOnlyPayloadAndActor() {
+        given(service.checkInQr(
+                any(QrAccessCheckInCommand.class),
+                any(AuthenticatedActor.class)))
+                .willReturn(deniedRecord());
+
+        ResponseEntity<AccessRecordResponse> response = controller.checkInQr(
+                new QrCheckInRequest(VALID_QR_PAYLOAD), authentication());
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().result()).isEqualTo(AccessResult.DENIED);
+
+        ArgumentCaptor<QrAccessCheckInCommand> commandCaptor =
+                ArgumentCaptor.forClass(QrAccessCheckInCommand.class);
+        verify(service).checkInQr(commandCaptor.capture(), any(AuthenticatedActor.class));
+        assertThat(commandCaptor.getValue().payload().value()).isEqualTo(VALID_QR_PAYLOAD);
     }
 
     @Test
