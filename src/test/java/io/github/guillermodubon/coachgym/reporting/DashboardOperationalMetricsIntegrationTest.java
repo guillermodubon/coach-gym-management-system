@@ -11,6 +11,28 @@ class DashboardOperationalMetricsIntegrationTest
         extends AbstractDashboardApiIntegrationTest {
 
     @Test
+    void accessMetricsCountPersistedAllowedAndDeniedDecisions() throws Exception {
+        jdbcTemplate.execute("truncate table gym.access_records");
+        jdbcTemplate.update("""
+                insert into gym.access_records
+                    (id, entered_code, decision, reason_code, details,
+                     occurred_at, recorded_by_user_id)
+                values (?, 'REPORTING-ALLOWED', 'ALLOWED', 'ACCESS_ALLOWED',
+                        'Reporting integration fixture', current_timestamp, ?),
+                       (?, 'REPORTING-DENIED', 'DENIED', 'IDENTIFIER_NOT_FOUND',
+                        'Reporting integration fixture', current_timestamp, ?)
+                """,
+                java.util.UUID.randomUUID(), adminId,
+                java.util.UUID.randomUUID(), adminId);
+
+        mockMvc.perform(get("/api/v1/reporting/dashboard")
+                        .session(loginAsAdmin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.access.allowedToday").value(1))
+                .andExpect(jsonPath("$.access.deniedToday").value(1));
+    }
+
+    @Test
     void administratorMetricsMatchCurrentDatabaseSnapshots() throws Exception {
         jdbcTemplate.update("""
                 update gym.equipment

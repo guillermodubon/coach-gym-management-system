@@ -31,7 +31,7 @@ class DashboardSqlContractTest {
                 .contains(
                         "from gym.access_records")
                 .contains(
-                        "ar.decision = 'granted'")
+                        "ar.decision = 'allowed'")
                 .contains(
                         "ar.decision = 'denied'")
                 .contains(
