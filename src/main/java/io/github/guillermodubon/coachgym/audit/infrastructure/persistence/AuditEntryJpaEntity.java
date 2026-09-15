@@ -1300,12 +1300,20 @@ class AuditEntryJpaEntity {
                 event.presentedIdentifierType());
 
         metadata.put(
+                "identificationSource",
+                event.presentedIdentifierType());
+
+        metadata.put(
                 "result",
                 event.result().name());
 
         metadata.put(
                 "reasonCode",
                 event.reasonCode().name());
+
+        metadata.put(
+                "duplicate",
+                event.duplicate());
 
         metadata.put(
                 "checkedInAt",
@@ -1321,6 +1329,12 @@ class AuditEntryJpaEntity {
             metadata.put(
                     "membershipId",
                     event.membershipId().toString());
+        }
+
+        if (event.accessCredentialId() != null) {
+            metadata.put(
+                    "accessCredentialId",
+                    event.accessCredentialId().toString());
         }
 
         return Map.copyOf(metadata);
