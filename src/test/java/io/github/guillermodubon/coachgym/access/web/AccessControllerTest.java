@@ -11,6 +11,7 @@ import io.github.guillermodubon.coachgym.access.AccessReasonCode;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.AccessResult;
 import io.github.guillermodubon.coachgym.access.application.AccessApplicationService;
+import io.github.guillermodubon.coachgym.access.application.AccessPaymentPolicyEvaluationException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordPage;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordSearchQuery;
 import io.github.guillermodubon.coachgym.access.application.CheckInCommand;
@@ -24,6 +25,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -104,6 +106,22 @@ class AccessControllerTest {
                 ArgumentCaptor.forClass(QrAccessCheckInCommand.class);
         verify(service).checkInQr(commandCaptor.capture(), any(AuthenticatedActor.class));
         assertThat(commandCaptor.getValue().payload().value()).isEqualTo(VALID_QR_PAYLOAD);
+    }
+
+    @Test
+    void mapsPaymentPolicyFailureToSafeTechnicalProblem() {
+        ResponseEntity<ProblemDetail> response =
+                controller.handlePaymentPolicyEvaluationFailure(
+                        new AccessPaymentPolicyEvaluationException(
+                                "internal detail", new IllegalStateException()));
+
+        assertThat(response.getStatusCode())
+                .isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getProperties())
+                .containsEntry("code", "ACCESS_PAYMENT_POLICY_EVALUATION_FAILED");
+        assertThat(response.getBody().getDetail())
+                .isEqualTo("The access check-in could not be evaluated.");
     }
 
     @Test
