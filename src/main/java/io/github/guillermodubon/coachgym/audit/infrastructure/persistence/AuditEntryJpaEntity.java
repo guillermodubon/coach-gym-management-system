@@ -6,6 +6,7 @@ import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialIssued
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplaced;
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialRevoked;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyChanged;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryDeactivatedEvent;
@@ -85,6 +86,28 @@ class AuditEntryJpaEntity {
         entry.resourceCodeSnapshot = event.clientCode();
         entry.summary = "Client registered.";
         entry.metadata = Map.of();
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(AccessPaymentPolicyChanged event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Access payment policy event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "ACCESS_PAYMENT_POLICY_CHANGED";
+        entry.resourceType = "SETTINGS";
+        entry.resourceId = AccessPaymentPolicyChanged.SETTINGS_RESOURCE_ID;
+        entry.resourceCodeSnapshot = "GYM_SETTINGS";
+        entry.summary = "Access payment policy changed.";
+        entry.metadata = Map.of(
+                "previousValue", event.previousValue(),
+                "newValue", event.newValue());
         entry.occurredAt = event.occurredAt();
         return entry;
     }
