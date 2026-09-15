@@ -2,15 +2,22 @@ package io.github.guillermodubon.coachgym.access.web;
 
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.application.AccessApplicationService;
+import io.github.guillermodubon.coachgym.access.application.AccessDuplicateScanPolicyUnavailableException;
+import io.github.guillermodubon.coachgym.access.application.AccessRecordDataAccessException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordNotFoundException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordSearchQuery;
+import io.github.guillermodubon.coachgym.access.application.QrAccessCredentialUnavailableException;
 import io.github.guillermodubon.coachgym.access.domain.AccessValidationException;
+import io.github.guillermodubon.coachgym.access.domain.QrAccessPayloadValidationException;
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.time.Instant;
@@ -39,6 +46,7 @@ import org.springframework.web.bind.annotation.*;
                 Only administrators and receptionists may process check-ins
                 or query access-records.
                 """)
+@SecurityRequirement(name = "sessionCookie")
 public class AccessController {
 
     private final AccessApplicationService accessApplicationService;
@@ -83,6 +91,55 @@ public class AccessController {
             Authentication authentication) {
 
         AccessRecordDetails record = accessApplicationService.checkIn(
+                request.toCommand(),
+                actor(authentication));
+
+        return ResponseEntity.ok(AccessRecordResponse.from(record));
+    }
+
+    @PostMapping("/qr-check-in")
+    @Operation(
+            summary = "Process a QR gym access check-in",
+            description = """
+                    Processes a decoded versioned QR credential payload through
+                    the same current client and membership policy as manual
+                    check-in. The request contains only the QR payload; client,
+                    membership, decision, actor, timestamp, credential storage,
+                    and payment fields are server controlled.
+
+                    HTTP 200 may contain either ALLOWED or DENIED. A normal
+                    denial is a recorded business decision, not an HTTP
+                    authorization failure. This is a staff-only operation:
+                    ADMIN and RECEPTIONIST sessions are accepted and a valid
+                    CSRF token is required. No confirmed payment is required
+                    by this endpoint. Persisted QR attempts use the safe
+                    identification source QR_CREDENTIAL. This is not a public
+                    scanner endpoint.
+                    """)
+    @ApiResponse(
+            responseCode = "200",
+            description = "QR check-in processed; result may be ALLOWED or DENIED",
+            content = @Content(schema = @Schema(implementation = AccessRecordResponse.class)))
+    @ApiResponse(
+            responseCode = "400",
+            description = "Malformed, unsupported, or invalid QR request")
+    @ApiResponse(
+            responseCode = "401",
+            description = "Authentication required")
+    @ApiResponse(
+            responseCode = "403",
+            description = "Insufficient role or invalid CSRF token")
+    @ApiResponse(
+            responseCode = "404",
+            description = "QR credential is unknown or inactive")
+    @ApiResponse(
+            responseCode = "500",
+            description = "QR access processing could not be completed")
+    public ResponseEntity<AccessRecordResponse> checkInQr(
+            @Valid @RequestBody QrCheckInRequest request,
+            Authentication authentication) {
+
+        AccessRecordDetails record = accessApplicationService.checkInQr(
                 request.toCommand(),
                 actor(authentication));
 
@@ -195,6 +252,46 @@ public class AccessController {
                 HttpStatus.BAD_REQUEST,
                 "ACCESS_VALIDATION_FAILED",
                 exception.getMessage());
+    }
+
+    @ExceptionHandler(QrAccessPayloadValidationException.class)
+    ResponseEntity<ProblemDetail> handleQrPayloadValidation(
+            QrAccessPayloadValidationException exception) {
+
+        return problem(
+                HttpStatus.BAD_REQUEST,
+                "QR_ACCESS_VALIDATION_FAILED",
+                "The QR access payload is invalid.");
+    }
+
+    @ExceptionHandler(QrAccessCredentialUnavailableException.class)
+    ResponseEntity<ProblemDetail> handleQrCredentialUnavailable(
+            QrAccessCredentialUnavailableException exception) {
+
+        return problem(
+                HttpStatus.NOT_FOUND,
+                "ACCESS_CREDENTIAL_NOT_FOUND",
+                "The QR access credential was not found or is inactive.");
+    }
+
+    @ExceptionHandler(AccessDuplicateScanPolicyUnavailableException.class)
+    ResponseEntity<ProblemDetail> handleDuplicatePolicyUnavailable(
+            AccessDuplicateScanPolicyUnavailableException exception) {
+
+        return problem(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "ACCESS_DUPLICATE_SCAN_POLICY_UNAVAILABLE",
+                "QR access processing is not configured.");
+    }
+
+    @ExceptionHandler(AccessRecordDataAccessException.class)
+    ResponseEntity<ProblemDetail> handleAccessDataAccessFailure(
+            AccessRecordDataAccessException exception) {
+
+        return problem(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "ACCESS_DATA_ACCESS_FAILED",
+                "The access check-in could not be completed.");
     }
 
     @ExceptionHandler(AccessRecordNotFoundException.class)

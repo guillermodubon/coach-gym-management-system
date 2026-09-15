@@ -15,9 +15,11 @@ public final class AccessCredentialQrPayload {
     public static final String PREFIX = "cgac:";
     public static final String CURRENT_VERSION = "v1";
     public static final String PAYLOAD_PREFIX = PREFIX + CURRENT_VERSION + ":";
+    /** Length of the fixed {@code cgac:v1:} prefix. */
+    public static final int PAYLOAD_PREFIX_LENGTH = 8;
     public static final int TOKEN_BYTES = 32;
     public static final int TOKEN_LENGTH = 43;
-    public static final int MAX_LENGTH = PAYLOAD_PREFIX.length() + TOKEN_LENGTH;
+    public static final int MAX_LENGTH = PAYLOAD_PREFIX_LENGTH + TOKEN_LENGTH;
 
     private final String value;
 

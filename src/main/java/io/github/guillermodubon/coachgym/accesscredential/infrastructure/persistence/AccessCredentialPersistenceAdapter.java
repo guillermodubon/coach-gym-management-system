@@ -84,6 +84,21 @@ class AccessCredentialPersistenceAdapter
     }
 
     @Override
+    @Transactional
+    public Optional<AccessCredentialDetails> findActiveByTokenFingerprintForUpdate(
+            String tokenFingerprint) {
+        String normalized = requireFingerprint(tokenFingerprint);
+        try {
+            return credentialRepository
+                    .findByTokenFingerprintAndStatusForUpdate(
+                            normalized, AccessCredentialStatus.ACTIVE)
+                    .map(AccessCredentialJpaEntity::toDetails);
+        } catch (DataAccessException exception) {
+            throw dataAccess("Access credential could not be locked.", exception);
+        }
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Optional<AccessCredentialStoredDocument> findArtifactByCredentialId(
             UUID credentialId) {

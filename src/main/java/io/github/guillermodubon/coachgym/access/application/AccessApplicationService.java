@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.access.application;
 
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
+import io.github.guillermodubon.coachgym.access.AccessReasonCode;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.domain.AccessCheckInContext;
 import io.github.guillermodubon.coachgym.access.domain.AccessEvaluation;
@@ -8,6 +9,10 @@ import io.github.guillermodubon.coachgym.access.domain.AccessIdentifier;
 import io.github.guillermodubon.coachgym.access.domain.AccessIdentifierType;
 import io.github.guillermodubon.coachgym.access.domain.AccessPolicy;
 import io.github.guillermodubon.coachgym.access.domain.AccessValidationException;
+import io.github.guillermodubon.coachgym.access.domain.DuplicateScanPolicy;
+import io.github.guillermodubon.coachgym.access.domain.DuplicateScanResult;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialResolver;
+import io.github.guillermodubon.coachgym.accesscredential.ResolvedAccessCredential;
 import io.github.guillermodubon.coachgym.client.ClientAccessDetails;
 import io.github.guillermodubon.coachgym.client.ClientAccessQuery;
 import io.github.guillermodubon.coachgym.membership.MembershipAccessDetails;
@@ -17,6 +22,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -50,21 +57,49 @@ public class AccessApplicationService {
     private final AccessRecordStore accessRecordStore;
     private final ClientAccessQuery clientAccessQuery;
     private final MembershipAccessQuery membershipAccessQuery;
+    private final AccessCredentialResolver accessCredentialResolver;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final Optional<DuplicateScanPolicy> duplicateScanPolicy;
 
+    /** Constructor retained for focused unit tests and non-QR callers. */
     public AccessApplicationService(
             AccessRecordStore accessRecordStore,
             ClientAccessQuery clientAccessQuery,
             MembershipAccessQuery membershipAccessQuery,
+            AccessCredentialResolver accessCredentialResolver,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
+
+        this(
+                accessRecordStore,
+                clientAccessQuery,
+                membershipAccessQuery,
+                accessCredentialResolver,
+                eventPublisher,
+                clock,
+                Optional.empty());
+    }
+
+    @Autowired
+    public AccessApplicationService(
+            AccessRecordStore accessRecordStore,
+            ClientAccessQuery clientAccessQuery,
+            MembershipAccessQuery membershipAccessQuery,
+            AccessCredentialResolver accessCredentialResolver,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            Optional<DuplicateScanPolicy> duplicateScanPolicy) {
 
         this.accessRecordStore = accessRecordStore;
         this.clientAccessQuery = clientAccessQuery;
         this.membershipAccessQuery = membershipAccessQuery;
+        this.accessCredentialResolver = accessCredentialResolver;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
+        this.duplicateScanPolicy = duplicateScanPolicy == null
+                ? Optional.empty()
+                : duplicateScanPolicy;
     }
 
     // ── Check-in ──────────────────────────────────────────────────────────────
@@ -110,6 +145,130 @@ public class AccessApplicationService {
                         record.id(),
                         record.presentedIdentifier(),
                         identifier.type().name(),
+                        record.clientId(),
+                        record.clientCode(),
+                        record.membershipId(),
+                        record.membershipCode(),
+                        record.result(),
+                        record.reasonCode(),
+                        record.checkedInAt(),
+                        actor.id(),
+                        actor.username(),
+                        occurredAt));
+        return record;
+    }
+
+    /**
+     * Evaluates a scanned QR credential through the same client, membership,
+     * period, freeze, and cancellation policy used by manual check-in.
+     *
+     * <p>This read-only operation is retained as an internal preview contract.
+     * The state-changing QR check-in path is {@link #checkInQr}, which adds
+     * duplicate protection, durable persistence, and event publication.
+     * Unknown or inactive credentials are rejected before client resolution
+     * because no authoritative identity is available; the constant exception
+     * message never reveals token or lookup details.</p>
+     */
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public QrAccessCheckInResult evaluateQr(
+            QrAccessCheckInCommand command,
+            AuthenticatedActor actor) {
+
+        validateQrCommand(command);
+        validateActor(actor);
+
+        Instant evaluatedAt = clock.instant();
+        LocalDate operationalDate = LocalDate.now(clock);
+
+        ResolvedAccessCredential credential = accessCredentialResolver
+                .resolve(command.payload())
+                .orElseThrow(QrAccessCredentialUnavailableException::new);
+
+        AccessIdentifier identifier = AccessIdentifier.qrCredential();
+        AccessCheckInContext context = resolveQrClient(
+                credential.clientId(), identifier, operationalDate);
+        AccessEvaluation evaluation = AccessPolicy.evaluate(context);
+
+        return new QrAccessCheckInResult(
+                credential.credentialId(),
+                identifier.type(),
+                context.clientId(),
+                context.clientCode(),
+                context.membershipId(),
+                context.membershipCode(),
+                context.membershipPeriodId(),
+                evaluation.result(),
+                evaluation.reasonCode(),
+                evaluation.reason(),
+                evaluatedAt);
+    }
+
+    /**
+     * Processes and records one QR check-in in a single transaction.
+     *
+     * <p>The credential resolver locks the active credential row, which
+     * serializes duplicate decisions for that credential only. The duplicate
+     * query then observes the authoritative committed access history under the
+     * same transaction before the attempt is persisted.</p>
+     */
+    @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public AccessRecordDetails checkInQr(
+            QrAccessCheckInCommand command,
+            AuthenticatedActor actor) {
+
+        validateQrCommand(command);
+        validateActor(actor);
+
+        DuplicateScanPolicy policy = duplicateScanPolicy.orElseThrow(
+                AccessDuplicateScanPolicyUnavailableException::new);
+        Instant occurredAt = clock.instant();
+        LocalDate operationalDate = LocalDate.now(clock);
+
+        ResolvedAccessCredential credential = accessCredentialResolver
+                .resolveAndLock(command.payload())
+                .orElseThrow(QrAccessCredentialUnavailableException::new);
+
+        AccessIdentifier identifier = AccessIdentifier.qrCredential();
+        AccessCheckInContext context = resolveQrClient(
+                credential.clientId(), identifier, operationalDate);
+        AccessEvaluation evaluation = AccessPolicy.evaluate(context);
+
+        Optional<AccessRecordDetails> previous = accessRecordStore
+                .findMostRecentAllowedQrAttempt(
+                        credential.credentialId(),
+                        occurredAt.minus(policy.window()));
+
+        if (policy.evaluate(
+                occurredAt,
+                previous.map(AccessRecordDetails::checkedInAt).orElse(null))
+                == DuplicateScanResult.DUPLICATE) {
+            evaluation = AccessEvaluation.denied(
+                    AccessReasonCode.DUPLICATE_CHECK_IN,
+                    "A recent QR check-in was already recorded.");
+        }
+
+        AccessRecordDetails record = accessRecordStore.persistQr(
+                identifier.value(),
+                credential.credentialId(),
+                context.clientId(),
+                context.clientCode(),
+                context.membershipId(),
+                context.membershipCode(),
+                context.membershipPeriodId(),
+                evaluation.result(),
+                evaluation.reasonCode(),
+                evaluation.reason(),
+                occurredAt,
+                actor.id());
+
+        eventPublisher.publishEvent(
+                new AccessAttemptRecorded(
+                        record.id(),
+                        record.presentedIdentifier(),
+                        identifier.type().name(),
+                        credential.credentialId(),
                         record.clientId(),
                         record.clientCode(),
                         record.membershipId(),
@@ -197,14 +356,7 @@ public class AccessApplicationService {
             AccessCheckInContext.Builder ctx) {
 
         membershipAccessQuery.findByCode(normalizedCode).ifPresent(mem -> {
-            ctx.membershipId(mem.membershipId())
-               .membershipCode(mem.membershipCode())
-               .membershipStatus(mem.status().name())
-               .membershipPeriodId(mem.currentPeriodId())
-               .periodStartsOn(mem.periodStartsOn())
-               .periodEffectiveEndsOn(mem.periodEffectiveEndsOn())
-               .freezeStartsOn(mem.freezeStartsOn())
-               .freezePlannedEndsOn(mem.freezePlannedEndsOn());
+            populateMembership(mem, ctx);
 
             // Derive client from membership; load for status check.
             resolveClientById(mem, ctx);
@@ -217,14 +369,7 @@ public class AccessApplicationService {
 
         return membershipAccessQuery.findByCode(normalizedCode)
                 .map(mem -> {
-                    ctx.membershipId(mem.membershipId())
-                       .membershipCode(mem.membershipCode())
-                       .membershipStatus(mem.status().name())
-                       .membershipPeriodId(mem.currentPeriodId())
-                       .periodStartsOn(mem.periodStartsOn())
-                       .periodEffectiveEndsOn(mem.periodEffectiveEndsOn())
-                       .freezeStartsOn(mem.freezeStartsOn())
-                       .freezePlannedEndsOn(mem.freezePlannedEndsOn());
+                    populateMembership(mem, ctx);
                     resolveClientById(mem, ctx);
                     return true;
                 })
@@ -255,24 +400,7 @@ public class AccessApplicationService {
             AccessCheckInContext.Builder ctx) {
 
         clientAccessQuery.findByCode(normalizedCode).ifPresent(client -> {
-            ctx.clientId(client.id())
-               .clientCode(client.clientCode())
-               .clientStatus(client.status().name());
-
-            // Look for current membership.
-            membershipAccessQuery.findCurrentByClientId(client.id())
-                    .ifPresent(mem -> {
-                        ctx.membershipId(mem.membershipId())
-                           .membershipCode(mem.membershipCode())
-                           .membershipStatus(mem.status().name())
-                           .membershipPeriodId(mem.currentPeriodId())
-                           .periodStartsOn(mem.periodStartsOn())
-                           .periodEffectiveEndsOn(mem.periodEffectiveEndsOn())
-                           .freezeStartsOn(mem.freezeStartsOn())
-                           .freezePlannedEndsOn(mem.freezePlannedEndsOn());
-                        // Ownership cross-check.
-                        enforceOwnership(client.id(), mem.clientId(), mem.membershipId());
-                    });
+            resolveClientAndCurrentMembership(client, ctx);
         });
     }
 
@@ -282,25 +410,53 @@ public class AccessApplicationService {
 
         return clientAccessQuery.findByCode(normalizedCode)
                 .map(client -> {
-                    ctx.clientId(client.id())
-                       .clientCode(client.clientCode())
-                       .clientStatus(client.status().name());
-
-                    membershipAccessQuery.findCurrentByClientId(client.id())
-                            .ifPresent(mem -> {
-                                ctx.membershipId(mem.membershipId())
-                                   .membershipCode(mem.membershipCode())
-                                   .membershipStatus(mem.status().name())
-                                   .membershipPeriodId(mem.currentPeriodId())
-                                   .periodStartsOn(mem.periodStartsOn())
-                                   .periodEffectiveEndsOn(mem.periodEffectiveEndsOn())
-                                   .freezeStartsOn(mem.freezeStartsOn())
-                                   .freezePlannedEndsOn(mem.freezePlannedEndsOn());
-                                enforceOwnership(client.id(), mem.clientId(), mem.membershipId());
-                            });
+                    resolveClientAndCurrentMembership(client, ctx);
                     return true;
                 })
                 .orElse(false);
+    }
+
+    private AccessCheckInContext resolveQrClient(
+            UUID clientId,
+            AccessIdentifier identifier,
+            LocalDate operationalDate) {
+
+        ClientAccessDetails client = clientAccessQuery.findById(clientId)
+                .orElseThrow(QrAccessCredentialUnavailableException::new);
+
+        AccessCheckInContext.Builder ctx =
+                AccessCheckInContext.builder(identifier, operationalDate);
+        resolveClientAndCurrentMembership(client, ctx);
+        return ctx.build();
+    }
+
+    private void resolveClientAndCurrentMembership(
+            ClientAccessDetails client,
+            AccessCheckInContext.Builder ctx) {
+
+        ctx.clientId(client.id())
+           .clientCode(client.clientCode())
+           .clientStatus(client.status().name());
+
+        membershipAccessQuery.findCurrentByClientId(client.id())
+                .ifPresent(mem -> {
+                    populateMembership(mem, ctx);
+                    enforceOwnership(client.id(), mem.clientId(), mem.membershipId());
+                });
+    }
+
+    private static void populateMembership(
+            MembershipAccessDetails membership,
+            AccessCheckInContext.Builder ctx) {
+
+        ctx.membershipId(membership.membershipId())
+           .membershipCode(membership.membershipCode())
+           .membershipStatus(membership.status().name())
+           .membershipPeriodId(membership.currentPeriodId())
+           .periodStartsOn(membership.periodStartsOn())
+           .periodEffectiveEndsOn(membership.periodEffectiveEndsOn())
+           .freezeStartsOn(membership.freezeStartsOn())
+           .freezePlannedEndsOn(membership.freezePlannedEndsOn());
     }
 
     /**
@@ -327,6 +483,13 @@ public class AccessApplicationService {
         if (command == null) {
             throw new AccessValidationException(
                     "Check-in command must be provided.");
+        }
+    }
+
+    private static void validateQrCommand(QrAccessCheckInCommand command) {
+        if (command == null) {
+            throw new AccessValidationException(
+                    "QR access check-in command must be provided.");
         }
     }
 

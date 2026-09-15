@@ -27,6 +27,21 @@ public record AccessIdentifier(
 
     private static final String MEMBERSHIP_PREFIX = "MEM-";
     private static final String CLIENT_PREFIX = "CLI-";
+    private static final String QR_SOURCE_MARKER = "QR_CREDENTIAL";
+
+    /**
+     * Creates the safe internal identifier used while evaluating a QR
+     * credential.
+     *
+     * <p>The opaque payload is deliberately not used as the identifier value.
+     * Persistence and events can therefore use this marker alongside the
+     * dedicated QR source and credential fields.</p>
+     */
+    public static AccessIdentifier qrCredential() {
+        return new AccessIdentifier(
+                QR_SOURCE_MARKER,
+                AccessIdentifierType.QR_CREDENTIAL);
+    }
 
     /**
      * Normalises {@code raw} and infers its type.
