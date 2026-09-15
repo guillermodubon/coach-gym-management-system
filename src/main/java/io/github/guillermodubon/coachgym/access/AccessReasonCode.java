@@ -22,6 +22,7 @@ package io.github.guillermodubon.coachgym.access;
  *   <li>{@code MEMBERSHIP_EXPIRED}</li>
  *   <li>{@code MEMBERSHIP_PERIOD_EXPIRED}</li>
  *   <li>{@code MEMBERSHIP_NOT_STARTED}</li>
+ *   <li>{@code PAYMENT_REQUIRED} (when the optional payment policy is enabled)</li>
  * </ol>
  *
  * <p>QR workflow-specific denials are {@code ACCESS_CREDENTIAL_INVALID} and
@@ -74,6 +75,9 @@ public enum AccessReasonCode {
 
     /** The resolved membership status is CANCELLED. */
     MEMBERSHIP_CANCELLED,
+
+    /** An otherwise eligible period has no qualifying confirmed payment. */
+    PAYMENT_REQUIRED,
 
     /** The supplied QR credential is unknown or no longer active. */
     ACCESS_CREDENTIAL_INVALID,

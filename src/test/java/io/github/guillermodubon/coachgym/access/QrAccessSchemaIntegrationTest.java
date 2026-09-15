@@ -219,25 +219,27 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
         assertThat(unsafeColumns).isEmpty();
     }
 
-    @Test
-    void cleanMigrationChainIncludesV24() {
-        Integer installed = jdbcTemplate.queryForObject("""
-                select count(*)
-                from flyway_schema_history
-                where version = '24'
-                  and success = true
-                """, Integer.class);
-        assertThat(installed).isEqualTo(1);
+  @Test
+void cleanMigrationChainIncludesV25() {
+    Integer installed = jdbcTemplate.queryForObject("""
+            select count(*)
+            from flyway_schema_history
+            where version = '25'
+              and success = true
+            """, Integer.class);
 
-        String latestVersion = jdbcTemplate.queryForObject("""
-                select version
-                from flyway_schema_history
-                where success = true
-                order by installed_rank desc
-                limit 1
-                """, String.class);
-        assertThat(latestVersion).isEqualTo("24");
-    }
+    assertThat(installed).isEqualTo(1);
+
+    String latestVersion = jdbcTemplate.queryForObject("""
+            select version
+            from flyway_schema_history
+            where success = true
+            order by installed_rank desc
+            limit 1
+            """, String.class);
+
+    assertThat(latestVersion).isEqualTo("25");
+}
 
     private UUID insertCredential(ClientFixture client) {
         UUID id = UUID.randomUUID();

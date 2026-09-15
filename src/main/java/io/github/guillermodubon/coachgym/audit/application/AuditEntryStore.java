@@ -5,6 +5,7 @@ import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialIssued
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplaced;
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialRevoked;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyChanged;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryDeactivatedEvent;
@@ -69,6 +70,8 @@ public interface AuditEntryStore {
     void recordPaymentReceiptGenerated(PaymentReceiptGenerated event);
 
     void recordDeniedAccessAttempt(AccessAttemptRecorded event);
+
+    void recordAccessPaymentPolicyChanged(AccessPaymentPolicyChanged event);
 
     void recordAccessCredentialIssued(AccessCredentialIssued event);
 

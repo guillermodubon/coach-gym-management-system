@@ -33,8 +33,8 @@ import io.github.guillermodubon.coachgym.accesscredential.application.AccessCred
 import io.github.guillermodubon.coachgym.accesscredential.application.AccessCredentialValidationException;
 import io.github.guillermodubon.coachgym.accesscredential.application.AccessCredentialVersionConflictException;
 import io.github.guillermodubon.coachgym.accesscredential.application.IssueAccessCredentialCommand;
-import io.github.guillermodubon.coachgym.accesscredential.application.RevokeAccessCredentialCommand;
-import io.github.guillermodubon.coachgym.accesscredential.application.ReplaceAccessCredentialCommand;
+import io.github.guillermodubon.coachgym.accesscredential.application.RevokeClientAccessCredentialCommand;
+import io.github.guillermodubon.coachgym.accesscredential.application.ReplaceClientAccessCredentialCommand;
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.time.Instant;
@@ -146,10 +146,9 @@ class AccessCredentialControllerTest {
     void revokesAndReplacesWithReasonAndExpectedVersion() throws Exception {
         AccessCredentialDetails revoked = revokedDetails();
         AccessCredentialDetails replacement = replacementDetails();
-        when(service.findActiveByClientId(CLIENT_ID)).thenReturn(activeDetails());
-        when(service.revoke(any(RevokeAccessCredentialCommand.class), any()))
+        when(service.revoke(any(RevokeClientAccessCredentialCommand.class), any()))
                 .thenReturn(revoked);
-        when(service.replace(any(ReplaceAccessCredentialCommand.class), any()))
+        when(service.replace(any(ReplaceClientAccessCredentialCommand.class), any()))
                 .thenReturn(replacement);
 
         mockMvc.perform(post(path() + "/revoke")
@@ -170,9 +169,9 @@ class AccessCredentialControllerTest {
                 .andExpect(jsonPath("$.status").value("ACTIVE"));
 
         verify(service).revoke(
-                eq(new RevokeAccessCredentialCommand(CREDENTIAL_ID, "lost card", 0)), any());
+                eq(new RevokeClientAccessCredentialCommand(CLIENT_ID, "lost card", 0)), any());
         verify(service).replace(
-                eq(new ReplaceAccessCredentialCommand(CREDENTIAL_ID, "lost card", 0)), any());
+                eq(new ReplaceClientAccessCredentialCommand(CLIENT_ID, "lost card", 0)), any());
     }
 
     @Test
@@ -269,8 +268,7 @@ class AccessCredentialControllerTest {
 
         reset(service);
         doThrow(new AccessCredentialVersionConflictException(CREDENTIAL_ID, 0, 1))
-                .when(service).revoke(any(), any());
-        when(service.findActiveByClientId(CLIENT_ID)).thenReturn(activeDetails());
+                .when(service).revoke(any(RevokeClientAccessCredentialCommand.class), any());
         mockMvc.perform(post(path() + "/revoke").with(authenticatedAs("ADMIN")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"lost card\",\"version\":0}"))
@@ -306,10 +304,9 @@ class AccessCredentialControllerTest {
                 .andExpect(jsonPath("$.code").value("ACCESS_CREDENTIAL_ALREADY_ACTIVE"));
 
         reset(service);
-        when(service.findActiveByClientId(CLIENT_ID)).thenReturn(activeDetails());
         doThrow(new AccessCredentialStateConflictException(
                 CREDENTIAL_ID, AccessCredentialStatus.REVOKED, AccessCredentialStatus.REVOKED))
-                .when(service).revoke(any(), any());
+                .when(service).revoke(any(RevokeClientAccessCredentialCommand.class), any());
         mockMvc.perform(post(path() + "/revoke").with(authenticatedAs("ADMIN")).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"reason\":\"lost card\",\"version\":0}"))

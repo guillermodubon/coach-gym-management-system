@@ -9,8 +9,7 @@ import io.github.guillermodubon.coachgym.access.AccessResult;
  * <p>Consistency invariant (enforced by factory methods):</p>
  * <ul>
  *   <li>{@code result == ALLOWED} iff {@code reasonCode == ACCESS_ALLOWED}</li>
- *   <li>{@code result == DENIED} iff {@code reasonCode} is one of the eight
- *       denial codes</li>
+ *   <li>{@code result == DENIED} iff {@code reasonCode} is a denial code</li>
  * </ul>
  */
 public record AccessEvaluation(

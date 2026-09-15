@@ -6,6 +6,7 @@ import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplac
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialRevoked;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryStore;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyChanged;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryDeactivatedEvent;
@@ -266,6 +267,13 @@ class AuditEntryPersistenceAdapter
 
         repository.save(
                 AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordAccessPaymentPolicyChanged(
+            AccessPaymentPolicyChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
     }
 
     @Override

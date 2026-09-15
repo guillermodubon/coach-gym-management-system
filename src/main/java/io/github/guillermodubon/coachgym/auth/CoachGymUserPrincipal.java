@@ -1,5 +1,7 @@
 package io.github.guillermodubon.coachgym.auth;
 
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyActor;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyActorProvider;
 import io.github.guillermodubon.coachgym.user.AuthenticatedUser;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.util.Collection;
@@ -15,7 +17,7 @@ import org.springframework.security.core.userdetails.UserDetails;
  * <p>This is part of the authentication module contract because both its web and security
  * adapters need to read the authenticated identity.</p>
  */
-public final class CoachGymUserPrincipal implements UserDetails {
+public final class CoachGymUserPrincipal implements UserDetails, AccessPaymentPolicyActorProvider {
 
     private final UUID id;
     private final String username;
@@ -54,6 +56,16 @@ public final class CoachGymUserPrincipal implements UserDetails {
 
     public AuthenticatedActor authenticatedActor() {
         return new AuthenticatedActor(id, username);
+    }
+
+    /**
+     * Returns the minimal actor projection accepted by the configuration
+     * module. No credentials, authorities, or provider data cross the module
+     * boundary.
+     */
+    @Override
+    public AccessPaymentPolicyActor accessPaymentPolicyActor() {
+        return new AccessPaymentPolicyActor(id, username);
     }
 
     @Override
