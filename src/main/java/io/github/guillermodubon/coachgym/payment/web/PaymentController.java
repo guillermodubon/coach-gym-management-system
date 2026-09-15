@@ -13,6 +13,7 @@ import io.github.guillermodubon.coachgym.payment.domain.PaymentAmountMismatchExc
 import io.github.guillermodubon.coachgym.payment.domain.PaymentCurrencyMismatchException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentMembershipMismatchException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentMembershipStateConflictException;
+import io.github.guillermodubon.coachgym.payment.domain.ManualCardPaymentNotAllowedException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentValidationException;
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
@@ -64,6 +65,9 @@ class PaymentController {
 
                     If an external reference is supplied it must be unique
                     for the given payment method.
+
+                    Manual registration supports CASH, BANK_TRANSFER, and OTHER.
+                    CARD payments are created only from a verified provider event.
 
                     Administrators and receptionists can execute this operation.
                     """)
@@ -156,6 +160,14 @@ class PaymentController {
     // ------------------------------------------------------------------
     // Exception handlers
     // ------------------------------------------------------------------
+
+    @ExceptionHandler(ManualCardPaymentNotAllowedException.class)
+    ResponseEntity<ProblemDetail> handleManualCardPaymentNotAllowed(
+            ManualCardPaymentNotAllowedException ex) {
+
+        return problem(HttpStatus.CONFLICT,
+                "MANUAL_CARD_PAYMENT_NOT_ALLOWED", ex.getMessage());
+    }
 
     @ExceptionHandler(PaymentValidationException.class)
     ResponseEntity<ProblemDetail> handleValidation(

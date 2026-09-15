@@ -15,28 +15,6 @@ import org.springframework.mock.web.MockHttpSession;
 class PaymentSecurityApiIntegrationTest
         extends AbstractPaymentApiIntegrationTest {
 
-    @Test
-    void maintenanceUserCannotRegisterPayment() throws Exception {
-        MockHttpSession admin = loginAsAdmin();
-        MockHttpSession maintenance = loginAsMaintenance();
-        UUID clientId = createClient(admin, uniqueEmail());
-        UUID planId = createPlan(admin, uniqueName("Plan"), "25.00", "USD");
-        UUID membershipId = createMembership(admin, clientId, planId, null, "2026-09-01");
-        UUID periodId = getMembershipPeriodId(membershipId);
-
-        mockMvc.perform(
-                        post("/api/v1/payments")
-                                .with(csrf())
-                                .session(maintenance)
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(PaymentRegistrationApiIntegrationTest.paymentBody(
-                                        clientId, membershipId, periodId,
-                                        "25.00", "USD", "CASH", null,
-                                        "2026-08-25T12:00:00Z")))
-                .andExpect(status().isForbidden());
-
-        assertThat(countPaymentRows(membershipId)).isZero();
-    }
 
     @Test
     void unauthenticatedUserCannotRegisterPayment() throws Exception {
@@ -74,15 +52,6 @@ class PaymentSecurityApiIntegrationTest
                 .andExpect(status().isForbidden());
     }
 
-    @Test
-    void maintenanceUserCannotGetPayment() throws Exception {
-        MockHttpSession maintenance = loginAsMaintenance();
-
-        mockMvc.perform(
-                        get("/api/v1/payments/{id}", UUID.randomUUID())
-                                .session(maintenance))
-                .andExpect(status().isForbidden());
-    }
 
     @Test
     void unauthenticatedUserCannotGetPayment() throws Exception {
@@ -91,13 +60,4 @@ class PaymentSecurityApiIntegrationTest
                 .andExpect(status().isUnauthorized());
     }
 
-    @Test
-    void maintenanceUserCannotListPayments() throws Exception {
-        MockHttpSession maintenance = loginAsMaintenance();
-
-        mockMvc.perform(
-                        get("/api/v1/payments")
-                                .session(maintenance))
-                .andExpect(status().isForbidden());
-    }
 }

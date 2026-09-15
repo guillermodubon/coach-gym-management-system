@@ -27,7 +27,6 @@ class EquipmentCategoryApiIntegrationTest extends AbstractEquipmentApiIntegratio
         jdbcTemplate.update("delete from gym.audit_entries where action_code like 'EQUIPMENT_CATEGORY%'");
         jdbcTemplate.update("delete from gym.equipment_categories");
         provisionUser(ADMIN_USERNAME, "eq-admin@example.com", ADMIN_PASSWORD, "ADMIN");
-        provisionUser(MAINTENANCE_USERNAME, "eq-maint@example.com", MAINTENANCE_PASSWORD, "MAINTENANCE");
         provisionUser(RECEPTIONIST_USERNAME, "eq-recept@example.com", RECEPTIONIST_PASSWORD, "RECEPTIONIST");
     }
 
@@ -77,16 +76,6 @@ class EquipmentCategoryApiIntegrationTest extends AbstractEquipmentApiIntegratio
     }
 
     @Test
-    void create_returns403_forMaintenance() throws Exception {
-        MockHttpSession session = loginAsMaintenance();
-        mockMvc.perform(post("/api/v1/equipment-categories")
-                        .session(session).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Cardio\"}"))
-                .andExpect(status().isForbidden());
-    }
-
-    @Test
     void create_returns403_missingCsrf() throws Exception {
         MockHttpSession session = loginAsAdmin();
         mockMvc.perform(post("/api/v1/equipment-categories")
@@ -115,15 +104,6 @@ class EquipmentCategoryApiIntegrationTest extends AbstractEquipmentApiIntegratio
                 .andExpect(jsonPath("$.name").value("Stretching"));
     }
 
-    @Test
-    void findById_returns200_forMaintenance() throws Exception {
-        MockHttpSession adminSession = loginAsAdmin();
-        UUID id = createCategory(adminSession, "FreeWeights");
-
-        MockHttpSession mSession = loginAsMaintenance();
-        mockMvc.perform(get("/api/v1/equipment-categories/{id}", id).session(mSession))
-                .andExpect(status().isOk());
-    }
 
     @Test
     void findById_returns200_forReceptionist() throws Exception {

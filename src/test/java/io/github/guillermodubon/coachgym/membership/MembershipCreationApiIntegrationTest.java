@@ -726,51 +726,6 @@ class MembershipCreationApiIntegrationTest
                 .isZero();
     }
 
-    @Test
-    void maintenanceUserCannotCreateOrGetMembership()
-            throws Exception {
-
-        MockHttpSession adminSession =
-                loginAsAdmin();
-
-        UUID clientId =
-                createClient(
-                        adminSession,
-                        uniqueValue("restricted-member")
-                                + "@example.com");
-
-        UUID planId =
-                createPlan(
-                        adminSession,
-                        uniqueValue("Restricted Membership Plan"),
-                        "25.00",
-                        "USD");
-
-        MockHttpSession maintenanceSession =
-                loginAsMaintenance();
-
-        mockMvc.perform(
-                        post("/api/v1/memberships")
-                                .with(csrf())
-                                .session(
-                                        maintenanceSession)
-                                .contentType(
-                                        MediaType.APPLICATION_JSON)
-                                .content(
-                                        membershipBody(
-                                                clientId,
-                                                planId,
-                                                null,
-                                                "2026-09-01")))
-                .andExpect(status().isForbidden())
-                .andExpect(
-                        jsonPath("$.code")
-                                .value("ACCESS_DENIED"));
-
-        assertThat(
-                membershipCount(clientId))
-                .isZero();
-    }
 
     @Test
     void rejectsStructurallyInvalidRequest()

@@ -12,6 +12,7 @@ import io.github.guillermodubon.coachgym.payment.application.PaymentPeriodMismat
 import io.github.guillermodubon.coachgym.payment.application.PaymentPeriodNotFoundException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentAmountMismatchException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentCurrencyMismatchException;
+import io.github.guillermodubon.coachgym.payment.domain.ManualCardPaymentNotAllowedException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentMembershipMismatchException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentMembershipStateConflictException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentValidationException;
@@ -167,6 +168,16 @@ class PaymentErrorMappingTest {
 
         assertStatus(response, HttpStatus.CONFLICT);
         assertCode(response, "DUPLICATE_PAYMENT_REFERENCE");
+    }
+
+    @Test
+    void mapsManualCardRejectionTo409() {
+        ResponseEntity<ProblemDetail> response =
+                controller.handleManualCardPaymentNotAllowed(
+                        new ManualCardPaymentNotAllowedException());
+
+        assertStatus(response, HttpStatus.CONFLICT);
+        assertCode(response, "MANUAL_CARD_PAYMENT_NOT_ALLOWED");
     }
 
     // ------------------------------------------------------------------

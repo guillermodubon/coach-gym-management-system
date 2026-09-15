@@ -148,6 +148,36 @@ class PaymentJpaEntity {
         return entity;
     }
 
+    static PaymentJpaEntity registerProviderConfirmed(
+            UUID paymentId,
+            UUID clientId,
+            UUID membershipId,
+            UUID membershipPeriodId,
+            BigDecimal amount,
+            String currency,
+            UUID registeredByUserId,
+            Instant paidAt,
+            Instant occurredAt) {
+
+        PaymentJpaEntity entity = new PaymentJpaEntity();
+
+        entity.id = paymentId;
+        entity.clientId = clientId;
+        entity.membershipId = membershipId;
+        entity.membershipPeriodId = membershipPeriodId;
+        entity.amount = amount;
+        entity.currency = currency;
+        entity.paymentMethod = PaymentMethod.CARD;
+        entity.status = PaymentStatus.PAID;
+        entity.externalReference = null;
+        entity.paidAt = paidAt;
+        entity.registeredByUserId = registeredByUserId;
+        entity.createdAt = occurredAt;
+        entity.updatedAt = occurredAt;
+
+        return entity;
+    }
+
     PaymentDetails toDetails() {
         return new PaymentDetails(
                 id,

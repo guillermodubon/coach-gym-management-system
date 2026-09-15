@@ -26,6 +26,10 @@ class AccessAttemptRecordedTest {
             UUID.fromString(
                     "50000000-0000-0000-0000-000000000001");
 
+    private static final UUID CREDENTIAL_ID =
+            UUID.fromString(
+                    "60000000-0000-0000-0000-000000000001");
+
     private static final Instant NOW =
             Instant.parse("2026-09-15T20:00:00Z");
 
@@ -51,6 +55,54 @@ class AccessAttemptRecordedTest {
         assertThat(event.clientCode()).isNull();
         assertThat(event.membershipId()).isNull();
         assertThat(event.membershipCode()).isNull();
+    }
+
+    @Test
+    void createsQrEventWithOnlySafeCredentialReference() {
+        AccessAttemptRecorded event =
+                new AccessAttemptRecorded(
+                        RECORD_ID,
+                        "QR_CREDENTIAL",
+                        "QR_CREDENTIAL",
+                        CREDENTIAL_ID,
+                        CLIENT_ID,
+                        "CLI-000001",
+                        MEMBERSHIP_ID,
+                        "MEM-000001",
+                        AccessResult.DENIED,
+                        AccessReasonCode.DUPLICATE_CHECK_IN,
+                        NOW,
+                        ACTOR_ID,
+                        "receptionist",
+                        NOW);
+
+        assertThat(event.accessCredentialId())
+                .isEqualTo(CREDENTIAL_ID);
+        assertThat(event.duplicate()).isTrue();
+        assertThat(event.toString())
+                .doesNotContain("payload", "token", "fingerprint");
+    }
+
+    @Test
+    void rejectsQrEventWithoutSafeCredentialReference() {
+        assertThatThrownBy(() ->
+                new AccessAttemptRecorded(
+                        RECORD_ID,
+                        "QR_CREDENTIAL",
+                        "QR_CREDENTIAL",
+                        null,
+                        CLIENT_ID,
+                        "CLI-000001",
+                        MEMBERSHIP_ID,
+                        "MEM-000001",
+                        AccessResult.ALLOWED,
+                        AccessReasonCode.ACCESS_ALLOWED,
+                        NOW,
+                        ACTOR_ID,
+                        "receptionist",
+                        NOW))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("safe credential reference");
     }
 
     @Test

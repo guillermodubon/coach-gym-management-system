@@ -31,8 +31,6 @@ abstract class AbstractAccessApiIntegrationTest {
     protected static final String ADMIN_PASSWORD = "A-strong-password";
     protected static final String RECEPTIONIST_USERNAME = "access-receptionist";
     protected static final String RECEPTIONIST_PASSWORD = "R-strong-password";
-    protected static final String MAINTENANCE_USERNAME = "access-maintenance";
-    protected static final String MAINTENANCE_PASSWORD = "M-strong-password";
 
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>("postgres:17-alpine");
@@ -58,10 +56,11 @@ abstract class AbstractAccessApiIntegrationTest {
     @BeforeEach
     void prepareAccessData() {
         jdbcTemplate.update("delete from gym.audit_entries where action_code='ACCESS_DENIED'");
-        jdbcTemplate.update("delete from gym.access_records");
+        // Access attempts are append-only in production. TRUNCATE is the
+        // isolated fixture reset that does not exercise a business delete.
+        jdbcTemplate.execute("truncate table gym.access_records");
         provisionUser(ADMIN_USERNAME, "access-admin@example.com", ADMIN_PASSWORD, "ADMIN");
         provisionUser(RECEPTIONIST_USERNAME, "access-receptionist@example.com", RECEPTIONIST_PASSWORD, "RECEPTIONIST");
-        provisionUser(MAINTENANCE_USERNAME, "access-maintenance@example.com", MAINTENANCE_PASSWORD, "MAINTENANCE");
     }
 
     protected MockHttpSession loginAsAdmin() throws Exception {
@@ -70,10 +69,6 @@ abstract class AbstractAccessApiIntegrationTest {
 
     protected MockHttpSession loginAsReceptionist() throws Exception {
         return login(RECEPTIONIST_USERNAME, RECEPTIONIST_PASSWORD);
-    }
-
-    protected MockHttpSession loginAsMaintenance() throws Exception {
-        return login(MAINTENANCE_USERNAME, MAINTENANCE_PASSWORD);
     }
 
     protected UUID userId(String username) {

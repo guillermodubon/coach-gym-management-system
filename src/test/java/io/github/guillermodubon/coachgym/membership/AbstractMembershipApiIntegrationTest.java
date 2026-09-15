@@ -38,12 +38,6 @@ abstract class AbstractMembershipApiIntegrationTest {
     protected static final String RECEPTIONIST_PASSWORD =
             "R-strong-password";
 
-    protected static final String MAINTENANCE_USERNAME =
-            "membership-maintenance";
-
-    protected static final String MAINTENANCE_PASSWORD =
-            "M-strong-password";
-
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>(
                     "postgres:17-alpine");
@@ -113,12 +107,6 @@ abstract class AbstractMembershipApiIntegrationTest {
                 "membership-front-desk@coach-gym.local",
                 RECEPTIONIST_PASSWORD,
                 "RECEPTIONIST");
-
-        provisionUser(
-                MAINTENANCE_USERNAME,
-                "membership-maintenance@coach-gym.local",
-                MAINTENANCE_PASSWORD,
-                "MAINTENANCE");
     }
 
     protected MockHttpSession loginAsAdmin()
@@ -135,14 +123,6 @@ abstract class AbstractMembershipApiIntegrationTest {
         return login(
                 RECEPTIONIST_USERNAME,
                 RECEPTIONIST_PASSWORD);
-    }
-
-    protected MockHttpSession loginAsMaintenance()
-            throws Exception {
-
-        return login(
-                MAINTENANCE_USERNAME,
-                MAINTENANCE_PASSWORD);
     }
 
     protected UUID createClient(

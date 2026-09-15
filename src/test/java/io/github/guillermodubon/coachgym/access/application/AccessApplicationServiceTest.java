@@ -8,12 +8,18 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
 import io.github.guillermodubon.coachgym.access.AccessReasonCode;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.AccessResult;
 import io.github.guillermodubon.coachgym.access.domain.AccessValidationException;
+import io.github.guillermodubon.coachgym.access.domain.AccessIdentifierType;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialQrPayload;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialResolver;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialStatus;
+import io.github.guillermodubon.coachgym.accesscredential.ResolvedAccessCredential;
 import io.github.guillermodubon.coachgym.client.ClientAccessDetails;
 import io.github.guillermodubon.coachgym.client.ClientAccessQuery;
 import io.github.guillermodubon.coachgym.client.ClientStatus;
@@ -54,6 +60,14 @@ class AccessApplicationServiceTest {
     private static final UUID OTHER_CLIENT_ID =
             UUID.fromString("10000000-0000-0000-0000-000000000099");
 
+    private static final UUID CREDENTIAL_ID =
+            UUID.fromString("60000000-0000-0000-0000-000000000001");
+
+    private static final String QR_TOKEN =
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    private static final String QR_PAYLOAD = "cgac:v1:" + QR_TOKEN;
+
     // ── Time fixtures ─────────────────────────────────────────────────────────
 
     /**
@@ -83,6 +97,7 @@ class AccessApplicationServiceTest {
     private AccessRecordStore accessRecordStore;
     private ClientAccessQuery clientAccessQuery;
     private MembershipAccessQuery membershipAccessQuery;
+    private AccessCredentialResolver accessCredentialResolver;
     private ApplicationEventPublisher eventPublisher;
     private AccessApplicationService service;
 
@@ -91,13 +106,15 @@ class AccessApplicationServiceTest {
         accessRecordStore      = mock(AccessRecordStore.class);
         clientAccessQuery      = mock(ClientAccessQuery.class);
         membershipAccessQuery  = mock(MembershipAccessQuery.class);
+        accessCredentialResolver = mock(AccessCredentialResolver.class);
         eventPublisher         = mock(ApplicationEventPublisher.class);
 
         Clock clock = Clock.fixed(NOW, GYM_ZONE);
 
         service = new AccessApplicationService(
                 accessRecordStore, clientAccessQuery,
-                membershipAccessQuery, eventPublisher, clock);
+                membershipAccessQuery, accessCredentialResolver,
+                eventPublisher, clock);
     }
 
     // ── Happy path — membership code ─────────────────────────────────────────
@@ -133,6 +150,183 @@ class AccessApplicationServiceTest {
                 service.checkIn(new CheckInCommand("CLI-000001"), ACTOR);
 
         assertThat(result.result()).isEqualTo(AccessResult.ALLOWED);
+    }
+
+    // ── QR workflow integration (pre-persistence Block 3 path) ─────────────
+
+    @Test
+    void evaluatesActiveQrCredentialThroughTheManualPolicyPath() {
+        AccessCredentialQrPayload payload =
+                AccessCredentialQrPayload.parse(QR_PAYLOAD);
+        given(accessCredentialResolver.resolve(payload))
+                .willReturn(Optional.of(activeResolvedCredential()));
+        givenClientById(CLIENT_ID, ClientStatus.ACTIVE);
+        givenCurrentMembershipByClientId(CLIENT_ID);
+
+        QrAccessCheckInResult result = service.evaluateQr(
+                new QrAccessCheckInCommand(payload), ACTOR);
+
+        assertThat(result.result()).isEqualTo(AccessResult.ALLOWED);
+        assertThat(result.reasonCode())
+                .isEqualTo(AccessReasonCode.ACCESS_ALLOWED);
+        assertThat(result.identificationSource())
+                .isEqualTo(AccessIdentifierType.QR_CREDENTIAL);
+        assertThat(result.credentialId()).isEqualTo(CREDENTIAL_ID);
+        assertThat(result.clientId()).isEqualTo(CLIENT_ID);
+        assertThat(result.membershipId()).isEqualTo(MEMBERSHIP_ID);
+        assertThat(result.evaluatedAt()).isEqualTo(NOW);
+
+        // Block 3 is an in-memory policy integration point; persistence and
+        // event publication belong to later blocks.
+        verify(accessRecordStore, never()).persist(
+                any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void qrDecisionMatchesEquivalentManualClientCodeDecision() {
+        AccessCredentialQrPayload payload =
+                AccessCredentialQrPayload.parse(QR_PAYLOAD);
+        given(accessCredentialResolver.resolve(payload))
+                .willReturn(Optional.of(activeResolvedCredential()));
+        givenClientById(CLIENT_ID, ClientStatus.ACTIVE);
+        givenCurrentMembershipByClientId(CLIENT_ID);
+        givenActiveClientByCode("CLI-000001");
+        given(accessRecordStore.persist(any(), any(), any(), any(), any(), any(),
+                eq(AccessResult.ALLOWED), eq(AccessReasonCode.ACCESS_ALLOWED),
+                any(), eq(NOW), eq(ACTOR_ID)))
+                .willReturn(allowedRecord());
+
+        QrAccessCheckInResult qrResult = service.evaluateQr(
+                new QrAccessCheckInCommand(payload), ACTOR);
+        AccessRecordDetails manualResult = service.checkIn(
+                new CheckInCommand("CLI-000001"), ACTOR);
+
+        assertThat(qrResult.result()).isEqualTo(manualResult.result());
+        assertThat(qrResult.reasonCode()).isEqualTo(manualResult.reasonCode());
+        assertThat(qrResult.clientId()).isEqualTo(manualResult.clientId());
+        assertThat(qrResult.clientCode()).isEqualTo(manualResult.clientCode());
+        assertThat(qrResult.membershipId()).isEqualTo(manualResult.membershipId());
+        assertThat(qrResult.membershipCode()).isEqualTo(manualResult.membershipCode());
+    }
+
+    @Test
+    void qrUsesTheSameClientAndMembershipDenialReasonsAsManualAccess() {
+        AccessCredentialQrPayload payload =
+                AccessCredentialQrPayload.parse(QR_PAYLOAD);
+        given(accessCredentialResolver.resolve(payload))
+                .willReturn(Optional.of(activeResolvedCredential()));
+        givenClientById(CLIENT_ID, ClientStatus.INACTIVE);
+        given(clientAccessQuery.findByCode("CLI-000001"))
+                .willReturn(Optional.of(
+                        new ClientAccessDetails(
+                                CLIENT_ID,
+                                "CLI-000001",
+                                ClientStatus.INACTIVE)));
+        givenCurrentMembershipByClientId(CLIENT_ID);
+        AccessRecordDetails denied = deniedRecord(AccessReasonCode.CLIENT_INACTIVE);
+        given(accessRecordStore.persist(any(), any(), any(), any(), any(), any(),
+                eq(AccessResult.DENIED), eq(AccessReasonCode.CLIENT_INACTIVE),
+                any(), eq(NOW), eq(ACTOR_ID))).willReturn(denied);
+
+        QrAccessCheckInResult qrResult = service.evaluateQr(
+                new QrAccessCheckInCommand(payload), ACTOR);
+        AccessRecordDetails manualResult = service.checkIn(
+                new CheckInCommand("CLI-000001"), ACTOR);
+
+        assertThat(qrResult.result()).isEqualTo(AccessResult.DENIED);
+        assertThat(qrResult.reasonCode()).isEqualTo(manualResult.reasonCode());
+    }
+
+    @Test
+    void qrUsesMembershipNotFoundWhenTheResolvedClientHasNoCurrentMembership() {
+        AccessCredentialQrPayload payload =
+                AccessCredentialQrPayload.parse(QR_PAYLOAD);
+        given(accessCredentialResolver.resolve(payload))
+                .willReturn(Optional.of(activeResolvedCredential()));
+        givenClientById(CLIENT_ID, ClientStatus.ACTIVE);
+        given(clientAccessQuery.findByCode("CLI-000001"))
+                .willReturn(Optional.of(
+                        new ClientAccessDetails(
+                                CLIENT_ID,
+                                "CLI-000001",
+                                ClientStatus.ACTIVE)));
+        given(membershipAccessQuery.findCurrentByClientId(CLIENT_ID))
+                .willReturn(Optional.empty());
+        given(accessRecordStore.persist(any(), any(), any(), any(), any(), any(),
+                eq(AccessResult.DENIED), eq(AccessReasonCode.MEMBERSHIP_NOT_FOUND),
+                any(), eq(NOW), eq(ACTOR_ID)))
+                .willReturn(deniedRecord(AccessReasonCode.MEMBERSHIP_NOT_FOUND));
+
+        QrAccessCheckInResult qrResult = service.evaluateQr(
+                new QrAccessCheckInCommand(payload), ACTOR);
+        AccessRecordDetails manualResult = service.checkIn(
+                new CheckInCommand("CLI-000001"), ACTOR);
+
+        assertThat(qrResult.result()).isEqualTo(AccessResult.DENIED);
+        assertThat(qrResult.reasonCode()).isEqualTo(manualResult.reasonCode());
+        assertThat(qrResult.reasonCode())
+                .isEqualTo(AccessReasonCode.MEMBERSHIP_NOT_FOUND);
+    }
+
+    @Test
+    void unknownOrInactiveQrCredentialIsRejectedBeforeClientResolution() {
+        AccessCredentialQrPayload payload =
+                AccessCredentialQrPayload.parse(QR_PAYLOAD);
+        given(accessCredentialResolver.resolve(payload))
+                .willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.evaluateQr(
+                new QrAccessCheckInCommand(payload), ACTOR))
+                .isInstanceOf(QrAccessCredentialUnavailableException.class)
+                .hasMessage("QR access credential is unavailable.")
+                .hasMessageNotContaining(QR_TOKEN)
+                .hasMessageNotContaining(QR_PAYLOAD);
+
+        verifyNoClientOrMembershipResolution();
+        verify(accessRecordStore, never()).persist(
+                any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void qrCommandAndResultDiagnosticsNeverContainTheOpaqueToken() {
+        AccessCredentialQrPayload payload =
+                AccessCredentialQrPayload.parse(QR_PAYLOAD);
+        given(accessCredentialResolver.resolve(payload))
+                .willReturn(Optional.of(activeResolvedCredential()));
+        givenClientById(CLIENT_ID, ClientStatus.ACTIVE);
+        givenCurrentMembershipByClientId(CLIENT_ID);
+
+        QrAccessCheckInResult result = service.evaluateQr(
+                new QrAccessCheckInCommand(payload), ACTOR);
+
+        assertThat(result.toString())
+                .doesNotContain(QR_TOKEN, QR_PAYLOAD);
+    }
+
+    @Test
+    void qrValidationStopsBeforeCredentialResolutionWhenCommandIsNull() {
+        assertThatThrownBy(() -> service.evaluateQr(null, ACTOR))
+                .isInstanceOf(AccessValidationException.class)
+                .hasMessage("QR access check-in command must be provided.");
+
+        verifyNoInteractionsForQrWorkflow();
+    }
+
+    @Test
+    void qrValidationStopsBeforeCredentialResolutionWhenActorIsNull() {
+        AccessCredentialQrPayload payload =
+                AccessCredentialQrPayload.parse(QR_PAYLOAD);
+
+        assertThatThrownBy(() -> service.evaluateQr(
+                new QrAccessCheckInCommand(payload), null))
+                .isInstanceOf(AccessValidationException.class)
+                .hasMessage("Authenticated actor must be provided.");
+
+        verifyNoInteractionsForQrWorkflow();
     }
 
     // ── Persist-then-publish ordering ────────────────────────────────────────
@@ -512,6 +706,29 @@ class AccessApplicationServiceTest {
         given(clientAccessQuery.findById(clientId))
                 .willReturn(Optional.of(
                         new ClientAccessDetails(clientId, "CLI-000001", status)));
+    }
+
+    private static ResolvedAccessCredential activeResolvedCredential() {
+        return new ResolvedAccessCredential(
+                CREDENTIAL_ID,
+                CLIENT_ID,
+                AccessCredentialStatus.ACTIVE);
+    }
+
+    private void verifyNoClientOrMembershipResolution() {
+        verify(clientAccessQuery, never()).findById(any());
+        verify(clientAccessQuery, never()).findByCode(any());
+        verify(membershipAccessQuery, never()).findByCode(any());
+        verify(membershipAccessQuery, never()).findCurrentByClientId(any());
+    }
+
+    private void verifyNoInteractionsForQrWorkflow() {
+        verifyNoClientOrMembershipResolution();
+        verifyNoInteractions(accessCredentialResolver);
+        verify(accessRecordStore, never()).persist(
+                any(), any(), any(), any(), any(), any(),
+                any(), any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     private static MembershipAccessDetails activeMembership(UUID clientId) {

@@ -13,6 +13,29 @@ jobs:
   verify:
     name: Compile and test backend
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: coach_gym
+          POSTGRES_USER: coach_gym_app
+          POSTGRES_PASSWORD: coach_gym_ci_password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U coach_gym_app -d coach_gym"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: jdbc:postgresql://localhost:5433/coach_gym
+      DATABASE_USERNAME: coach_gym_app
+      DATABASE_PASSWORD: coach_gym_ci_password
+      DOCKER_COMPOSE_ENABLED: "false"
+      BOOTSTRAP_ADMIN_ENABLED: "false"
+
     steps:
       - name: Check out source
         uses: actions/checkout@v6
@@ -29,5 +52,15 @@ jobs:
       - name: Make the Gradle wrapper executable
         run: chmod +x gradlew
 
+      - name: Verify PostgreSQL
+        env:
+          PGPASSWORD: coach_gym_ci_password
+        run: |
+          pg_isready \
+            --host=localhost \
+            --port=5433 \
+            --username=coach_gym_app \
+            --dbname=coach_gym
+
       - name: Verify
-        run: ./gradlew check
+        run: ./gradlew clean check

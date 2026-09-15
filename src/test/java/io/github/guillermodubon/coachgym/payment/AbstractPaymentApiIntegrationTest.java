@@ -28,8 +28,6 @@ abstract class AbstractPaymentApiIntegrationTest {
     protected static final String ADMIN_PASSWORD = "A-strong-password";
     protected static final String RECEPTIONIST_USERNAME = "payment-receptionist";
     protected static final String RECEPTIONIST_PASSWORD = "R-strong-password";
-    protected static final String MAINTENANCE_USERNAME = "payment-maintenance";
-    protected static final String MAINTENANCE_PASSWORD = "M-strong-password";
 
     static final PostgreSQLContainer<?> POSTGRES =
             new PostgreSQLContainer<>("postgres:17-alpine");
@@ -66,9 +64,6 @@ abstract class AbstractPaymentApiIntegrationTest {
         provisionUser(RECEPTIONIST_USERNAME,
                 "payment-receptionist@coach-gym.local",
                 RECEPTIONIST_PASSWORD, "RECEPTIONIST");
-        provisionUser(MAINTENANCE_USERNAME,
-                "payment-maintenance@coach-gym.local",
-                MAINTENANCE_PASSWORD, "MAINTENANCE");
     }
 
     protected MockHttpSession loginAsAdmin() throws Exception {
@@ -79,9 +74,6 @@ abstract class AbstractPaymentApiIntegrationTest {
         return login(RECEPTIONIST_USERNAME, RECEPTIONIST_PASSWORD);
     }
 
-    protected MockHttpSession loginAsMaintenance() throws Exception {
-        return login(MAINTENANCE_USERNAME, MAINTENANCE_PASSWORD);
-    }
 
     protected UUID createClient(MockHttpSession session, String email)
             throws Exception {

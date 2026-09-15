@@ -69,7 +69,7 @@ class PaymentRegistrationApiIntegrationTest
     }
 
     @Test
-    void receptionistRegistersPaymentSuccessfully() throws Exception {
+    void receptionistCannotRegisterCardManually() throws Exception {
         MockHttpSession session = loginAsReceptionist();
         MockHttpSession adminSession = loginAsAdmin();
         UUID clientId = createClient(adminSession, uniqueEmail());
@@ -85,8 +85,11 @@ class PaymentRegistrationApiIntegrationTest
                                 .content(paymentBody(clientId, membershipId, periodId,
                                         "30.00", "USD", "CARD", null,
                                         "2026-08-25T12:00:00Z")))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.paymentMethod").value("CARD"));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code")
+                        .value("MANUAL_CARD_PAYMENT_NOT_ALLOWED"));
+
+        assertThat(countPaymentRows(membershipId)).isZero();
     }
 
     @Test

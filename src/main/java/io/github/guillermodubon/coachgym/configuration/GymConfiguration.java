@@ -7,11 +7,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({GymProperties.class, InitialAdminProperties.class})
+@EnableConfigurationProperties({
+        GymProperties.class,
+        InitialAdminProperties.class})
 class GymConfiguration {
 
     @Bean
     Clock gymClock(GymProperties gymProperties) {
         return Clock.system(ZoneId.of(gymProperties.timeZone()));
     }
+
 }

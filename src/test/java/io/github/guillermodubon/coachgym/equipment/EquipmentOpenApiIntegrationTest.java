@@ -229,11 +229,7 @@ class EquipmentOpenApiIntegrationTest
                 .andExpect(
                         jsonPath(
                                 "$.paths['/api/v1/equipment/{id}/out-of-service'].post.description",
-                                containsString("ADMIN")))
-                .andExpect(
-                        jsonPath(
-                                "$.paths['/api/v1/equipment/{id}/out-of-service'].post.description",
-                                containsString("MAINTENANCE")))
+                                containsString("Permitted roles: ADMIN.")))
                 .andExpect(
                         jsonPath(
                                 "$.paths['/api/v1/equipment/{id}/retire'].post.description",

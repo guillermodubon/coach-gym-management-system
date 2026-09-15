@@ -25,8 +25,6 @@ abstract class AbstractEquipmentApiIntegrationTest {
 
     protected static final String ADMIN_USERNAME = "eq-admin";
     protected static final String ADMIN_PASSWORD = "A-strong-password";
-    protected static final String MAINTENANCE_USERNAME = "eq-maintenance";
-    protected static final String MAINTENANCE_PASSWORD = "M-strong-password";
     protected static final String RECEPTIONIST_USERNAME = "eq-receptionist";
     protected static final String RECEPTIONIST_PASSWORD = "R-strong-password";
 
@@ -72,9 +70,6 @@ abstract class AbstractEquipmentApiIntegrationTest {
         return login(ADMIN_USERNAME, ADMIN_PASSWORD);
     }
 
-    protected MockHttpSession loginAsMaintenance() throws Exception {
-        return login(MAINTENANCE_USERNAME, MAINTENANCE_PASSWORD);
-    }
 
     protected MockHttpSession loginAsReceptionist() throws Exception {
         return login(RECEPTIONIST_USERNAME, RECEPTIONIST_PASSWORD);

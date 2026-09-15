@@ -1,6 +1,9 @@
 package io.github.guillermodubon.coachgym.audit.application;
 
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialIssued;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplaced;
+import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialRevoked;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
@@ -9,8 +12,17 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryUpdatedEvent
 import io.github.guillermodubon.coachgym.equipment.EquipmentRegisteredEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentStatusChangedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
+import io.github.guillermodubon.coachgym.maintenance.*;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
+import io.github.guillermodubon.coachgym.payment.PaymentRefunded;
+import io.github.guillermodubon.coachgym.payment.PaymentVoided;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptCreated;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusChanged;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatusChanged;
+import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledged;
+import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
+import io.github.guillermodubon.coachgym.payment.PaymentReceiptGenerated;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
@@ -37,7 +49,32 @@ public interface AuditEntryStore {
 
     void recordPaymentRegistered(PaymentRegistered event);
 
+    void recordPaymentVoided(PaymentVoided event);
+
+    void recordPaymentRefunded(PaymentRefunded event);
+
+    void recordPaymentAttemptCreated(PaymentAttemptCreated event);
+
+    void recordPaymentAttemptStatusChanged(PaymentAttemptStatusChanged event);
+
+    void recordPaymentAttemptProviderStatusChanged(
+            PaymentAttemptProviderStatusChanged event);
+
+    void recordPaymentProviderEventAcknowledged(
+            PaymentProviderEventAcknowledged event);
+
+    void recordPaymentProviderPaymentConfirmed(
+            PaymentProviderPaymentConfirmed event);
+
+    void recordPaymentReceiptGenerated(PaymentReceiptGenerated event);
+
     void recordDeniedAccessAttempt(AccessAttemptRecorded event);
+
+    void recordAccessCredentialIssued(AccessCredentialIssued event);
+
+    void recordAccessCredentialRevoked(AccessCredentialRevoked event);
+
+    void recordAccessCredentialReplaced(AccessCredentialReplaced event);
 
     void recordEquipmentCategoryCreated(EquipmentCategoryCreatedEvent event);
 
@@ -52,5 +89,27 @@ public interface AuditEntryStore {
     void recordEquipmentUpdated(EquipmentUpdatedEvent event);
 
     void recordEquipmentStatusChanged(EquipmentStatusChangedEvent event);
-}
 
+    void recordIncidentReported(IncidentReportedEvent event);
+
+    void recordIncidentInvestigationStarted(IncidentInvestigationStartedEvent event);
+
+    void recordIncidentPriorityChanged(IncidentPriorityChangedEvent event);
+
+    void recordIncidentResolved(IncidentResolvedEvent event);
+
+    void recordMaintenanceScheduled(
+            MaintenanceScheduledEvent event);
+
+    void recordMaintenanceUpdated(
+            MaintenanceUpdatedEvent event);
+
+    void recordMaintenanceStarted(
+            MaintenanceStartedEvent event);
+
+    void recordMaintenanceCompleted(
+            MaintenanceCompletedEvent event);
+
+    void recordMaintenanceCancelled(
+            MaintenanceCancelledEvent event);
+}

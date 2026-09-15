@@ -6,6 +6,8 @@ import io.github.guillermodubon.coachgym.payment.application.PaymentPage;
 import io.github.guillermodubon.coachgym.payment.application.PaymentSearchQuery;
 import io.github.guillermodubon.coachgym.payment.application.PaymentSortDirection;
 import io.github.guillermodubon.coachgym.payment.application.PaymentStore;
+import io.github.guillermodubon.coachgym.payment.application.ProviderConfirmedPaymentCommand;
+import io.github.guillermodubon.coachgym.payment.application.ProviderConfirmedPaymentStore;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
@@ -26,7 +28,7 @@ import org.springframework.data.jpa.domain.Specification;
 
 @Repository
 class PaymentPersistenceAdapter
-        implements PaymentStore {
+        implements PaymentStore, ProviderConfirmedPaymentStore {
 
     private final PaymentJpaRepository paymentRepository;
     private final PaymentStatusHistoryJpaRepository historyRepository;
@@ -79,6 +81,30 @@ class PaymentPersistenceAdapter
                         actor,
                         occurredAt));
 
+        return payment.toDetails();
+    }
+
+    @Override
+    @Transactional
+    public PaymentDetails register(ProviderConfirmedPaymentCommand command) {
+        if (command == null) {
+            throw new IllegalArgumentException("Provider-confirmed payment command is required.");
+        }
+        PaymentJpaEntity payment = paymentRepository.saveAndFlush(
+                PaymentJpaEntity.registerProviderConfirmed(
+                        command.paymentId(),
+                        command.clientId(),
+                        command.membershipId(),
+                        command.membershipPeriodId(),
+                        command.amount(),
+                        command.currency(),
+                        command.registeredByUserId(),
+                        command.paidAt(),
+                        command.occurredAt()));
+        entityManager.refresh(payment);
+        historyRepository.saveAndFlush(
+                PaymentStatusHistoryJpaEntity.providerConfirmation(
+                        payment.id(), command.registeredByUserId(), command.occurredAt()));
         return payment.toDetails();
     }
 

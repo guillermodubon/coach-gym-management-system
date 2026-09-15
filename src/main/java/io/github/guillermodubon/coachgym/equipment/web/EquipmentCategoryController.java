@@ -118,7 +118,7 @@ class EquipmentCategoryController {
             description = """
                     Returns an equipment category by its identifier.
 
-                    Permitted roles: ADMIN, MAINTENANCE and RECEPTIONIST.
+                    Permitted roles: ADMIN and RECEPTIONIST.
                     This is a read-only operation and does not require a CSRF
                     token.
                     """)
@@ -151,7 +151,7 @@ class EquipmentCategoryController {
             description = """
                     Returns a paginated equipment-category catalog.
 
-                    Permitted roles: ADMIN, MAINTENANCE and RECEPTIONIST.
+                    Permitted roles: ADMIN and RECEPTIONIST.
 
                     Supported filter:
                     active, with values true or false.

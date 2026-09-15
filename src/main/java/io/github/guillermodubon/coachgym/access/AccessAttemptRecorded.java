@@ -17,6 +17,7 @@ public record AccessAttemptRecorded(
         UUID accessRecordId,
         String presentedIdentifier,
         String presentedIdentifierType,
+        UUID accessCredentialId,
         UUID clientId,
         String clientCode,
         UUID membershipId,
@@ -27,6 +28,46 @@ public record AccessAttemptRecorded(
         UUID actorUserId,
         String actorIdentifier,
         Instant occurredAt) {
+
+    /**
+     * Compatibility constructor for manual access publishers.
+     *
+     * <p>Manual attempts do not have an access credential. Keeping this
+     * constructor preserves the existing public event contract while QR
+     * attempts use the canonical constructor and carry only the safe
+     * credential UUID.</p>
+     */
+    public AccessAttemptRecorded(
+            UUID accessRecordId,
+            String presentedIdentifier,
+            String presentedIdentifierType,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            Instant checkedInAt,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+
+        this(
+                accessRecordId,
+                presentedIdentifier,
+                presentedIdentifierType,
+                null,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                result,
+                reasonCode,
+                checkedInAt,
+                actorUserId,
+                actorIdentifier,
+                occurredAt);
+    }
 
     public AccessAttemptRecorded {
         if (accessRecordId == null) {
@@ -92,6 +133,18 @@ public record AccessAttemptRecorded(
         presentedIdentifier = presentedIdentifier.trim();
         presentedIdentifierType =
                 presentedIdentifierType.trim();
+
+        if ("QR_CREDENTIAL".equals(presentedIdentifierType)) {
+            if (!"QR_CREDENTIAL".equals(presentedIdentifier)
+                    || accessCredentialId == null) {
+                throw new IllegalArgumentException(
+                        "QR access events require a safe credential reference.");
+            }
+        } else if (accessCredentialId != null) {
+            throw new IllegalArgumentException(
+                    "Only QR access events may reference a credential.");
+        }
+
         clientCode = normalizeNullable(clientCode);
         membershipCode = normalizeNullable(membershipCode);
         actorIdentifier = actorIdentifier.trim();
@@ -99,6 +152,16 @@ public record AccessAttemptRecorded(
 
     public boolean denied() {
         return result == AccessResult.DENIED;
+    }
+
+    /**
+     * Returns whether this attempt was denied by the duplicate-scan policy.
+     *
+     * <p>The value is derived from the bounded reason code instead of being
+     * accepted as an independent caller-controlled flag.</p>
+     */
+    public boolean duplicate() {
+        return reasonCode == AccessReasonCode.DUPLICATE_CHECK_IN;
     }
 
     private static String normalizeNullable(String value) {

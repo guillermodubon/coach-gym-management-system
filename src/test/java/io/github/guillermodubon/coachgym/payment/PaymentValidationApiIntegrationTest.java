@@ -143,7 +143,7 @@ class PaymentValidationApiIntegrationTest
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(PaymentRegistrationApiIntegrationTest.paymentBody(
                                         clientId, membershipId, periodId,
-                                        "25.00", "USD", "CARD", ref,
+                                        "25.00", "USD", "BANK_TRANSFER", ref,
                                         "2026-08-25T12:00:00Z")))
                 .andExpect(status().isCreated());
 
@@ -152,7 +152,7 @@ class PaymentValidationApiIntegrationTest
         UUID membershipId2 = createMembership(session, clientId2, planId, null, "2026-09-01");
         UUID periodId2 = getMembershipPeriodId(membershipId2);
 
-        // Second payment with same CARD + ref must be rejected
+        // Second payment with the same manual method + reference must be rejected
         mockMvc.perform(
                         post("/api/v1/payments")
                                 .with(csrf())
@@ -160,7 +160,7 @@ class PaymentValidationApiIntegrationTest
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(PaymentRegistrationApiIntegrationTest.paymentBody(
                                         clientId2, membershipId2, periodId2,
-                                        "25.00", "USD", "CARD", ref,
+                                        "25.00", "USD", "BANK_TRANSFER", ref,
                                         "2026-08-25T14:00:00Z")))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code")

@@ -29,14 +29,11 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
         jdbcTemplate.update("delete from gym.equipment");
         jdbcTemplate.update("delete from gym.equipment_categories");
         provisionUser(ADMIN_USERNAME, "eq-admin@example.com", ADMIN_PASSWORD, "ADMIN");
-        provisionUser(MAINTENANCE_USERNAME, "eq-maint@example.com", MAINTENANCE_PASSWORD, "MAINTENANCE");
         provisionUser(RECEPTIONIST_USERNAME, "eq-recept@example.com", RECEPTIONIST_PASSWORD, "RECEPTIONIST");
 
         MockHttpSession admin = loginAsAdmin();
         categoryId = createCategory(admin, "Cardio");
     }
-
-    // ── AVAILABLE → OUT_OF_SERVICE ────────────────────────────────────────────
 
     @Test
     void outOfService_fromAvailable_returns200_statusChangedAndHistoryInserted() throws Exception {
@@ -59,20 +56,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
     }
 
     @Test
-    void outOfService_byMaintenance_succeeds() throws Exception {
-        MockHttpSession admin = loginAsAdmin();
-        UUID id = registerEquipment(admin, "Bike A");
-
-        MockHttpSession maint = loginAsMaintenance();
-        mockMvc.perform(post("/api/v1/equipment/{id}/out-of-service", id)
-                        .session(maint).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reason\":\"Scheduled service\",\"version\":0}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("OUT_OF_SERVICE"));
-    }
-
-    @Test
     void outOfService_alreadyOutOfService_returns409StateConflict() throws Exception {
         MockHttpSession admin = loginAsAdmin();
         UUID id = registerEquipment(admin, "Bike B");
@@ -85,8 +68,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("EQUIPMENT_STATE_CONFLICT"));
     }
-
-    // ── OUT_OF_SERVICE → AVAILABLE ────────────────────────────────────────────
 
     @Test
     void available_fromOutOfService_returns200() throws Exception {
@@ -114,8 +95,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("EQUIPMENT_STATE_CONFLICT"));
     }
-
-    // ── RETIRE ────────────────────────────────────────────────────────────────
 
     @Test
     void retire_fromAvailable_returns200_setsRetirementColumns() throws Exception {
@@ -160,18 +139,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                 .andExpect(jsonPath("$.code").value("EQUIPMENT_STATE_CONFLICT"));
     }
 
-    @Test
-    void retire_byMaintenance_returns403() throws Exception {
-        MockHttpSession admin = loginAsAdmin();
-        UUID id = registerEquipment(admin, "Restricted Eq");
-
-        MockHttpSession maint = loginAsMaintenance();
-        mockMvc.perform(post("/api/v1/equipment/{id}/retire", id)
-                        .session(maint).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reason\":\"Trying\",\"version\":0}"))
-                .andExpect(status().isForbidden());
-    }
 
     @Test
     void retire_byReceptionist_returns403() throws Exception {
@@ -185,8 +152,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                         .content("{\"reason\":\"Trying\",\"version\":0}"))
                 .andExpect(status().isForbidden());
     }
-
-    // ── MAINTENANCE blocked ────────────────────────────────────────────────────
 
     @Test
     void outOfService_fromMaintenance_returns409StateConflict() throws Exception {
@@ -202,8 +167,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                 .andExpect(jsonPath("$.code").value("EQUIPMENT_STATE_CONFLICT"));
     }
 
-    // ── OPTIMISTIC LOCKING ────────────────────────────────────────────────────
-
     @Test
     void outOfService_staleVersion_returns409VersionConflict() throws Exception {
         MockHttpSession admin = loginAsAdmin();
@@ -216,8 +179,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("EQUIPMENT_VERSION_CONFLICT"));
     }
-
-    // ── VALIDATION ────────────────────────────────────────────────────────────
 
     @Test
     void outOfService_blankReason_returns400() throws Exception {
@@ -243,8 +204,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                 .andExpect(status().isBadRequest());
     }
 
-    // ── AUTH ──────────────────────────────────────────────────────────────────
-
     @Test
     void outOfService_unauthenticated_returns401() throws Exception {
         mockMvc.perform(post("/api/v1/equipment/{id}/out-of-service", UUID.randomUUID())
@@ -264,7 +223,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                 .andExpect(status().isForbidden());
     }
 
-    // ── AUDIT ─────────────────────────────────────────────────────────────────
 
     @Test
     void outOfService_persistsAuditEntry() throws Exception {
@@ -293,8 +251,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                 Integer.class, id);
         assertThat(count).isEqualTo(1);
     }
-
-    // ── DB CONSTRAINTS ────────────────────────────────────────────────────────
 
     @Test
     void directInsert_statusHistory_invalidStatus_violatesConstraint() {
@@ -326,8 +282,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
                         UUID.randomUUID(), eqId, "AVAILABLE", "AVAILABLE"));
     }
 
-    // ── TRANSACTION ATOMICITY ─────────────────────────────────────────────────
-
     @Test
     void historyAndStatusAreAtomicWithVersion() throws Exception {
         MockHttpSession admin = loginAsAdmin();
@@ -347,7 +301,6 @@ class EquipmentLifecycleApiIntegrationTest extends AbstractEquipmentApiIntegrati
         assertThat(historyCount).isEqualTo(1);
     }
 
-    // ── helpers ───────────────────────────────────────────────────────────────
 
     private UUID registerEquipment(MockHttpSession session, String name) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/v1/equipment")

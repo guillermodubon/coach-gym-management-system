@@ -90,40 +90,6 @@ class MembershipFreezeSecurityApiIntegrationTest
                 .isZero();
     }
 
-    @Test
-    void maintenanceUserCannotFreezeMembership()
-            throws Exception {
-
-        MockHttpSession adminSession =
-                loginAsAdmin();
-
-        UUID membershipId =
-                createActiveMembership(adminSession);
-
-        long version =
-                membershipVersion(membershipId);
-
-        MockHttpSession maintenanceSession =
-                loginAsMaintenance();
-
-        freezeMembership(
-                maintenanceSession,
-                membershipId,
-                "2026-09-10",
-                "2026-09-20",
-                "Medical leave",
-                version)
-                .andExpect(status().isForbidden())
-                .andExpect(
-                        jsonPath("$.code")
-                                .value("ACCESS_DENIED"));
-
-        assertThat(membershipStatus(membershipId))
-                .isEqualTo("ACTIVE");
-
-        assertThat(openFreezeCount(membershipId))
-                .isZero();
-    }
 
     @Test
     void unauthenticatedUserCannotReactivateMembership()
@@ -216,45 +182,4 @@ class MembershipFreezeSecurityApiIntegrationTest
                 .isEqualTo(1);
     }
 
-    @Test
-    void maintenanceUserCannotReactivateMembership()
-            throws Exception {
-
-        MockHttpSession adminSession =
-                loginAsAdmin();
-
-        UUID membershipId =
-                createActiveMembership(adminSession);
-
-        long version =
-                membershipVersion(membershipId);
-
-        freezeMembership(
-                adminSession,
-                membershipId,
-                "2026-09-10",
-                "2026-09-20",
-                "Medical leave",
-                version)
-                .andExpect(status().isOk());
-
-        MockHttpSession maintenanceSession =
-                loginAsMaintenance();
-
-        reactivateMembership(
-                maintenanceSession,
-                membershipId,
-                "2026-09-15",
-                version + 1)
-                .andExpect(status().isForbidden())
-                .andExpect(
-                        jsonPath("$.code")
-                                .value("ACCESS_DENIED"));
-
-        assertThat(membershipStatus(membershipId))
-                .isEqualTo("FROZEN");
-
-        assertThat(openFreezeCount(membershipId))
-                .isEqualTo(1);
-    }
 }

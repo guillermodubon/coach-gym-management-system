@@ -79,8 +79,7 @@ public class EquipmentCategoryApplicationService {
     }
 
     @Transactional(readOnly = true)
-    @PreAuthorize(
-            "hasAnyRole('ADMIN', 'MAINTENANCE', 'RECEPTIONIST')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public EquipmentCategoryDetails findById(
             UUID categoryId) {
 
@@ -92,8 +91,7 @@ public class EquipmentCategoryApplicationService {
     }
 
     @Transactional(readOnly = true)
-    @PreAuthorize(
-            "hasAnyRole('ADMIN', 'MAINTENANCE', 'RECEPTIONIST')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public EquipmentCategoryPage findAll(
             EquipmentCategorySearchQuery query) {
 

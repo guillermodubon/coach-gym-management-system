@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.access.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.access.AccessReasonCode;
+import io.github.guillermodubon.coachgym.access.domain.AccessIdentifierType;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.AccessResult;
 import io.github.guillermodubon.coachgym.access.domain.AccessValidationException;
@@ -87,11 +88,83 @@ class AccessRecordJpaEntity {
             updatable = false)
     private UUID processedByUserId;
 
+    @Enumerated(EnumType.STRING)
+    @Column(
+            name = "identification_source",
+            nullable = false,
+            length = 32,
+            updatable = false)
+    private AccessIdentifierType identificationSource;
+
+    @Column(name = "access_credential_id", updatable = false)
+    private UUID accessCredentialId;
+
     protected AccessRecordJpaEntity() {
     }
 
     static AccessRecordJpaEntity create(
             String presentedIdentifier,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            UUID membershipPeriodId,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            String reason,
+            Instant checkedInAt,
+            UUID processedByUserId) {
+
+        return create(
+                presentedIdentifier,
+                AccessIdentifierType.UNKNOWN,
+                null,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                membershipPeriodId,
+                result,
+                reasonCode,
+                reason,
+                checkedInAt,
+                processedByUserId);
+    }
+
+    static AccessRecordJpaEntity createQr(
+            String presentedIdentifier,
+            UUID accessCredentialId,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            UUID membershipPeriodId,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            String reason,
+            Instant checkedInAt,
+            UUID processedByUserId) {
+
+        return create(
+                presentedIdentifier,
+                AccessIdentifierType.QR_CREDENTIAL,
+                accessCredentialId,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                membershipPeriodId,
+                result,
+                reasonCode,
+                reason,
+                checkedInAt,
+                processedByUserId);
+    }
+
+    private static AccessRecordJpaEntity create(
+            String presentedIdentifier,
+            AccessIdentifierType identificationSource,
+            UUID accessCredentialId,
             UUID clientId,
             String clientCode,
             UUID membershipId,
@@ -110,6 +183,11 @@ class AccessRecordJpaEntity {
                 reason,
                 checkedInAt,
                 processedByUserId);
+
+        validateSourceConsistency(
+                identificationSource,
+                accessCredentialId,
+                clientId);
 
         validateResolutionConsistency(
                 clientId,
@@ -133,6 +211,8 @@ class AccessRecordJpaEntity {
         entity.reason = reason.trim();
         entity.checkedInAt = checkedInAt;
         entity.processedByUserId = processedByUserId;
+        entity.identificationSource = identificationSource;
+        entity.accessCredentialId = accessCredentialId;
 
         return entity;
     }
@@ -158,6 +238,35 @@ class AccessRecordJpaEntity {
 
     UUID membershipPeriodId() {
         return membershipPeriodId;
+    }
+
+    AccessIdentifierType identificationSource() {
+        return identificationSource;
+    }
+
+    UUID accessCredentialId() {
+        return accessCredentialId;
+    }
+
+    private static void validateSourceConsistency(
+            AccessIdentifierType identificationSource,
+            UUID accessCredentialId,
+            UUID clientId) {
+
+        if (identificationSource == null) {
+            throw new AccessValidationException(
+                    "Access identification source must be provided.");
+        }
+
+        if (identificationSource == AccessIdentifierType.QR_CREDENTIAL) {
+            if (accessCredentialId == null || clientId == null) {
+                throw new AccessValidationException(
+                        "QR access records require a credential and client.");
+            }
+        } else if (accessCredentialId != null) {
+            throw new AccessValidationException(
+                    "Only QR access records may reference a credential.");
+        }
     }
 
     private static void validateRequiredValues(

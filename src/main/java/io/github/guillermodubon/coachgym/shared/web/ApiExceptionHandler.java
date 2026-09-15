@@ -10,36 +10,86 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 class ApiExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    ResponseEntity<ProblemDetail> handleValidation(MethodArgumentNotValidException exception) {
-        Map<String, String> fieldErrors = new LinkedHashMap<>();
-        exception.getBindingResult().getFieldErrors().forEach(error ->
-                fieldErrors.putIfAbsent(error.getField(), error.getDefaultMessage()));
-        ProblemDetail problem = ApiProblemFactory.create(
-                HttpStatus.BAD_REQUEST,
-                "VALIDATION_FAILED",
-                "One or more request fields are invalid.");
-        problem.setProperty("fieldErrors", fieldErrors);
-        return ResponseEntity.badRequest().body(problem);
+    ResponseEntity<ProblemDetail> handleValidation(
+            MethodArgumentNotValidException exception) {
+
+        Map<String, String> fieldErrors =
+                new LinkedHashMap<>();
+
+        exception.getBindingResult()
+                .getFieldErrors()
+                .forEach(error ->
+                        fieldErrors.putIfAbsent(
+                                error.getField(),
+                                error.getDefaultMessage()));
+
+        ProblemDetail problem =
+                ApiProblemFactory.create(
+                        HttpStatus.BAD_REQUEST,
+                        "VALIDATION_FAILED",
+                        "One or more request fields are invalid.");
+
+        problem.setProperty(
+                "fieldErrors",
+                fieldErrors);
+
+        return ResponseEntity
+                .badRequest()
+                .body(problem);
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    ResponseEntity<ProblemDetail> handleUnreadableRequest(HttpMessageNotReadableException exception) {
-        return ResponseEntity.badRequest().body(ApiProblemFactory.create(
-                HttpStatus.BAD_REQUEST,
-                "MALFORMED_REQUEST",
-                "The request body is malformed or missing."));
+    ResponseEntity<ProblemDetail> handleUnreadableRequest(
+            HttpMessageNotReadableException exception) {
+
+        return ResponseEntity
+                .badRequest()
+                .body(
+                        ApiProblemFactory.create(
+                                HttpStatus.BAD_REQUEST,
+                                "MALFORMED_REQUEST",
+                                "The request body is malformed or missing."));
     }
 
     @ExceptionHandler(AuthenticationException.class)
-    ResponseEntity<ProblemDetail> handleAuthenticationFailure(AuthenticationException exception) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiProblemFactory.create(
-                HttpStatus.UNAUTHORIZED,
-                "INVALID_CREDENTIALS",
-                "Invalid credentials."));
+    ResponseEntity<ProblemDetail> handleAuthenticationFailure(
+            AuthenticationException exception) {
+
+        return ResponseEntity
+                .status(HttpStatus.UNAUTHORIZED)
+                .body(
+                        ApiProblemFactory.create(
+                                HttpStatus.UNAUTHORIZED,
+                                "INVALID_CREDENTIALS",
+                                "Invalid credentials."));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    ResponseEntity<ProblemDetail> handleArgumentTypeMismatch(
+            MethodArgumentTypeMismatchException exception) {
+
+        ProblemDetail problem =
+                ApiProblemFactory.create(
+                        HttpStatus.BAD_REQUEST,
+                        "INVALID_REQUEST_PARAMETER",
+                        "A request parameter contains an unsupported value.");
+
+        if (exception.getName() != null
+                && !exception.getName().isBlank()) {
+
+            problem.setProperty(
+                    "parameter",
+                    exception.getName());
+        }
+
+        return ResponseEntity
+                .badRequest()
+                .body(problem);
     }
 }

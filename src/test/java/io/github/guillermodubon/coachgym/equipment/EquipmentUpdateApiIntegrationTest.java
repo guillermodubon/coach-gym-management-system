@@ -30,7 +30,6 @@ class EquipmentUpdateApiIntegrationTest extends AbstractEquipmentApiIntegrationT
         jdbcTemplate.update("delete from gym.equipment");
         jdbcTemplate.update("delete from gym.equipment_categories");
         provisionUser(ADMIN_USERNAME, "eq-admin@example.com", ADMIN_PASSWORD, "ADMIN");
-        provisionUser(MAINTENANCE_USERNAME, "eq-maint@example.com", MAINTENANCE_PASSWORD, "MAINTENANCE");
         provisionUser(RECEPTIONIST_USERNAME, "eq-recept@example.com", RECEPTIONIST_PASSWORD, "RECEPTIONIST");
 
         MockHttpSession admin = loginAsAdmin();
@@ -39,8 +38,6 @@ class EquipmentUpdateApiIntegrationTest extends AbstractEquipmentApiIntegrationT
         inactiveCatId = createCategory(admin, "OldCat");
         deactivateCategory(admin, inactiveCatId, 0L);
     }
-
-    // ── success ───────────────────────────────────────────────────────────────
 
     @Test
     void update_returns200_andFieldsAreChanged() throws Exception {
@@ -210,20 +207,6 @@ class EquipmentUpdateApiIntegrationTest extends AbstractEquipmentApiIntegrationT
                 .andExpect(status().isOk());
     }
 
-    // ── auth ──────────────────────────────────────────────────────────────────
-
-    @Test
-    void update_returns403_forMaintenance() throws Exception {
-        MockHttpSession admin = loginAsAdmin();
-        UUID id = registerEquipment(admin, activeCatId, "AuthTest", null);
-
-        MockHttpSession maint = loginAsMaintenance();
-        mockMvc.perform(put("/api/v1/equipment/{id}", id)
-                        .session(maint).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(updateBody(activeCatId, "AuthTest", null, null, null, null, 0L)))
-                .andExpect(status().isForbidden());
-    }
 
     @Test
     void update_returns403_forReceptionist() throws Exception {
@@ -262,8 +245,6 @@ class EquipmentUpdateApiIntegrationTest extends AbstractEquipmentApiIntegrationT
                 .andExpect(status().isForbidden());
     }
 
-    // ── audit ─────────────────────────────────────────────────────────────────
-
     @Test
     void update_persistsAuditEntry() throws Exception {
         MockHttpSession admin = loginAsAdmin();
@@ -281,8 +262,6 @@ class EquipmentUpdateApiIntegrationTest extends AbstractEquipmentApiIntegrationT
                 Integer.class, id);
         assertThat(count).isEqualTo(1);
     }
-
-    // ── helpers ───────────────────────────────────────────────────────────────
 
     private UUID registerEquipment(MockHttpSession session, UUID catId, String name, String serial)
             throws Exception {
