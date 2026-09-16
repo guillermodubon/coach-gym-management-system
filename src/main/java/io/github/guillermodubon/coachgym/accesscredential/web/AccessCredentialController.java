@@ -118,8 +118,7 @@ class AccessCredentialController {
             @PathVariable UUID clientId,
             @Valid @RequestBody RevokeAccessCredentialRequest request,
             Authentication authentication) {
-        AccessCredentialDetails current = service.findActiveByClientId(clientId);
-        return response(service.revoke(request.toCommand(current.id()), actor(authentication)));
+        return response(service.revoke(request.toCommand(clientId), actor(authentication)));
     }
 
     @PostMapping("/replace")
@@ -137,8 +136,7 @@ class AccessCredentialController {
             @PathVariable UUID clientId,
             @Valid @RequestBody ReplaceAccessCredentialRequest request,
             Authentication authentication) {
-        AccessCredentialDetails current = service.findActiveByClientId(clientId);
-        return response(service.replace(request.toCommand(current.id()), actor(authentication)));
+        return response(service.replace(request.toCommand(clientId), actor(authentication)));
     }
 
     @GetMapping("/history")
