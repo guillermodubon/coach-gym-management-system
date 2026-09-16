@@ -7,11 +7,14 @@ import io.github.guillermodubon.coachgym.notification.application.EmailComposer;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliverySourceResolver;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryStore;
 import io.github.guillermodubon.coachgym.notification.application.EmailSender;
+import io.github.guillermodubon.coachgym.notification.application.RequestAccessCredentialEmailCommand;
+import io.github.guillermodubon.coachgym.notification.application.RequestPaymentReceiptEmailCommand;
+import io.github.guillermodubon.coachgym.notification.application.RetryEmailDeliveryCommand;
+import java.lang.reflect.RecordComponent;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
-import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 class EmailDeliveryArchitectureContractTest {
@@ -98,23 +101,33 @@ class EmailDeliveryArchitectureContractTest {
     }
 
     @Test
-    void adrRecordsTheSelectedConsistencyAndPrivacyBoundaries() throws Exception {
-        String adr = Files.readString(Path.of(
-                "docs/adr/ADR-005-transactional-email-delivery-boundary.md"))
-                .toLowerCase(Locale.ROOT);
+    void publicDeliveryPolicyRemainsExplicitAndSourceControlled() {
+        assertThat(EmailDeliveryType.values())
+                .containsExactly(EmailDeliveryType.PAYMENT_RECEIPT,
+                        EmailDeliveryType.ACCESS_CREDENTIAL);
+        assertThat(EmailDeliveryStatus.values())
+                .containsExactly(EmailDeliveryStatus.PENDING,
+                        EmailDeliveryStatus.SENT,
+                        EmailDeliveryStatus.FAILED);
+        assertThat(EmailAttemptResult.values())
+                .containsExactly(EmailAttemptResult.SENT,
+                        EmailAttemptResult.FAILED,
+                        EmailAttemptResult.AMBIGUOUS);
+        assertThat(EmailDeliveryFailureCode.values())
+                .contains(EmailDeliveryFailureCode.RECIPIENT_UNAVAILABLE,
+                        EmailDeliveryFailureCode.ATTACHMENT_INTEGRITY_FAILED,
+                        EmailDeliveryFailureCode.RETRY_LIMIT_REACHED,
+                        EmailDeliveryFailureCode.AMBIGUOUS_TRANSPORT_OUTCOME);
 
-        assertThat(adr)
-                .contains("notification` module owns")
-                .contains("mailpit")
-                .contains("pending")
-                .contains("exactly-once")
-                .contains("ambiguous")
-                .contains("idempotency")
-                .contains("canonical")
-                .contains("recipient")
-                .contains("attachment")
-                .contains("smtp credentials")
-                .contains("non-goals for this block");
+        assertThat(RequestPaymentReceiptEmailCommand.class.getRecordComponents())
+                .extracting(RecordComponent::getName)
+                .containsExactly("paymentId");
+        assertThat(RequestAccessCredentialEmailCommand.class.getRecordComponents())
+                .extracting(RecordComponent::getName)
+                .containsExactly("clientId");
+        assertThat(RetryEmailDeliveryCommand.class.getRecordComponents())
+                .extracting(RecordComponent::getName)
+                .containsExactly("deliveryId", "expectedVersion");
     }
 
     private static String read(Path path) {
