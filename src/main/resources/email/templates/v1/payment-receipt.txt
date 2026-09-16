@@ -1,0 +1,17 @@
+Hello {{clientGreeting}},
+
+{{organizationName}} payment receipt
+
+Receipt number: {{primaryReference}}
+Payment code: {{secondaryReference}}
+Payment status: {{status}}
+Paid at: {{eventTimestamp}}
+Membership: {{membershipCode}}
+Plan: {{planName}}
+Amount: {{amount}} {{currency}}
+{{testModeNotice}}
+
+The canonical payment receipt PDF is attached to this message.
+This document is a payment receipt and does not constitute a tax invoice.
+
+Coach Gym

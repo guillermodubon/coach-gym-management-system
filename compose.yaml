@@ -20,6 +20,20 @@ services:
       retries: 12
       start_period: 10s
 
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    container_name: coach-gym-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8025/livez > /dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
 volumes:
   postgres-data:
     name: coach-gym-postgres-data
