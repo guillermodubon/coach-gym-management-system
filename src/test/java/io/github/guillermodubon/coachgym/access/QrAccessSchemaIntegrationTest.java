@@ -220,7 +220,7 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
     }
 
     @Test
-    void cleanMigrationChainIncludesV25AndCurrentV26() {
+    void cleanMigrationChainIncludesV25AndCurrentV27() {
         Integer installed = jdbcTemplate.queryForObject("""
                 select count(*)
                 from flyway_schema_history
@@ -238,7 +238,7 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
                 limit 1
                 """, String.class);
 
-        assertThat(latestVersion).isEqualTo("26");
+        assertThat(latestVersion).isEqualTo("27");
     }
 
     private UUID insertCredential(ClientFixture client) {
