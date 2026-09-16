@@ -262,6 +262,44 @@ class AccessCredentialApplicationServiceTest {
     }
 
     @Test
+    void clientScopedRevokeLocksClientBeforeResolvingCurrentCredential() {
+        AccessCredentialDetails current = activeDetails(
+                CREDENTIAL_ID, CLIENT_ID, "AC-REVOKE", NOW, ACTOR_ID, 3);
+        AccessCredentialDetails revoked = revokedDetails(
+                CREDENTIAL_ID, CLIENT_ID, "AC-REVOKE", NOW, ACTOR_ID, NOW, ACTOR_ID, 4, null);
+        given(credentialStore.findActiveByClientIdForUpdate(CLIENT_ID))
+                .willReturn(Optional.of(current));
+        given(credentialStore.revoke(
+                CREDENTIAL_ID, "lost card", ACTOR_ID, NOW, 3)).willReturn(revoked);
+        given(historyStore.append(any())).willReturn(revokedHistory(CREDENTIAL_ID, CLIENT_ID));
+
+        AccessCredentialDetails result = service.revoke(
+                new RevokeClientAccessCredentialCommand(CLIENT_ID, " lost card ", 3), ACTOR);
+
+        assertThat(result.status()).isEqualTo(AccessCredentialStatus.REVOKED);
+        verify(credentialStore).lockClientForLifecycle(CLIENT_ID);
+        verify(credentialStore).findActiveByClientIdForUpdate(CLIENT_ID);
+    }
+
+    @Test
+    void clientScopedRevokeReportsStateConflictWhenTheLatestCredentialIsFinal() {
+        AccessCredentialDetails revoked = revokedDetails(
+                CREDENTIAL_ID, CLIENT_ID, "AC-REVOKED", NOW, ACTOR_ID, NOW, ACTOR_ID, 4, null);
+        given(credentialStore.findActiveByClientIdForUpdate(CLIENT_ID))
+                .willReturn(Optional.empty());
+        given(credentialStore.findLatestByClientIdForUpdate(CLIENT_ID))
+                .willReturn(Optional.of(revoked));
+
+        assertThatThrownBy(() -> service.revoke(
+                new RevokeClientAccessCredentialCommand(CLIENT_ID, "again", 4), ACTOR))
+                .isInstanceOf(AccessCredentialStateConflictException.class);
+
+        verify(credentialStore).lockClientForLifecycle(CLIENT_ID);
+        verify(credentialStore, never()).revoke(any(), any(), any(), any(), anyLong());
+        verifyNoInteractions(historyStore, eventPublisher);
+    }
+
+    @Test
     void repeatedRevokeIsRejectedWithoutAnotherHistoryEntry() {
         AccessCredentialDetails revoked = revokedDetails(
                 CREDENTIAL_ID, CLIENT_ID, "AC-REVOKED", NOW, ACTOR_ID, NOW, ACTOR_ID, 4, null);
