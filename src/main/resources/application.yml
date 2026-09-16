@@ -41,6 +41,25 @@ gym:
       directory: ${PAYMENT_RECEIPTS_DIRECTORY:data/payment-receipts}
 
 coach-gym:
+  email:
+    enabled: ${EMAIL_ENABLED:false}
+    organization-name: ${EMAIL_ORGANIZATION_NAME:Coach Gym}
+    template-version: ${EMAIL_TEMPLATE_VERSION:v1}
+    from-address: ${EMAIL_FROM_ADDRESS:no-reply@coach-gym.local}
+    from-name: ${EMAIL_FROM_NAME:Coach Gym}
+    reply-to: ${EMAIL_REPLY_TO:}
+    smtp-host: ${SMTP_HOST:localhost}
+    smtp-port: ${SMTP_PORT:1025}
+    smtp-username: ${SMTP_USERNAME:}
+    smtp-password: ${SMTP_PASSWORD:}
+    smtp-auth-enabled: ${SMTP_AUTH_ENABLED:false}
+    smtp-starttls-enabled: ${SMTP_STARTTLS_ENABLED:false}
+    connection-timeout: ${SMTP_CONNECTION_TIMEOUT:PT5S}
+    read-timeout: ${SMTP_READ_TIMEOUT:PT10S}
+    write-timeout: ${SMTP_WRITE_TIMEOUT:PT10S}
+    max-message-bytes: ${EMAIL_MAX_MESSAGE_BYTES:12582912}
+    max-retry-count: ${EMAIL_MAX_RETRY_COUNT:3}
+    stale-pending-threshold: ${EMAIL_STALE_PENDING_THRESHOLD:PT15M}
   payment:
     stripe:
       enabled: ${STRIPE_ENABLED:false}

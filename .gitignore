@@ -49,6 +49,3 @@ out/
 # Access credential PNGs generated during local development
 /data/access-credentials/
 
-# Local repository context export
-/Contexto actual de la app.xml
-/Estado actual de la app.xml
