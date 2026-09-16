@@ -63,4 +63,9 @@ dependencyManagement {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    // Integration tests create several Spring contexts and Testcontainers
+    // fixtures. Keep one worker at a time and give it enough heap for the
+    // complete suite without multiplying concurrent JVM footprints in CI.
+    maxHeapSize = "1g"
+    maxParallelForks = 1
 }
