@@ -20,6 +20,7 @@ import io.github.guillermodubon.coachgym.membership.MembershipCreated;
 import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
 import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
 import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
+import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.payment.PaymentRefunded;
 import io.github.guillermodubon.coachgym.payment.PaymentVoided;
@@ -233,6 +234,12 @@ class AuditEntryPersistenceAdapter
     @Override
     @Transactional
     public void recordPaymentReceiptGenerated(PaymentReceiptGenerated event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordEmailDeliveryLifecycle(EmailDeliveryLifecycleEvent event) {
         repository.save(AuditEntryJpaEntity.from(event));
     }
 
