@@ -3,10 +3,12 @@ package io.github.guillermodubon.coachgym.access.application;
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
 import io.github.guillermodubon.coachgym.access.AccessReasonCode;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
+import io.github.guillermodubon.coachgym.access.AccessResult;
 import io.github.guillermodubon.coachgym.access.domain.AccessCheckInContext;
 import io.github.guillermodubon.coachgym.access.domain.AccessEvaluation;
 import io.github.guillermodubon.coachgym.access.domain.AccessIdentifier;
 import io.github.guillermodubon.coachgym.access.domain.AccessIdentifierType;
+import io.github.guillermodubon.coachgym.access.domain.AccessPaymentPolicyEvaluator;
 import io.github.guillermodubon.coachgym.access.domain.AccessPolicy;
 import io.github.guillermodubon.coachgym.access.domain.AccessValidationException;
 import io.github.guillermodubon.coachgym.access.domain.DuplicateScanPolicy;
@@ -15,12 +17,16 @@ import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialResolv
 import io.github.guillermodubon.coachgym.accesscredential.ResolvedAccessCredential;
 import io.github.guillermodubon.coachgym.client.ClientAccessDetails;
 import io.github.guillermodubon.coachgym.client.ClientAccessQuery;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyQuery;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipAccessDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipAccessQuery;
+import io.github.guillermodubon.coachgym.payment.ConfirmedPaymentForAccessQuery;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +60,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AccessApplicationService {
 
+    private static final AccessPaymentPolicyQuery DISABLED_POLICY_QUERY =
+            () -> new AccessPaymentPolicyDetails(false, 0);
+
+    private static final ConfirmedPaymentForAccessQuery NO_PAYMENT_QUERY =
+            (clientId, membershipId, membershipPeriodId) -> false;
+
     private final AccessRecordStore accessRecordStore;
     private final ClientAccessQuery clientAccessQuery;
     private final MembershipAccessQuery membershipAccessQuery;
@@ -61,6 +73,8 @@ public class AccessApplicationService {
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final Optional<DuplicateScanPolicy> duplicateScanPolicy;
+    private final AccessPaymentPolicyQuery accessPaymentPolicyQuery;
+    private final ConfirmedPaymentForAccessQuery confirmedPaymentForAccessQuery;
 
     /** Constructor retained for focused unit tests and non-QR callers. */
     public AccessApplicationService(
@@ -78,7 +92,30 @@ public class AccessApplicationService {
                 accessCredentialResolver,
                 eventPublisher,
                 clock,
-                Optional.empty());
+                Optional.empty(),
+                DISABLED_POLICY_QUERY,
+                NO_PAYMENT_QUERY);
+    }
+
+    public AccessApplicationService(
+            AccessRecordStore accessRecordStore,
+            ClientAccessQuery clientAccessQuery,
+            MembershipAccessQuery membershipAccessQuery,
+            AccessCredentialResolver accessCredentialResolver,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            Optional<DuplicateScanPolicy> duplicateScanPolicy) {
+
+        this(
+                accessRecordStore,
+                clientAccessQuery,
+                membershipAccessQuery,
+                accessCredentialResolver,
+                eventPublisher,
+                clock,
+                duplicateScanPolicy,
+                DISABLED_POLICY_QUERY,
+                NO_PAYMENT_QUERY);
     }
 
     @Autowired
@@ -89,7 +126,9 @@ public class AccessApplicationService {
             AccessCredentialResolver accessCredentialResolver,
             ApplicationEventPublisher eventPublisher,
             Clock clock,
-            Optional<DuplicateScanPolicy> duplicateScanPolicy) {
+            Optional<DuplicateScanPolicy> duplicateScanPolicy,
+            AccessPaymentPolicyQuery accessPaymentPolicyQuery,
+            ConfirmedPaymentForAccessQuery confirmedPaymentForAccessQuery) {
 
         this.accessRecordStore = accessRecordStore;
         this.clientAccessQuery = clientAccessQuery;
@@ -100,6 +139,10 @@ public class AccessApplicationService {
         this.duplicateScanPolicy = duplicateScanPolicy == null
                 ? Optional.empty()
                 : duplicateScanPolicy;
+        this.accessPaymentPolicyQuery = Objects.requireNonNull(
+                accessPaymentPolicyQuery);
+        this.confirmedPaymentForAccessQuery = Objects.requireNonNull(
+                confirmedPaymentForAccessQuery);
     }
 
     // ── Check-in ──────────────────────────────────────────────────────────────
@@ -123,8 +166,9 @@ public class AccessApplicationService {
         // Steps 4 & 5: resolve and cross-check.
         AccessCheckInContext context = resolve(identifier, operationalDate);
 
-        // Step 6: evaluate policy.
-        AccessEvaluation evaluation = AccessPolicy.evaluate(context);
+        // Step 6: evaluate existing rules, then the optional payment policy.
+        AccessEvaluation evaluation = evaluateWithPaymentPolicy(
+                AccessPolicy.evaluate(context), context);
 
         // Step 7: persist.
         AccessRecordDetails record = accessRecordStore.persist(
@@ -188,7 +232,8 @@ public class AccessApplicationService {
         AccessIdentifier identifier = AccessIdentifier.qrCredential();
         AccessCheckInContext context = resolveQrClient(
                 credential.clientId(), identifier, operationalDate);
-        AccessEvaluation evaluation = AccessPolicy.evaluate(context);
+        AccessEvaluation evaluation = evaluateWithPaymentPolicy(
+                AccessPolicy.evaluate(context), context);
 
         return new QrAccessCheckInResult(
                 credential.credentialId(),
@@ -247,6 +292,10 @@ public class AccessApplicationService {
             evaluation = AccessEvaluation.denied(
                     AccessReasonCode.DUPLICATE_CHECK_IN,
                     "A recent QR check-in was already recorded.");
+        } else {
+            // Duplicate decisions remain ahead of the payment requirement so
+            // no financial lookup is made for an already-duplicate scan.
+            evaluation = evaluateWithPaymentPolicy(evaluation, context);
         }
 
         AccessRecordDetails record = accessRecordStore.persistQr(
@@ -280,6 +329,59 @@ public class AccessApplicationService {
                         actor.username(),
                         occurredAt));
         return record;
+    }
+
+    /**
+     * Applies the persisted payment requirement only after the established
+     * non-financial access rules have allowed the request.
+     *
+     * <p>Payment query failures deliberately propagate as safe system errors;
+     * they are never converted into a financial denial.</p>
+     */
+    private AccessEvaluation evaluateWithPaymentPolicy(
+            AccessEvaluation baseEvaluation,
+            AccessCheckInContext context) {
+
+        if (baseEvaluation.result() != AccessResult.ALLOWED) {
+            return baseEvaluation;
+        }
+
+        AccessPaymentPolicyDetails details;
+        try {
+            details = accessPaymentPolicyQuery.findCurrent();
+        } catch (RuntimeException exception) {
+            throw new AccessPaymentPolicyEvaluationException(
+                    "Access payment policy could not be evaluated.",
+                    exception);
+        }
+        if (details == null) {
+            throw new AccessPaymentPolicyEvaluationException(
+                    "Access payment policy query returned no policy.");
+        }
+
+        // A disabled requirement must preserve the pre-branch workflow and
+        // avoid touching payment persistence altogether.
+        if (!details.policy().requireConfirmedPaymentForAccess()) {
+            return baseEvaluation;
+        }
+
+        boolean hasConfirmedPayment;
+        try {
+            hasConfirmedPayment = confirmedPaymentForAccessQuery
+                    .hasConfirmedPaymentForPeriod(
+                            context.clientId(),
+                            context.membershipId(),
+                            context.membershipPeriodId());
+        } catch (RuntimeException exception) {
+            throw new AccessPaymentPolicyEvaluationException(
+                    "Access payment policy could not be evaluated.",
+                    exception);
+        }
+
+        return AccessPaymentPolicyEvaluator.evaluate(
+                baseEvaluation,
+                details.policy(),
+                hasConfirmedPayment);
     }
 
     // ── Queries ───────────────────────────────────────────────────────────────

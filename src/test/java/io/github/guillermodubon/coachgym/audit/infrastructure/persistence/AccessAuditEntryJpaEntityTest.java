@@ -171,6 +171,34 @@ class AccessAuditEntryJpaEntityTest {
     }
 
     @Test
+    void supportsPaymentRequiredWithoutPersistingFinancialDetails() {
+        AccessAttemptRecorded event = new AccessAttemptRecorded(
+                RECORD_ID,
+                "MEM-000001",
+                "MEMBERSHIP_CODE",
+                CLIENT_ID,
+                "CLI-000001",
+                MEMBERSHIP_ID,
+                "MEM-000001",
+                AccessResult.DENIED,
+                AccessReasonCode.PAYMENT_REQUIRED,
+                NOW,
+                ACTOR_ID,
+                "receptionist",
+                NOW);
+
+        AuditEntryJpaEntity entry = AuditEntryJpaEntity.from(event);
+
+        assertThat(entry.actionCode()).isEqualTo("ACCESS_DENIED");
+        assertThat(entry.metadata())
+                .containsEntry("reasonCode", "PAYMENT_REQUIRED")
+                .containsEntry("result", "DENIED");
+        assertThat(entry.metadata().toString())
+                .doesNotContain("amount", "currency", "method", "provider",
+                        "externalReference", "stripe", "card");
+    }
+
+    @Test
     void rejectsAllowedAttempt() {
         AccessAttemptRecorded event =
                 new AccessAttemptRecorded(

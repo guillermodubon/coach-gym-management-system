@@ -6,6 +6,7 @@ import io.github.guillermodubon.coachgym.access.application.AccessDuplicateScanP
 import io.github.guillermodubon.coachgym.access.application.AccessRecordDataAccessException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordNotFoundException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordSearchQuery;
+import io.github.guillermodubon.coachgym.access.application.AccessPaymentPolicyEvaluationException;
 import io.github.guillermodubon.coachgym.access.application.QrAccessCredentialUnavailableException;
 import io.github.guillermodubon.coachgym.access.domain.AccessValidationException;
 import io.github.guillermodubon.coachgym.access.domain.QrAccessPayloadValidationException;
@@ -292,6 +293,16 @@ public class AccessController {
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "ACCESS_DATA_ACCESS_FAILED",
                 "The access check-in could not be completed.");
+    }
+
+    @ExceptionHandler(AccessPaymentPolicyEvaluationException.class)
+    ResponseEntity<ProblemDetail> handlePaymentPolicyEvaluationFailure(
+            AccessPaymentPolicyEvaluationException exception) {
+
+        return problem(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "ACCESS_PAYMENT_POLICY_EVALUATION_FAILED",
+                "The access check-in could not be evaluated.");
     }
 
     @ExceptionHandler(AccessRecordNotFoundException.class)

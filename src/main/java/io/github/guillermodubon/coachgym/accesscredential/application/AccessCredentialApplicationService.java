@@ -206,6 +206,30 @@ public class AccessCredentialApplicationService {
         return new AccessCredentialContent(details, document);
     }
 
+    /**
+     * Revokes the current credential for a client under the client lifecycle
+     * lock. The lookup and transition are kept in the same transaction so a
+     * concurrent request observes a stable state conflict instead of a
+     * controller-level not-found result.
+     */
+    @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public AccessCredentialDetails revoke(
+            RevokeClientAccessCredentialCommand command,
+            AuthenticatedActor actor) {
+        if (command == null) {
+            throw new AccessCredentialValidationException(
+                    "Access credential revoke command is required.");
+        }
+        requireActor(actor);
+        AccessCredentialDetails current = loadCurrentForClient(command.clientId());
+        return revokeLocked(
+                new RevokeAccessCredentialCommand(
+                        current.id(), command.reason(), command.expectedVersion()),
+                actor,
+                current);
+    }
+
     /** Revokes an active credential while preserving its immutable PNG artifact. */
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
@@ -223,9 +247,16 @@ public class AccessCredentialApplicationService {
         // target the same client concurrently.
         AccessCredentialDetails hint = credentialQuery.findById(command.credentialId())
                 .orElseThrow(() -> new AccessCredentialNotFoundException(command.credentialId()));
-        credentialStore.lockClient(hint.clientId());
+        credentialStore.lockClientForLifecycle(hint.clientId());
         AccessCredentialDetails current = credentialStore.findByIdForUpdate(command.credentialId())
                 .orElseThrow(() -> new AccessCredentialNotFoundException(command.credentialId()));
+        return revokeLocked(command, actor, current);
+    }
+
+    private AccessCredentialDetails revokeLocked(
+            RevokeAccessCredentialCommand command,
+            AuthenticatedActor actor,
+            AccessCredentialDetails current) {
         AccessCredentialPolicy.requireRevocationAllowed(current.id(), current.status());
         Instant revokedAt = serverNow();
         AccessCredentialDetails revoked = credentialStore.revoke(
@@ -262,6 +293,29 @@ public class AccessCredentialApplicationService {
     }
 
     /**
+     * Replaces the current credential for a client under the client lifecycle
+     * lock. A final credential is reported as a state conflict rather than a
+     * second not-found response when requests race.
+     */
+    @Transactional
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public AccessCredentialDetails replace(
+            ReplaceClientAccessCredentialCommand command,
+            AuthenticatedActor actor) {
+        if (command == null) {
+            throw new AccessCredentialValidationException(
+                    "Access credential replacement command is required.");
+        }
+        requireActor(actor);
+        AccessCredentialDetails current = loadCurrentForClient(command.clientId());
+        return replaceLocked(
+                new ReplaceAccessCredentialCommand(
+                        current.id(), command.reason(), command.expectedVersion()),
+                actor,
+                current);
+    }
+
+    /**
      * Atomically revokes the current credential and creates its replacement.
      * The old row remains REVOKED because the persisted status model has no
      * REPLACED value; the replacement link records the relationship.
@@ -279,9 +333,16 @@ public class AccessCredentialApplicationService {
 
         AccessCredentialDetails hint = credentialQuery.findById(command.credentialId())
                 .orElseThrow(() -> new AccessCredentialNotFoundException(command.credentialId()));
-        credentialStore.lockClient(hint.clientId());
+        credentialStore.lockClientForLifecycle(hint.clientId());
         AccessCredentialDetails current = credentialStore.findByIdForUpdate(command.credentialId())
                 .orElseThrow(() -> new AccessCredentialNotFoundException(command.credentialId()));
+        return replaceLocked(command, actor, current);
+    }
+
+    private AccessCredentialDetails replaceLocked(
+            ReplaceAccessCredentialCommand command,
+            AuthenticatedActor actor,
+            AccessCredentialDetails current) {
         AccessCredentialPolicy.requireReplacementAllowed(current.id(), current.status());
 
         Instant replacedAt = serverNow();
@@ -356,6 +417,14 @@ public class AccessCredentialApplicationService {
                     "Credential history pagination is invalid.");
         }
         return historyQuery.findByClientId(clientId, page, size);
+    }
+
+    private AccessCredentialDetails loadCurrentForClient(UUID clientId) {
+        requireIdentifier(clientId, "Client id");
+        credentialStore.lockClientForLifecycle(clientId);
+        return credentialStore.findActiveByClientIdForUpdate(clientId)
+                .orElseGet(() -> credentialStore.findLatestByClientIdForUpdate(clientId)
+                        .orElseThrow(() -> new AccessCredentialNotFoundException(clientId)));
     }
 
     private AccessCredentialDetails persistIssued(

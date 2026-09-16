@@ -82,6 +82,8 @@ class SecurityConfiguration {
                         .permitAll()
                         .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout")
                         .authenticated()
+                        .requestMatchers("/api/v1/settings/access-payment-policy")
+                        .authenticated()
                         .requestMatchers("/api/v1/clients/**")
                         .authenticated()
                         .requestMatchers("/api/v1/plans/**")

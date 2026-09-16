@@ -51,4 +51,14 @@ interface AccessCredentialJpaRepository extends JpaRepository<AccessCredentialJp
     Optional<AccessCredentialJpaEntity> findActiveByClientIdForUpdate(
             @Param("clientId") UUID clientId,
             @Param("status") AccessCredentialStatus status);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            select credential
+            from AccessCredentialJpaEntity credential
+            where credential.clientId = :clientId
+            order by credential.issuedAt desc, credential.id desc
+            """)
+    Optional<AccessCredentialJpaEntity> findLatestByClientIdForUpdate(
+            @Param("clientId") UUID clientId);
 }

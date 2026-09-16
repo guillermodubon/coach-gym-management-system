@@ -2,7 +2,7 @@ package io.github.guillermodubon.coachgym.accesscredential.web;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAnySetter;
-import io.github.guillermodubon.coachgym.accesscredential.application.RevokeAccessCredentialCommand;
+import io.github.guillermodubon.coachgym.accesscredential.application.RevokeClientAccessCredentialCommand;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -23,7 +23,7 @@ record RevokeAccessCredentialRequest(
         throw new IllegalArgumentException("Unsupported access credential request field: " + name);
     }
 
-    RevokeAccessCredentialCommand toCommand(UUID credentialId) {
-        return new RevokeAccessCredentialCommand(credentialId, reason, version);
+    RevokeClientAccessCredentialCommand toCommand(UUID clientId) {
+        return new RevokeClientAccessCredentialCommand(clientId, reason, version);
     }
 }

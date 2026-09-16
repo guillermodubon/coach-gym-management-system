@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,10 +41,21 @@ class AccessCredentialPersistenceAdapter
     @Override
     @Transactional
     public void lockClient(UUID clientId) {
+        lockClient(clientId, false);
+    }
+
+    @Override
+    @Transactional
+    public void lockClientForLifecycle(UUID clientId) {
+        lockClient(clientId, true);
+    }
+
+    private void lockClient(UUID clientId, boolean failFast) {
         requireIdentifier(clientId, "Client id");
         try {
+            String lockClause = failFast ? " for update nowait" : " for update";
             entityManager.createNativeQuery(
-                            "select id from gym.clients where id = :clientId for update")
+                            "select id from gym.clients where id = :clientId" + lockClause)
                     .setParameter("clientId", clientId)
                     .getResultList();
             // A missing client is resolved by the application service after
@@ -56,6 +68,14 @@ class AccessCredentialPersistenceAdapter
                 throw new AccessCredentialVersionConflictException(clientId, -1, -1);
             }
             throw dataAccess("Client lock could not be acquired.", exception);
+        } catch (RuntimeException exception) {
+            // EntityManager calls can expose Hibernate's lock-timeout wrapper
+            // before repository exception translation runs. Normalize both
+            // paths to the same privacy-safe lifecycle conflict.
+            if (isConcurrencyFailure(exception)) {
+                throw new AccessCredentialVersionConflictException(clientId, -1, -1);
+            }
+            throw exception;
         }
     }
 
@@ -127,6 +147,21 @@ class AccessCredentialPersistenceAdapter
         requireIdentifier(clientId, "Client id");
         return safelyFind(() -> credentialRepository.findActiveByClientIdForUpdate(
                 clientId, AccessCredentialStatus.ACTIVE));
+    }
+
+    @Override
+    @Transactional
+    public Optional<AccessCredentialDetails> findLatestByClientIdForUpdate(UUID clientId) {
+        requireIdentifier(clientId, "Client id");
+        try {
+            return credentialRepository.findLatestByClientIdForUpdate(clientId)
+                    .map(AccessCredentialJpaEntity::toDetails);
+        } catch (DataAccessException exception) {
+            if (isConcurrencyFailure(exception)) {
+                throw new AccessCredentialVersionConflictException(clientId, -1, -1);
+            }
+            throw dataAccess("Access credential could not be loaded.", exception);
+        }
     }
 
     @Override
@@ -299,13 +334,15 @@ class AccessCredentialPersistenceAdapter
     private static boolean isConcurrencyFailure(Throwable failure) {
         Throwable current = failure;
         while (current != null) {
-            if (current instanceof OptimisticLockingFailureException
+            if (current instanceof CannotAcquireLockException
+                    || current instanceof OptimisticLockingFailureException
                     || current instanceof OptimisticLockException) {
                 return true;
             }
             if (current instanceof SQLException exception
                     && ("40P01".equals(exception.getSQLState())
-                    || "40001".equals(exception.getSQLState()))) {
+                    || "40001".equals(exception.getSQLState())
+                    || "55P03".equals(exception.getSQLState()))) {
                 return true;
             }
             current = current.getCause();
