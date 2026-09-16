@@ -16,6 +16,7 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentStatusChangedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
 import io.github.guillermodubon.coachgym.maintenance.*;
 import io.github.guillermodubon.coachgym.membership.*;
+import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptCreated;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusChanged;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatus;
@@ -1064,6 +1065,51 @@ class AuditEntryJpaEntity {
                 "amount", event.amount().toPlainString(),
                 "currency", event.currency(),
                 "testMode", event.testMode());
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(EmailDeliveryLifecycleEvent event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Email delivery lifecycle event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier() != null
+                ? event.actorIdentifier()
+                : "staff";
+        entry.actionCode = event.auditActionCode();
+        entry.resourceType = "EMAIL_DELIVERY";
+        entry.resourceId = event.deliveryId();
+        entry.resourceCodeSnapshot = event.deliveryType().name();
+        entry.summary = switch (entry.actionCode) {
+            case "EMAIL_DELIVERY_RETRIED" -> "Transactional email delivery retried.";
+            case "EMAIL_DELIVERY_SENT" -> "Transactional email delivery sent.";
+            default -> "Transactional email delivery failed.";
+        };
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("deliveryType", event.deliveryType().name());
+        metadata.put("status", event.currentStatus().name());
+        metadata.put("attemptNumber", event.attemptNumber());
+        metadata.put("attemptResult", event.attemptResult().name());
+        metadata.put("previousStatus", event.previousStatus().name());
+        if (event.sourceResourceId() != null) {
+            metadata.put("sourceResourceId", event.sourceResourceId().toString());
+        }
+        if (event.clientId() != null) {
+            metadata.put("clientId", event.clientId().toString());
+        }
+        if (event.maskedRecipient() != null) {
+            metadata.put("maskedRecipient", event.maskedRecipient());
+        }
+        if (event.failureCode() != null) {
+            metadata.put("failureCode", event.failureCode().name());
+        }
+        entry.metadata = Map.copyOf(metadata);
         entry.occurredAt = event.occurredAt();
         return entry;
     }

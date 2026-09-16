@@ -108,6 +108,8 @@ class SecurityConfiguration {
                         .authenticated()
                         .requestMatchers("/api/v1/notifications/**")
                         .authenticated()
+                        .requestMatchers("/api/v1/email-deliveries/**")
+                        .authenticated()
                         .requestMatchers("/api/v1/reporting/**")
                         .authenticated()
                         .anyRequest()

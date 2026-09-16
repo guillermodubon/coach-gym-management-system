@@ -1,0 +1,12 @@
+spring:
+  config:
+    activate:
+      on-profile: local
+
+coach-gym:
+  email:
+    enabled: ${EMAIL_ENABLED:true}
+    smtp-host: ${SMTP_HOST:localhost}
+    smtp-port: ${SMTP_PORT:1025}
+    smtp-auth-enabled: ${SMTP_AUTH_ENABLED:false}
+    smtp-starttls-enabled: ${SMTP_STARTTLS_ENABLED:false}
