@@ -1,5 +1,6 @@
 package io.github.guillermodubon.coachgym.audit.application;
 
+import io.github.guillermodubon.coachgym.audit.AuditExportCompleted;
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialIssued;
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplaced;
@@ -30,6 +31,8 @@ import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChang
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
 
 public interface AuditEntryStore {
+
+    void recordAuditExportCompleted(AuditExportCompleted event);
 
     void recordClientRegistered(ClientRegistered event);
 
