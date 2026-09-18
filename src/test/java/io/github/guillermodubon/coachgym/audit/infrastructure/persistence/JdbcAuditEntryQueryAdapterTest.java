@@ -13,9 +13,17 @@ import static org.mockito.Mockito.when;
 import io.github.guillermodubon.coachgym.audit.AuditEntryDetails;
 import io.github.guillermodubon.coachgym.audit.AuditEntryPage;
 import io.github.guillermodubon.coachgym.audit.AuditEntrySummary;
+import io.github.guillermodubon.coachgym.audit.AuditExportDataAccessException;
+import io.github.guillermodubon.coachgym.audit.AuditExportLimitExceededException;
+import io.github.guillermodubon.coachgym.audit.AuditExportPolicy;
+import io.github.guillermodubon.coachgym.audit.AuditExportQuery;
 import io.github.guillermodubon.coachgym.audit.AuditSearchQuery;
 import io.github.guillermodubon.coachgym.audit.application.AuditQueryDataAccessException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -26,9 +34,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataRetrievalFailureException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.core.ResultSetExtractor;
+import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class JdbcAuditEntryQueryAdapterTest {
@@ -43,6 +56,9 @@ class JdbcAuditEntryQueryAdapterTest {
     @Mock
     private NamedParameterJdbcTemplate jdbcTemplate;
 
+    @Mock
+    private JdbcTemplate streamJdbcTemplate;
+
     @Test
     void listsBoundedSummariesWithCountAndDeterministicNewestOrder() {
         when(jdbcTemplate.queryForObject(
@@ -56,8 +72,7 @@ class JdbcAuditEntryQueryAdapterTest {
                 any(RowMapper.class)))
                 .thenReturn(List.of(summary()));
 
-        AuditEntryPage page = new JdbcAuditEntryQueryAdapter(jdbcTemplate)
-                .findAll(AuditSearchQuery.defaults());
+        AuditEntryPage page = adapter().findAll(AuditSearchQuery.defaults());
 
         assertThat(page.items()).hasSize(1);
         assertThat(page.items().getFirst().id()).isEqualTo(ENTRY_ID);
@@ -86,8 +101,7 @@ class JdbcAuditEntryQueryAdapterTest {
                     return List.of(mapper.mapRow(resultSet, 0));
                 });
 
-        Optional<AuditEntryDetails> details = new JdbcAuditEntryQueryAdapter(
-                jdbcTemplate).findById(ENTRY_ID);
+        Optional<AuditEntryDetails> details = adapter().findById(ENTRY_ID);
 
         assertThat(details).isPresent();
         assertThat(details.orElseThrow().metadata().values())
@@ -105,8 +119,7 @@ class JdbcAuditEntryQueryAdapterTest {
                 any(RowMapper.class)))
                 .thenReturn(List.of());
 
-        assertThat(new JdbcAuditEntryQueryAdapter(jdbcTemplate)
-                .findById(ENTRY_ID)).isEmpty();
+        assertThat(adapter().findById(ENTRY_ID)).isEmpty();
     }
 
     @Test
@@ -117,16 +130,14 @@ class JdbcAuditEntryQueryAdapterTest {
                 eq(Long.class)))
                 .thenThrow(new DataRetrievalFailureException("password=secret"));
 
-        assertThatThrownBy(() -> new JdbcAuditEntryQueryAdapter(jdbcTemplate)
-                .findAll(AuditSearchQuery.defaults()))
+        assertThatThrownBy(() -> adapter().findAll(AuditSearchQuery.defaults()))
                 .isInstanceOf(AuditQueryDataAccessException.class)
                 .hasMessage("Audit entries could not be read.");
     }
 
     @Test
     void nullDetailIdIsRejectedBeforeDatabaseAccess() {
-        assertThatThrownBy(() -> new JdbcAuditEntryQueryAdapter(jdbcTemplate)
-                .findById(null))
+        assertThatThrownBy(() -> adapter().findById(null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Audit entry id must be provided.");
 
@@ -148,6 +159,122 @@ class JdbcAuditEntryQueryAdapterTest {
         assertThat(JdbcAuditEntryQueryAdapter.PAGE_SQL_ASC)
                 .contains("order by occurred_at asc, id asc")
                 .doesNotContain("metadata");
+        assertThat(JdbcAuditEntryQueryAdapter.EXPORT_SQL_DESC)
+                .contains("metadata::text as metadata_json")
+                .contains("order by occurred_at desc, id asc")
+                .contains("limit ?");
+        assertThat(JdbcAuditEntryQueryAdapter.EXPORT_SQL_ASC)
+                .contains("order by occurred_at asc, id asc")
+                .contains("limit ?");
+        assertThat(JdbcAuditEntryQueryAdapter.EXPORT_COUNT_SQL)
+                .contains("cast(? as uuid)")
+                .doesNotContain(":actorUserId");
+    }
+
+    @Test
+    void rejectsOverflowBeforeOpeningTheStreamingSelect() {
+        when(streamJdbcTemplate.query(
+                any(PreparedStatementCreator.class),
+                any(PreparedStatementSetter.class),
+                any(ResultSetExtractor.class)))
+                .thenReturn(3L);
+
+        assertThatThrownBy(() -> adapter().streamExport(
+                exportQuery(),
+                new AuditExportPolicy(Duration.ofDays(1), 2),
+                row -> { }))
+                .isInstanceOf(AuditExportLimitExceededException.class);
+
+        verify(streamJdbcTemplate, times(1)).query(
+                any(PreparedStatementCreator.class),
+                any(PreparedStatementSetter.class),
+                any(ResultSetExtractor.class));
+    }
+
+    @Test
+    void translatesExportDatabaseFailuresWithoutExposingDriverDetails() {
+        when(streamJdbcTemplate.query(
+                any(PreparedStatementCreator.class),
+                any(PreparedStatementSetter.class),
+                any(ResultSetExtractor.class)))
+                .thenThrow(new DataRetrievalFailureException("password=secret"));
+
+        assertThatThrownBy(() -> adapter().streamExport(
+                exportQuery(),
+                new AuditExportPolicy(Duration.ofDays(1), 2),
+                row -> { }))
+                .isInstanceOf(AuditExportDataAccessException.class)
+                .hasMessage("Audit export data could not be read.")
+                .hasMessageNotContaining("password");
+    }
+
+    @Test
+    void configuresForwardOnlyFetchSizeForTheStreamingStatement() throws Exception {
+        when(streamJdbcTemplate.query(
+                any(PreparedStatementCreator.class),
+                any(PreparedStatementSetter.class),
+                any(ResultSetExtractor.class)))
+                .thenReturn(0L)
+                .thenReturn(null);
+
+        adapter().streamExport(
+                exportQuery(),
+                new AuditExportPolicy(Duration.ofDays(1), 2),
+                row -> { });
+
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                PreparedStatementCreator.class);
+        verify(streamJdbcTemplate, times(2)).query(
+                captor.capture(),
+                any(PreparedStatementSetter.class),
+                any(ResultSetExtractor.class));
+
+        Connection connection = mock(Connection.class);
+        PreparedStatement statement = mock(PreparedStatement.class);
+        when(connection.prepareStatement(
+                JdbcAuditEntryQueryAdapter.EXPORT_SQL_DESC,
+                ResultSet.TYPE_FORWARD_ONLY,
+                ResultSet.CONCUR_READ_ONLY))
+                .thenReturn(statement);
+        captor.getAllValues().get(1).createPreparedStatement(connection);
+
+        verify(statement).setFetchSize(JdbcAuditEntryQueryAdapter.EXPORT_FETCH_SIZE);
+    }
+
+    @Test
+    void exportReadPathIsDeclaredReadOnly() throws Exception {
+        assertThat(JdbcAuditEntryQueryAdapter.class
+                .getMethod(
+                        "streamExport",
+                        io.github.guillermodubon.coachgym.audit.AuditExportQuery.class,
+                        AuditExportPolicy.class,
+                        io.github.guillermodubon.coachgym.audit.AuditExportSink.class)
+                .getAnnotation(Transactional.class)
+                .readOnly())
+                .isTrue();
+    }
+
+    private JdbcAuditEntryQueryAdapter adapter() {
+        return new JdbcAuditEntryQueryAdapter(
+                jdbcTemplate,
+                streamJdbcTemplate,
+                new tools.jackson.databind.json.JsonMapper(),
+                new io.github.guillermodubon.coachgym.audit.application.AuditEntryProjector());
+    }
+
+    private static AuditExportQuery exportQuery() {
+        return AuditExportQuery.from(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Instant.parse("2026-09-16T00:00:00Z"),
+                Instant.parse("2026-09-16T23:59:59Z"),
+                null,
+                null);
     }
 
     private static AuditEntrySummary summary() {

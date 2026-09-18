@@ -5,12 +5,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.guillermodubon.coachgym.audit.AuditEntryDetails;
 import io.github.guillermodubon.coachgym.audit.AuditEntryPage;
+import io.github.guillermodubon.coachgym.audit.AuditExportDataAccessException;
+import io.github.guillermodubon.coachgym.audit.AuditExportLimitExceededException;
+import io.github.guillermodubon.coachgym.audit.AuditExportPolicy;
+import io.github.guillermodubon.coachgym.audit.AuditExportQuery;
+import io.github.guillermodubon.coachgym.audit.AuditExportRow;
+import io.github.guillermodubon.coachgym.audit.AuditExportValidationException;
 import io.github.guillermodubon.coachgym.audit.AuditSearchQuery;
 import io.github.guillermodubon.coachgym.audit.application.AuditQueryDataAccessException;
 import io.github.guillermodubon.coachgym.maintenance.AbstractIncidentApiIntegrationTest;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -218,6 +227,179 @@ class AuditQuerySchemaIntegrationTest extends AbstractIncidentApiIntegrationTest
         long after = jdbcTemplate.queryForObject(
                 "select count(*) from gym.audit_entries", Long.class);
         assertThat(after).isEqualTo(before);
+    }
+
+    @Test
+    void streamsNewestFirstWithStableAscendingIdTieBreakingAndSanitizedMetadata() {
+        List<AuditExportRow> rows = new ArrayList<>();
+
+        queryAdapter.streamExport(
+                exportQuery(
+                        null,
+                        Instant.parse("2026-09-15T00:00:00Z"),
+                        Instant.parse("2026-09-16T23:59:59Z"),
+                        null,
+                        null),
+                new AuditExportPolicy(Duration.ofDays(3), 3),
+                rows::add);
+
+        assertThat(rows).extracting(AuditExportRow::entryId)
+                .containsExactly(FIRST_ID, SECOND_ID, THIRD_ID);
+        assertThat(rows.get(1).metadata().values())
+                .containsEntry("paymentId", PAYMENT_ID.toString())
+                .doesNotContainKey("token");
+    }
+
+    @Test
+    void streamsAscendingOrderAndAppliesEveryApprovedFilter() {
+        List<AuditExportRow> rows = new ArrayList<>();
+
+        queryAdapter.streamExport(
+                exportQuery(
+                        adminId,
+                        TIE_TIMESTAMP,
+                        TIE_TIMESTAMP,
+                        "ASC",
+                        "PAYMENT_REGISTERED"),
+                new AuditExportPolicy(Duration.ofDays(1), 3),
+                rows::add);
+
+        assertThat(rows).extracting(AuditExportRow::entryId)
+                .containsExactly(SECOND_ID);
+        assertThat(rows.getFirst())
+                .extracting(
+                        AuditExportRow::actorUserId,
+                        AuditExportRow::actorIdentifier,
+                        AuditExportRow::actionCode,
+                        AuditExportRow::resourceType,
+                        AuditExportRow::resourceId,
+                        AuditExportRow::resourceCode,
+                        AuditExportRow::correlationId)
+                .containsExactly(
+                        adminId,
+                        "audit-admin",
+                        "PAYMENT_REGISTERED",
+                        "PAYMENT",
+                        PAYMENT_ID,
+                        "PAY-000002",
+                        CORRELATION_ID);
+    }
+
+    @Test
+    void exactConfiguredLimitIsAllowedButOverflowIsRejectedBeforeWritingRows() {
+        List<AuditExportRow> exactRows = new ArrayList<>();
+        AuditExportQuery query = exportQuery(
+                null,
+                Instant.parse("2026-09-15T00:00:00Z"),
+                Instant.parse("2026-09-16T23:59:59Z"),
+                null,
+                null);
+
+        queryAdapter.streamExport(query, new AuditExportPolicy(Duration.ofDays(3), 3),
+                exactRows::add);
+        assertThat(exactRows).hasSize(3);
+
+        List<AuditExportRow> overflowRows = new ArrayList<>();
+        assertThatThrownBy(() -> queryAdapter.streamExport(
+                query,
+                new AuditExportPolicy(Duration.ofDays(3), 2),
+                overflowRows::add))
+                .isInstanceOf(AuditExportLimitExceededException.class)
+                .hasMessage("The audit export exceeds the configured row limit.");
+        assertThat(overflowRows).isEmpty();
+    }
+
+    @Test
+    void emptyExportDoesNotInvokeTheSinkAndRangePolicyRunsBeforeSql() {
+        List<AuditExportRow> rows = new ArrayList<>();
+
+        queryAdapter.streamExport(
+                exportQuery(
+                        null,
+                        Instant.parse("2026-09-17T00:00:00Z"),
+                        Instant.parse("2026-09-17T23:59:59Z"),
+                        null,
+                        null),
+                new AuditExportPolicy(Duration.ofDays(1), 3),
+                rows::add);
+        assertThat(rows).isEmpty();
+
+        assertThatThrownBy(() -> queryAdapter.streamExport(
+                exportQuery(
+                        null,
+                        Instant.parse("2026-09-15T00:00:00Z"),
+                        Instant.parse("2026-09-16T23:59:59Z"),
+                        null,
+                        null),
+                new AuditExportPolicy(Duration.ofDays(1), 3),
+                rows::add))
+                .isInstanceOf(AuditExportValidationException.class)
+                .hasMessage("The audit export date range exceeds the configured maximum.");
+    }
+
+    @Test
+    void closesTheStreamingResourcesWhenTheSinkAborts() {
+        AuditExportQuery query = exportQuery(
+                null,
+                Instant.parse("2026-09-15T00:00:00Z"),
+                Instant.parse("2026-09-16T23:59:59Z"),
+                null,
+                null);
+
+        assertThatThrownBy(() -> queryAdapter.streamExport(
+                query,
+                new AuditExportPolicy(Duration.ofDays(3), 3),
+                row -> {
+                    throw new IllegalStateException("client disconnected");
+                }))
+                .isInstanceOf(AuditExportDataAccessException.class)
+                .hasMessage("Audit export data could not be read.");
+
+        assertThat(queryAdapter.findAll(AuditSearchQuery.defaults()).items())
+                .hasSize(3);
+    }
+
+    @Test
+    void treatsFilterTextAsAParameterRatherThanExecutableSql() {
+        List<AuditExportRow> rows = new ArrayList<>();
+
+        queryAdapter.streamExport(
+                AuditExportQuery.from(
+                        null,
+                        "audit-admin' or '1'='1",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        Instant.parse("2026-09-15T00:00:00Z"),
+                        Instant.parse("2026-09-16T23:59:59Z"),
+                        null,
+                        null),
+                new AuditExportPolicy(Duration.ofDays(3), 3),
+                rows::add);
+
+        assertThat(rows).isEmpty();
+    }
+
+    private static AuditExportQuery exportQuery(
+            UUID actorUserId,
+            Instant occurredFrom,
+            Instant occurredUntil,
+            String direction,
+            String actionCode) {
+        return AuditExportQuery.from(
+                actorUserId,
+                actionCode == null ? null : "AUDIT-ADMIN",
+                actionCode,
+                actionCode == null ? null : "PAYMENT",
+                actionCode == null ? null : PAYMENT_ID,
+                actionCode == null ? null : "PAY-000002",
+                actionCode == null ? null : CORRELATION_ID,
+                occurredFrom,
+                occurredUntil,
+                null,
+                direction);
     }
 
     private void insertAuditEntry(
