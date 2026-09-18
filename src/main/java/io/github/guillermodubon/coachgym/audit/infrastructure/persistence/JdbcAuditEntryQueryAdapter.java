@@ -4,18 +4,28 @@ import io.github.guillermodubon.coachgym.audit.AuditEntryDetails;
 import io.github.guillermodubon.coachgym.audit.AuditEntryPage;
 import io.github.guillermodubon.coachgym.audit.AuditEntryQuery;
 import io.github.guillermodubon.coachgym.audit.AuditEntrySummary;
+import io.github.guillermodubon.coachgym.audit.AuditExportDataAccessException;
+import io.github.guillermodubon.coachgym.audit.AuditExportPolicy;
+import io.github.guillermodubon.coachgym.audit.AuditExportQuery;
+import io.github.guillermodubon.coachgym.audit.AuditExportRow;
+import io.github.guillermodubon.coachgym.audit.AuditExportSink;
+import io.github.guillermodubon.coachgym.audit.AuditExportStreamException;
+import io.github.guillermodubon.coachgym.audit.AuditExportValidationException;
 import io.github.guillermodubon.coachgym.audit.AuditQueryValidationException;
 import io.github.guillermodubon.coachgym.audit.AuditSearchQuery;
 import io.github.guillermodubon.coachgym.audit.AuditSortDirection;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryProjector;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryRow;
 import io.github.guillermodubon.coachgym.audit.application.AuditQueryDataAccessException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +34,10 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataRetrievalFailureException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
+import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -39,6 +53,8 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Repository
 class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
+
+    static final int EXPORT_FETCH_SIZE = 256;
 
     static final String WHERE_SQL = """
             where (cast(:actorUserId as uuid) is null
@@ -83,6 +99,31 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
             limit :limit offset :offset
             """;
 
+    private static final String EXPORT_WHERE_SQL = positionalWhereSql();
+
+    static final String EXPORT_COUNT_SQL = """
+            select count(*)
+            from gym.audit_entries
+            """ + EXPORT_WHERE_SQL;
+
+    private static final String EXPORT_SELECT_SQL = """
+            select id, actor_user_id, actor_identifier_snapshot,
+                   action_code, resource_type, resource_id,
+                   resource_code_snapshot, summary,
+                   metadata::text as metadata_json, correlation_id, occurred_at
+            from gym.audit_entries
+            """ + EXPORT_WHERE_SQL;
+
+    static final String EXPORT_SQL_DESC = EXPORT_SELECT_SQL + """
+            order by occurred_at desc, id asc
+            limit ?
+            """;
+
+    static final String EXPORT_SQL_ASC = EXPORT_SELECT_SQL + """
+            order by occurred_at asc, id asc
+            limit ?
+            """;
+
     static final String DETAIL_SQL = """
             select id, actor_user_id, actor_identifier_snapshot,
                    action_code, resource_type, resource_id,
@@ -93,21 +134,32 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final JdbcTemplate streamJdbcTemplate;
     private final JsonMapper jsonMapper;
     private final AuditEntryProjector projector;
 
     @Autowired
     JdbcAuditEntryQueryAdapter(NamedParameterJdbcTemplate jdbcTemplate) {
-        this(jdbcTemplate, new JsonMapper(), new AuditEntryProjector());
+        this(jdbcTemplate, jdbcTemplate.getJdbcTemplate(),
+                new JsonMapper(), new AuditEntryProjector());
+    }
+
+    JdbcAuditEntryQueryAdapter(
+            NamedParameterJdbcTemplate jdbcTemplate,
+            JdbcTemplate streamJdbcTemplate,
+            JsonMapper jsonMapper,
+            AuditEntryProjector projector) {
+        this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate);
+        this.streamJdbcTemplate = Objects.requireNonNull(streamJdbcTemplate);
+        this.jsonMapper = Objects.requireNonNull(jsonMapper);
+        this.projector = Objects.requireNonNull(projector);
     }
 
     JdbcAuditEntryQueryAdapter(
             NamedParameterJdbcTemplate jdbcTemplate,
             JsonMapper jsonMapper,
             AuditEntryProjector projector) {
-        this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate);
-        this.jsonMapper = Objects.requireNonNull(jsonMapper);
-        this.projector = Objects.requireNonNull(projector);
+        this(jdbcTemplate, jdbcTemplate.getJdbcTemplate(), jsonMapper, projector);
     }
 
     @Override
@@ -161,10 +213,140 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public void streamExport(
+            AuditExportQuery query,
+            AuditExportPolicy policy,
+            AuditExportSink sink) {
+        if (query == null) {
+            throw new AuditExportValidationException(
+                    "Audit export query must be provided.");
+        }
+        if (sink == null) {
+            throw new AuditExportValidationException(
+                    "Audit export sink must be provided.");
+        }
+        query.validate(policy);
+
+        long totalRows;
+        try {
+            totalRows = countExportRows(query);
+        } catch (DataAccessException exception) {
+            throw exportDataAccess(exception);
+        }
+        policy.validateRowCount(totalRows);
+
+        try {
+            streamJdbcTemplate.query(
+                    preparedStatement(exportSql(query), EXPORT_FETCH_SIZE),
+                    setter(exportParameters(query, policy.maxRows())),
+                    (resultSet) -> {
+                        while (resultSet.next()) {
+                            sink.accept(new AuditExportRow(
+                                    projector.toDetails(mapRow(resultSet, true))));
+                        }
+                        return null;
+                    });
+        } catch (DataAccessException exception) {
+            throw exportDataAccess(exception);
+        } catch (AuditExportStreamException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw exportDataAccess(exception);
+        }
+    }
+
     static String pageSql(AuditSearchQuery query) {
         return query.direction() == AuditSortDirection.ASC
                 ? PAGE_SQL_ASC
                 : PAGE_SQL_DESC;
+    }
+
+    static String exportSql(AuditExportQuery query) {
+        return query.direction() == AuditSortDirection.ASC
+                ? EXPORT_SQL_ASC
+                : EXPORT_SQL_DESC;
+    }
+
+    private long countExportRows(AuditExportQuery query) {
+        Long count = streamJdbcTemplate.query(
+                preparedStatement(EXPORT_COUNT_SQL, 0),
+                setter(exportParameters(query, null)),
+                resultSet -> {
+                    if (!resultSet.next()) {
+                        return null;
+                    }
+                    return resultSet.getLong(1);
+                });
+        if (count == null) {
+            throw new DataRetrievalFailureException(
+                    "Audit export count returned no row.");
+        }
+        return count;
+    }
+
+    private static PreparedStatementCreator preparedStatement(
+            String sql,
+            int fetchSize) {
+        return connection -> createStatement(connection, sql, fetchSize);
+    }
+
+    private static PreparedStatement createStatement(
+            Connection connection,
+            String sql,
+            int fetchSize) throws SQLException {
+        PreparedStatement statement = connection.prepareStatement(
+                sql,
+                ResultSet.TYPE_FORWARD_ONLY,
+                ResultSet.CONCUR_READ_ONLY);
+        if (fetchSize > 0) {
+            statement.setFetchSize(fetchSize);
+        }
+        return statement;
+    }
+
+    private static PreparedStatementSetter setter(Object[] values) {
+        return statement -> {
+            for (int index = 0; index < values.length; index++) {
+                statement.setObject(index + 1, values[index]);
+            }
+        };
+    }
+
+    private static Object[] exportParameters(
+            AuditExportQuery query,
+            Integer limit) {
+        List<Object> values = new ArrayList<>(19);
+        addTwice(values, query.actorUserId());
+        addTwice(values, query.actorIdentifier());
+        addTwice(values, query.actionCode());
+        addTwice(values, query.resourceType());
+        addTwice(values, query.resourceId());
+        addTwice(values, query.resourceCode());
+        addTwice(values, query.correlationId());
+        addTwice(values, offset(query.occurredFrom()));
+        addTwice(values, offset(query.occurredUntil()));
+        if (limit != null) {
+            values.add(limit);
+        }
+        return values.toArray();
+    }
+
+    private static void addTwice(List<Object> values, Object value) {
+        values.add(value);
+        values.add(value);
+    }
+
+    private static String positionalWhereSql() {
+        String sql = WHERE_SQL;
+        for (String parameter : List.of(
+                "actorUserId", "actorIdentifier", "actionCode", "resourceType",
+                "resourceId", "resourceCode", "correlationId", "occurredFrom",
+                "occurredUntil")) {
+            sql = sql.replace(":" + parameter, "?");
+        }
+        return sql;
     }
 
     private static AuditSearchQuery requireQuery(AuditSearchQuery query) {
@@ -256,5 +438,15 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
             RuntimeException exception) {
         return new AuditQueryDataAccessException(
                 "Audit entries could not be read.", exception);
+    }
+
+    private static AuditExportDataAccessException exportDataAccess(
+            DataAccessException exception) {
+        return new AuditExportDataAccessException(exception);
+    }
+
+    private static AuditExportDataAccessException exportDataAccess(
+            RuntimeException exception) {
+        return new AuditExportDataAccessException(exception);
     }
 }

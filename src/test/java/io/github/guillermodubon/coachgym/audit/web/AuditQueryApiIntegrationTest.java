@@ -8,10 +8,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import io.github.guillermodubon.coachgym.maintenance.AbstractIncidentApiIntegrationTest;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -77,6 +79,76 @@ class AuditQueryApiIntegrationTest extends AbstractIncidentApiIntegrationTest {
     }
 
     @Test
+    void adminCanDownloadABoundedSanitizedCsvWithoutCsrf() throws Exception {
+        mockMvc.perform(get("/api/v1/audit-entries/export.csv")
+                        .session(loginAsAdmin())
+                        .param("occurredFrom", "2000-01-01T00:00:00Z")
+                        .param("occurredUntil", "2000-01-31T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "text/csv;charset=UTF-8"))
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.matchesPattern(
+                                "attachment; filename=\\\"audit-export-[0-9]{8}-[0-9]{6}Z\\.csv\\\"")))
+                .andExpect(header().string("Cache-Control", "private, no-store"))
+                .andExpect(header().string("Pragma", "no-cache"))
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(content().string(
+                        "entry_id,occurred_at,actor_user_id,actor_identifier,action_code,"
+                                + "resource_type,resource_id,resource_code,summary,correlation_id,metadata\r\n"));
+    }
+
+    @Test
+    void adminExportStreamsCurrentRowsAndNeverReturnsRawMetadata() throws Exception {
+        Instant now = Instant.now();
+        mockMvc.perform(get("/api/v1/audit-entries/export.csv")
+                        .session(loginAsAdmin())
+                        .param("occurredFrom", now.minusSeconds(60).toString())
+                        .param("occurredUntil", now.plusSeconds(60).toString()))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString(entryId.toString())))
+                .andExpect(content().string(containsString("CLIENT_REGISTERED")))
+                .andExpect(content().string(not(containsString("must-not-return"))))
+                .andExpect(content().string(not(containsString("password"))));
+    }
+
+    @Test
+    void exportSecurityAndRangeErrorsAreStable() throws Exception {
+        mockMvc.perform(get("/api/v1/audit-entries/export.csv")
+                        .param("occurredFrom", "2000-01-01T00:00:00Z")
+                        .param("occurredUntil", "2000-01-02T00:00:00Z"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
+
+        mockMvc.perform(get("/api/v1/audit-entries/export.csv")
+                        .session(loginAsReceptionist())
+                        .param("occurredFrom", "2000-01-01T00:00:00Z")
+                        .param("occurredUntil", "2000-01-02T00:00:00Z"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("ACCESS_DENIED"));
+
+        mockMvc.perform(get("/api/v1/audit-entries/export.csv")
+                        .session(loginAsAdmin())
+                        .param("occurredFrom", "2000-01-01T00:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUDIT_EXPORT_RANGE_REQUIRED"));
+
+        mockMvc.perform(get("/api/v1/audit-entries/export.csv")
+                        .session(loginAsAdmin())
+                        .param("occurredFrom", "2000-01-01T00:00:00Z")
+                        .param("occurredUntil", "2000-03-01T00:00:00Z"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUDIT_EXPORT_RANGE_TOO_LARGE"));
+
+        mockMvc.perform(get("/api/v1/audit-entries/export.csv")
+                        .session(loginAsAdmin())
+                        .param("occurredFrom", "2000-01-01T00:00:00Z")
+                        .param("occurredUntil", "2000-01-02T00:00:00Z")
+                        .param("sort", "metadata"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("AUDIT_EXPORT_VALIDATION_FAILED"));
+    }
+
+    @Test
     void receptionistCannotListOrRetrieveAuditHistory() throws Exception {
         mockMvc.perform(get("/api/v1/audit-entries")
                         .session(loginAsReceptionist()))
@@ -136,6 +208,17 @@ class AuditQueryApiIntegrationTest extends AbstractIncidentApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/v1/audit-entries'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/audit-entries/{auditEntryId}'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/audit-entries/export.csv'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/audit-entries/export.csv'].get.parameters[*].name")
+                        .value(containsInAnyOrder(
+                                "actorUserId", "actorIdentifier", "actionCode", "resourceType",
+                                "resourceId", "resourceCode", "correlationId", "occurredFrom",
+                                "occurredUntil", "sort", "direction")))
+                .andExpect(jsonPath("$.paths['/api/v1/audit-entries/export.csv'].get.security[0].sessionCookie")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/api/v1/audit-entries/export.csv'].get.responses['200']"
+                        + ".content['text/csv']")
+                        .exists())
                 .andExpect(jsonPath("$.paths['/api/v1/audit-entries'].post").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/v1/audit-entries'].get.parameters[*].name")
                         .value(containsInAnyOrder(
@@ -153,8 +236,9 @@ class AuditQueryApiIntegrationTest extends AbstractIncidentApiIntegrationTest {
                 .andExpect(jsonPath("$.components.schemas.AuditEntryDetailsResponse.properties.metadataRedacted")
                         .exists())
                 .andExpect(content().string(containsString("default-deny sanitized")))
-                .andExpect(content().string(
-                        containsString("CSV export is deferred outside the current scope")))
+                .andExpect(content().string(containsString("bounded CSV export")))
+                .andExpect(content().string(containsString("occurredFrom")))
+                .andExpect(content().string(containsString("text/csv")))
                 .andExpect(content().string(not(containsString("rawMetadata"))));
     }
 }

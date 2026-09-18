@@ -23,8 +23,8 @@ import java.util.Set;
  * days. There is no arbitrary metadata filter and no result filter because
  * the current schema represents outcomes in action codes and metadata rather
  * than a result column. Audit reads are not self-audited by default to avoid
- * recursive writes and unbounded noise. CSV export remains outside the
- * current scope and may be introduced by a future approved branch.</p>
+ * recursive writes and unbounded noise. Bounded CSV export uses the separate
+ * {@link AuditExportPolicy} while reusing these filter and sort allowlists.</p>
  *
  * <p>Metadata follows a default-deny, action-aware allowlist and a global
  * sensitive-key denylist. Recursive sanitization and persistence projections
@@ -47,6 +47,7 @@ public final class AuditQueryPolicy {
     private static final Set<String> ALLOWED_RESOURCE_TYPES = immutableSet(
             "ACCESS_CREDENTIAL",
             "ACCESS_RECORD",
+            "AUDIT_EXPORT",
             "CLIENT",
             "EQUIPMENT",
             "EQUIPMENT_CATEGORY",
@@ -67,6 +68,7 @@ public final class AuditQueryPolicy {
             "ACCESS_CREDENTIAL_ISSUED",
             "ACCESS_CREDENTIAL_REPLACED",
             "ACCESS_CREDENTIAL_REVOKED",
+            "AUDIT_ENTRIES_EXPORTED",
             "CLIENT_REGISTERED",
             "EMAIL_DELIVERY_FAILED",
             "EMAIL_DELIVERY_RETRIED",

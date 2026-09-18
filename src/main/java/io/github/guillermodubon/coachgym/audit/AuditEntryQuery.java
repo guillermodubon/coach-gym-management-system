@@ -18,6 +18,18 @@ public interface AuditEntryQuery {
     /** Returns safe details for an entry, or empty when its UUID is absent. */
     Optional<AuditEntryDetails> findById(UUID auditEntryId);
 
+    /**
+     * Streams bounded, already-sanitized export rows to the supplied sink.
+     *
+     * <p>The implementation owns the database resources and must not collect
+     * the export into an in-memory list. Authorization and HTTP concerns stay
+     * in the application/web layers.</p>
+     */
+    void streamExport(
+            AuditExportQuery query,
+            AuditExportPolicy policy,
+            AuditExportSink sink);
+
     /** Alias used by application services that call list operations "search". */
     default AuditEntryPage search(AuditSearchQuery query) {
         return findAll(query);

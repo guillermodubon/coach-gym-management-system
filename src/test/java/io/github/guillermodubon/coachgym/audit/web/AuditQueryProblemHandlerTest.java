@@ -3,6 +3,11 @@ package io.github.guillermodubon.coachgym.audit.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.guillermodubon.coachgym.audit.AuditQueryValidationException;
+import io.github.guillermodubon.coachgym.audit.AuditExportAuditException;
+import io.github.guillermodubon.coachgym.audit.AuditExportDataAccessException;
+import io.github.guillermodubon.coachgym.audit.AuditExportLimitExceededException;
+import io.github.guillermodubon.coachgym.audit.AuditExportStreamException;
+import io.github.guillermodubon.coachgym.audit.AuditExportValidationException;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryNotFoundException;
 import io.github.guillermodubon.coachgym.audit.application.AuditMetadataProjectionException;
 import io.github.guillermodubon.coachgym.audit.application.AuditQueryDataAccessException;
@@ -53,6 +58,41 @@ class AuditQueryProblemHandlerTest {
                 "Audit metadata could not be projected safely.");
         assertThat(dataAccess.getBody().toString()).doesNotContain("sql", "table");
         assertThat(projection.getBody().toString()).doesNotContain("raw", "json");
+    }
+
+    @Test
+    void mapsExportFailuresToStablePrivacySafeProblems() {
+        ResponseEntity<ProblemDetail> required = handler.handleExportValidation(
+                new AuditExportValidationException(
+                        AuditExportValidationException.RANGE_REQUIRED_CODE,
+                        "secret range"));
+        ResponseEntity<ProblemDetail> limit = handler.handleExportLimit(
+                new AuditExportLimitExceededException(10));
+        ResponseEntity<ProblemDetail> dataAccess = handler.handleExportDataAccess(
+                new AuditExportDataAccessException(
+                        new IllegalStateException("SQL must not escape")));
+        ResponseEntity<ProblemDetail> stream = handler.handleExportFailure(
+                new AuditExportStreamException(new IllegalStateException("payload")));
+        ResponseEntity<ProblemDetail> audit = handler.handleExportFailure(
+                new AuditExportAuditException(new IllegalStateException("metadata")));
+
+        assertProblem(required, HttpStatus.BAD_REQUEST,
+                "AUDIT_EXPORT_RANGE_REQUIRED",
+                "Both occurredFrom and occurredUntil are required for an audit export.");
+        assertProblem(limit, HttpStatus.BAD_REQUEST,
+                "AUDIT_EXPORT_LIMIT_EXCEEDED",
+                "The audit export exceeds the configured row limit.");
+        assertProblem(dataAccess, HttpStatus.INTERNAL_SERVER_ERROR,
+                "AUDIT_EXPORT_DATA_ACCESS_FAILED",
+                "Audit export data could not be read.");
+        assertProblem(stream, HttpStatus.INTERNAL_SERVER_ERROR,
+                "AUDIT_EXPORT_STREAM_FAILED",
+                "The audit export could not be completed.");
+        assertProblem(audit, HttpStatus.INTERNAL_SERVER_ERROR,
+                "AUDIT_EXPORT_AUDIT_FAILED",
+                "The audit export could not be completed.");
+        assertThat(required.getBody().toString()).doesNotContain("secret");
+        assertThat(dataAccess.getBody().toString()).doesNotContain("SQL", "payload");
     }
 
     private static void assertProblem(
