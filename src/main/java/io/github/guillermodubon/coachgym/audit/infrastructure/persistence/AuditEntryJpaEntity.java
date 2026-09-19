@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.access.AccessAttemptRecorded;
 import io.github.guillermodubon.coachgym.access.AccessResult;
+import io.github.guillermodubon.coachgym.audit.AuditExportCompleted;
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialIssued;
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplaced;
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialRevoked;
@@ -948,6 +949,36 @@ class AuditEntryJpaEntity {
 
     Instant occurredAt() {
         return occurredAt;
+    }
+
+    static AuditEntryJpaEntity from(AuditExportCompleted event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Audit export completed event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = AuditExportCompleted.ACTION_CODE;
+        entry.resourceType = AuditExportCompleted.RESOURCE_TYPE;
+        entry.resourceId = event.exportId();
+        entry.resourceCodeSnapshot = event.format();
+        entry.summary = "Audit entries exported.";
+
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("occurredFrom", event.occurredFrom().toString());
+        metadata.put("occurredUntil", event.occurredUntil().toString());
+        metadata.put("filtersPresent", event.filterSummary());
+        metadata.put("sortField", event.sortField().name());
+        metadata.put("sortDirection", event.sortDirection().name());
+        metadata.put("rowCount", event.rowCount());
+        metadata.put("maximumRows", event.maximumRows());
+        metadata.put("format", event.format());
+        entry.metadata = Map.copyOf(metadata);
+        entry.occurredAt = event.occurredAt();
+        return entry;
     }
 
     static AuditEntryJpaEntity from(PaymentAttemptCreated event) {
