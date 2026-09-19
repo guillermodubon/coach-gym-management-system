@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.notification.web;
 
 import io.github.guillermodubon.coachgym.notification.application.EmailCompositionException;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryAttachmentException;
+import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryClaimConflictException;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryDataAccessException;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryDuplicateException;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryNotFoundException;
@@ -77,6 +78,15 @@ class EmailDeliveryProblemHandler {
                 HttpStatus.CONFLICT,
                 "EMAIL_DELIVERY_STATE_CONFLICT",
                 "The email delivery cannot be changed from its current state.");
+    }
+
+    @ExceptionHandler(EmailDeliveryClaimConflictException.class)
+    ResponseEntity<ProblemDetail> handleClaimConflict(
+            EmailDeliveryClaimConflictException exception) {
+        return problem(
+                HttpStatus.CONFLICT,
+                "EMAIL_DELIVERY_IN_PROGRESS",
+                "The email delivery is already being processed.");
     }
 
     @ExceptionHandler(EmailDeliveryVersionConflictException.class)

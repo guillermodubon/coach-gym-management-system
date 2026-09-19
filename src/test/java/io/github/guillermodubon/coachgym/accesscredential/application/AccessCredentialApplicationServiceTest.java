@@ -464,7 +464,7 @@ class AccessCredentialApplicationServiceTest {
         assertThat(issue.getAnnotation(Transactional.class)).isNotNull();
         assertThat(revoke.getAnnotation(Transactional.class)).isNotNull();
         assertThat(replace.getAnnotation(Transactional.class)).isNotNull();
-        assertThat(download.getAnnotation(Transactional.class).readOnly()).isTrue();
+        assertThat(download.getAnnotation(Transactional.class)).isNull();
         assertThat(issue.getAnnotation(PreAuthorize.class).value())
                 .isEqualTo("hasAnyRole('ADMIN', 'RECEPTIONIST')");
         assertThat(revoke.getAnnotation(PreAuthorize.class).value())

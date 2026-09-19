@@ -3,6 +3,9 @@ package io.github.guillermodubon.coachgym.notification.infrastructure.smtp;
 import io.github.guillermodubon.coachgym.notification.application.EmailComposer;
 import io.github.guillermodubon.coachgym.notification.application.EmailSender;
 import io.github.guillermodubon.coachgym.notification.domain.EmailDeliveryLifecyclePolicy;
+import io.github.guillermodubon.coachgym.notification.infrastructure.resend.ResendEmailSender;
+import io.github.guillermodubon.coachgym.notification.infrastructure.resend.ResendProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,7 +13,7 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 /** Infrastructure wiring for the provider-neutral composer and SMTP sender. */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(EmailProperties.class)
+@EnableConfigurationProperties({EmailProperties.class, ResendProperties.class})
 class EmailConfiguration {
 
     @Bean
@@ -25,9 +28,18 @@ class EmailConfiguration {
     }
 
     @Bean
-    EmailSender emailSender(EmailProperties properties) {
+    EmailSender emailSender(
+            EmailProperties properties,
+            ResendProperties resendProperties) {
         if (!properties.enabled()) {
             return new DisabledEmailSender();
+        }
+        if ("resend".equals(properties.provider())) {
+            return new ResendEmailSender(
+                    ResendEmailSender.createHttpClient(resendProperties),
+                    new ObjectMapper(),
+                    properties,
+                    resendProperties);
         }
         JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
         mailSender.setHost(properties.smtpHost());

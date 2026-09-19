@@ -9,6 +9,7 @@ import io.github.guillermodubon.coachgym.audit.AuditEntryPage;
 import io.github.guillermodubon.coachgym.audit.AuditQueryValidationException;
 import io.github.guillermodubon.coachgym.audit.AuditSearchQuery;
 import io.github.guillermodubon.coachgym.audit.application.AuditExportApplicationService;
+import io.github.guillermodubon.coachgym.audit.application.AuditExportMetrics;
 import io.github.guillermodubon.coachgym.audit.application.AuditQueryApplicationService;
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
@@ -52,12 +53,15 @@ class AuditQueryController {
 
     private final AuditQueryApplicationService service;
     private final AuditExportApplicationService exportService;
+    private final AuditExportMetrics exportMetrics;
 
     AuditQueryController(
             AuditQueryApplicationService service,
-            AuditExportApplicationService exportService) {
+            AuditExportApplicationService exportService,
+            AuditExportMetrics exportMetrics) {
         this.service = service;
         this.exportService = exportService;
+        this.exportMetrics = exportMetrics;
     }
 
     @GetMapping
@@ -219,12 +223,15 @@ class AuditQueryController {
         try {
             Writer writer = response.getWriter();
             exportService.exportCsv(query, actor, writer);
+            exportMetrics.recordSuccess();
         } catch (IOException exception) {
+            exportMetrics.recordFailure();
             handleCommittedFailure(response, "Audit CSV response could not be written.");
             if (!response.isCommitted()) {
                 throw new AuditExportStreamException(exception);
             }
         } catch (RuntimeException exception) {
+            exportMetrics.recordFailure();
             if (response.isCommitted()) {
                 handleCommittedFailure(response, "Audit CSV response terminated after commitment.");
                 return;

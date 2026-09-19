@@ -50,4 +50,14 @@ class NotificationSearchQueryTest {
                 0, 25, null, null))
                 .isInstanceOf(NotificationValidationException.class);
     }
+
+    @Test
+    void rejectsAnUnboundedCreatedRangeWindow() {
+        assertThatThrownBy(() -> new NotificationSearchQuery(
+                null, null, null, null,
+                Instant.parse("2024-01-01T00:00:00Z"),
+                Instant.parse("2026-01-02T00:00:00Z"),
+                0, 25, null, null))
+                .isInstanceOf(NotificationValidationException.class);
+    }
 }

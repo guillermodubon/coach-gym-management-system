@@ -11,6 +11,7 @@ import io.github.guillermodubon.coachgym.notification.EmailDeliveryFailureCode;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryStatus;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryType;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryDuplicateException;
+import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryClaim;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryNotFoundException;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryPage;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryQuery;
@@ -36,7 +37,9 @@ class JdbcTransactionalEmailDeliveryAdapterIntegrationTest
 
     @BeforeEach
     void clearDeliveries() {
-        jdbcTemplate.execute("truncate table gym.email_delivery_attempts, gym.email_deliveries");
+        jdbcTemplate.execute(
+                "truncate table gym.email_delivery_claims, "
+                        + "gym.email_delivery_attempts, gym.email_deliveries");
     }
 
     @Test
@@ -102,6 +105,46 @@ class JdbcTransactionalEmailDeliveryAdapterIntegrationTest
 
         assertThat(deliveryQuery.findById(pending.id())).contains(pending);
         assertThat(deliveryQuery.findAttempts(pending.id())).isEmpty();
+    }
+
+    @Test
+    void claimsDeliveryOnceUntilLeaseExpiresAndThenAllowsRecovery() {
+        UUID clientId = insertClient("claim");
+        EmailDeliveryDetails pending = deliveryStore.createPending(
+                pending(clientId, UUID.randomUUID(), "a".repeat(64)));
+
+        EmailDeliveryClaim first = deliveryStore.claimForAttempt(
+                        pending.id(), pending.version(), NOW, NOW.plusSeconds(30))
+                .orElseThrow();
+        assertThat(deliveryStore.claimForAttempt(
+                pending.id(), pending.version(), NOW.plusSeconds(1), NOW.plusSeconds(31)))
+                .isEmpty();
+
+        EmailDeliveryClaim recovered = deliveryStore.claimForAttempt(
+                        pending.id(), pending.version(), NOW.plusSeconds(31), NOW.plusSeconds(61))
+                .orElseThrow();
+        assertThat(recovered.claimToken()).isNotEqualTo(first.claimToken());
+    }
+
+    @Test
+    void claimProtectedFinalizationReleasesTheLeaseAtomically() {
+        UUID clientId = insertClient("claim-finalize");
+        EmailDeliveryDetails pending = deliveryStore.createPending(
+                pending(clientId, UUID.randomUUID(), "b".repeat(64)));
+        EmailDeliveryClaim claim = deliveryStore.claimForAttempt(
+                        pending.id(), pending.version(), NOW, NOW.plusSeconds(30))
+                .orElseThrow();
+
+        EmailDeliveryDetails sent = deliveryStore.appendAttemptAndFinalize(
+                sentAttempt(pending.id()), EmailDeliveryStatus.SENT, null, null,
+                NOW.plusSeconds(2), NOW.plusSeconds(2), claim.expectedVersion(),
+                claim.claimToken());
+
+        assertThat(sent.status()).isEqualTo(EmailDeliveryStatus.SENT);
+        assertThat(deliveryQuery.findAttempts(pending.id())).hasSize(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.email_delivery_claims where delivery_id = ?",
+                Integer.class, pending.id())).isZero();
     }
 
     @Test

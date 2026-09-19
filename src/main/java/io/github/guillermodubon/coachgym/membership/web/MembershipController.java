@@ -25,6 +25,7 @@ import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -49,6 +50,7 @@ import org.springframework.web.util.UriComponentsBuilder;
         description = """
                 Membership creation, renewal and lifecycle management.
                 """)
+@SecurityRequirement(name = "sessionCookie")
 class MembershipController {
 
     private final MembershipApplicationService

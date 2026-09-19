@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.notification.application;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryStatus;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryType;
 import io.github.guillermodubon.coachgym.notification.domain.EmailDeliveryValidationException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -20,6 +21,7 @@ public record EmailDeliverySearchQuery(
         EmailDeliverySortDirection sortDirection) {
 
     public static final int MAX_SIZE = 100;
+    public static final Duration MAX_DATE_RANGE = Duration.ofDays(366);
 
     public EmailDeliverySearchQuery {
         if (page < 0 || size < 1 || size > MAX_SIZE) {
@@ -30,6 +32,11 @@ public record EmailDeliverySearchQuery(
                 && requestedFrom.isAfter(requestedUntil)) {
             throw new EmailDeliveryValidationException(
                     "Email delivery requested-from must not be after requested-until.");
+        }
+        if (requestedFrom != null && requestedUntil != null
+                && MAX_DATE_RANGE.compareTo(Duration.between(requestedFrom, requestedUntil)) < 0) {
+            throw new EmailDeliveryValidationException(
+                    "Email delivery requested date range must not exceed 366 days.");
         }
         if (sortField == null) {
             sortField = EmailDeliverySortField.REQUESTED_AT;

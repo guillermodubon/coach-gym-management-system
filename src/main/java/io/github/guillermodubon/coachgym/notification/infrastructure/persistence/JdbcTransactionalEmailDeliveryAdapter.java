@@ -7,6 +7,7 @@ import io.github.guillermodubon.coachgym.notification.EmailDeliveryFailureCode;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryStatus;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryType;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryDataAccessException;
+import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryClaim;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryDuplicateException;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryNotFoundException;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryPage;
@@ -62,6 +63,53 @@ class JdbcTransactionalEmailDeliveryAdapter
 
     JdbcTransactionalEmailDeliveryAdapter(NamedParameterJdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate);
+    }
+
+    @Override
+    @Transactional
+    public Optional<EmailDeliveryClaim> claimForAttempt(
+            UUID deliveryId,
+            long expectedVersion,
+            Instant claimedAt,
+            Instant expiresAt) {
+        requireIdentifier(deliveryId);
+        if (expectedVersion < 0 || claimedAt == null || expiresAt == null
+                || !expiresAt.isAfter(claimedAt)) {
+            throw new IllegalArgumentException("Email delivery claim metadata is invalid.");
+        }
+        UUID claimToken = UUID.randomUUID();
+        String sql = """
+                with candidate as (
+                    select id
+                    from gym.email_deliveries
+                    where id = :deliveryId
+                      and version = :expectedVersion
+                      and status in ('PENDING', 'FAILED')
+                )
+                insert into gym.email_delivery_claims
+                    (delivery_id, claim_token, expected_version, claimed_at, expires_at)
+                select id, :claimToken, :expectedVersion, :claimedAt, :expiresAt
+                from candidate
+                on conflict (delivery_id) do update
+                    set claim_token = excluded.claim_token,
+                        expected_version = excluded.expected_version,
+                        claimed_at = excluded.claimed_at,
+                        expires_at = excluded.expires_at
+                    where gym.email_delivery_claims.expires_at <= :claimedAt
+                returning delivery_id, claim_token, expected_version, claimed_at, expires_at
+                """;
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("deliveryId", deliveryId)
+                .addValue("expectedVersion", expectedVersion)
+                .addValue("claimToken", claimToken)
+                .addValue("claimedAt", offset(claimedAt))
+                .addValue("expiresAt", offset(expiresAt));
+        try {
+            return jdbcTemplate.query(sql, parameters, JdbcTransactionalEmailDeliveryAdapter::mapClaim)
+                    .stream().findFirst();
+        } catch (DataAccessException exception) {
+            throw dataAccess("Email delivery claim could not be acquired.", exception);
+        }
     }
 
     @Override
@@ -166,6 +214,29 @@ class JdbcTransactionalEmailDeliveryAdapter
 
     @Override
     @Transactional
+    public EmailDeliveryDetails appendAttemptAndFinalize(
+            EmailDeliveryAttemptDetails attempt,
+            EmailDeliveryStatus status,
+            EmailDeliveryFailureCode failureCode,
+            String failureMessage,
+            Instant attemptedAt,
+            Instant sentAt,
+            long expectedVersion,
+            UUID claimToken) {
+        Objects.requireNonNull(attempt, "Email delivery attempt is required.");
+        requireClaimToken(claimToken);
+        if (attemptedAt == null || !attemptedAt.equals(attempt.completedAt())) {
+            throw new IllegalArgumentException(
+                    "Email attempt finalization timestamp must match the attempt.");
+        }
+        appendAttempt(attempt);
+        return finalizeAttempt(
+                attempt.deliveryId(), status, failureCode, failureMessage,
+                attemptedAt, sentAt, expectedVersion, claimToken);
+    }
+
+    @Override
+    @Transactional
     public EmailDeliveryDetails finalizeAttempt(
             UUID deliveryId,
             EmailDeliveryStatus status,
@@ -217,6 +288,83 @@ class JdbcTransactionalEmailDeliveryAdapter
                 return rows.get(0);
             }
             return resolveFailedFinalization(deliveryId, status, expectedVersion);
+        } catch (DataAccessException exception) {
+            throw dataAccess("Email delivery could not be finalized.", exception);
+        }
+    }
+
+    @Override
+    @Transactional
+    public EmailDeliveryDetails finalizeAttempt(
+            UUID deliveryId,
+            EmailDeliveryStatus status,
+            EmailDeliveryFailureCode failureCode,
+            String failureMessage,
+            Instant attemptedAt,
+            Instant sentAt,
+            long expectedVersion,
+            UUID claimToken) {
+        requireIdentifier(deliveryId);
+        requireClaimToken(claimToken);
+        if (status == null || status == EmailDeliveryStatus.PENDING) {
+            throw new IllegalArgumentException("Final email delivery status is invalid.");
+        }
+        if (attemptedAt == null || expectedVersion < 0) {
+            throw new IllegalArgumentException("Email finalization metadata is invalid.");
+        }
+        if (status == EmailDeliveryStatus.SENT && (failureCode != null || failureMessage != null
+                || sentAt == null)) {
+            throw new IllegalArgumentException("Sent email delivery metadata is invalid.");
+        }
+        if (status == EmailDeliveryStatus.FAILED && (failureCode == null
+                || failureMessage == null || sentAt != null)) {
+            throw new IllegalArgumentException("Failed email delivery metadata is invalid.");
+        }
+        String normalizedFailure = failureMessage == null
+                ? null : EmailDeliveryValuePolicy.normalizeFailureMessage(failureMessage);
+        String sql = """
+                update gym.email_deliveries as d
+                set status = :status,
+                    last_failure_code = :failureCode,
+                    last_failure_message = :failureMessage,
+                    last_attempt_at = :attemptedAt,
+                    sent_at = :sentAt,
+                    attempt_count = attempt_count + 1,
+                    version = version + 1
+                where d.id = :id
+                  and d.version = :expectedVersion
+                  and exists (
+                      select 1
+                      from gym.email_delivery_claims c
+                      where c.delivery_id = d.id
+                        and c.claim_token = :claimToken
+                        and c.expected_version = :expectedVersion)
+                returning """ + " " + COLUMNS;
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("status", status.name())
+                .addValue("failureCode", failureCode == null ? null : failureCode.name())
+                .addValue("failureMessage", normalizedFailure)
+                .addValue("attemptedAt", offset(attemptedAt))
+                .addValue("sentAt", sentAt == null ? null : offset(sentAt))
+                .addValue("id", deliveryId)
+                .addValue("expectedVersion", expectedVersion)
+                .addValue("claimToken", claimToken);
+        try {
+            List<EmailDeliveryDetails> rows = jdbcTemplate.query(
+                    sql, parameters, JdbcTransactionalEmailDeliveryAdapter::mapDelivery);
+            if (rows.isEmpty()) {
+                return resolveFailedFinalization(deliveryId, status, expectedVersion);
+            }
+            int released = jdbcTemplate.update(
+                    "delete from gym.email_delivery_claims"
+                            + " where delivery_id = :id and claim_token = :claimToken"
+                            + " and expected_version = :expectedVersion",
+                    parameters);
+            if (released != 1) {
+                throw new EmailDeliveryVersionConflictException(
+                        deliveryId, expectedVersion, expectedVersion + 1);
+            }
+            return rows.get(0);
         } catch (DataAccessException exception) {
             throw dataAccess("Email delivery could not be finalized.", exception);
         }
@@ -424,6 +572,15 @@ class JdbcTransactionalEmailDeliveryAdapter
                 rs.getString("provider_message_id"));
     }
 
+    private static EmailDeliveryClaim mapClaim(ResultSet rs, int row) throws SQLException {
+        return new EmailDeliveryClaim(
+                rs.getObject("delivery_id", UUID.class),
+                rs.getObject("claim_token", UUID.class),
+                rs.getLong("expected_version"),
+                instant(rs, "claimed_at"),
+                instant(rs, "expires_at"));
+    }
+
     private static <E extends Enum<E>> E enumValue(String value, Class<E> type) {
         return value == null ? null : Enum.valueOf(type, value);
     }
@@ -450,6 +607,12 @@ class JdbcTransactionalEmailDeliveryAdapter
     private static void requireIdentifier(UUID id) {
         if (id == null) {
             throw new IllegalArgumentException("Email delivery id is required.");
+        }
+    }
+
+    private static void requireClaimToken(UUID claimToken) {
+        if (claimToken == null) {
+            throw new IllegalArgumentException("Email delivery claim token is required.");
         }
     }
 

@@ -73,6 +73,14 @@ class TransactionalEmailDeliveryApplicationServiceTest {
         deliveryStore = org.mockito.Mockito.mock(EmailDeliveryStore.class);
         deliveryQuery = org.mockito.Mockito.mock(EmailDeliveryQuery.class);
         eventPublisher = org.mockito.Mockito.mock(ApplicationEventPublisher.class);
+        when(deliveryStore.claimForAttempt(
+                any(UUID.class), anyLong(), any(Instant.class), any(Instant.class)))
+                .thenAnswer(invocation -> Optional.of(new EmailDeliveryClaim(
+                        invocation.getArgument(0, UUID.class),
+                        UUID.randomUUID(),
+                        invocation.getArgument(1, Long.class),
+                        invocation.getArgument(2, Instant.class),
+                        invocation.getArgument(3, Instant.class))));
         doAnswer(invocation -> {
             EmailDeliveryAttemptDetails attempt = invocation.getArgument(0);
             EmailDeliveryStatus status = invocation.getArgument(1);
@@ -89,6 +97,22 @@ class TransactionalEmailDeliveryApplicationServiceTest {
                 any(EmailDeliveryAttemptDetails.class),
                 any(EmailDeliveryStatus.class),
                 any(), any(), any(Instant.class), any(), anyLong());
+        doAnswer(invocation -> {
+            EmailDeliveryAttemptDetails attempt = invocation.getArgument(0);
+            EmailDeliveryStatus status = invocation.getArgument(1);
+            EmailDeliveryFailureCode failureCode = invocation.getArgument(2);
+            String failureMessage = invocation.getArgument(3);
+            Instant attemptedAt = invocation.getArgument(4);
+            Instant sentAt = invocation.getArgument(5);
+            long expectedVersion = invocation.getArgument(6);
+            deliveryStore.appendAttempt(attempt);
+            return deliveryStore.finalizeAttempt(
+                    attempt.deliveryId(), status, failureCode, failureMessage,
+                    attemptedAt, sentAt, expectedVersion);
+        }).when(deliveryStore).appendAttemptAndFinalize(
+                any(EmailDeliveryAttemptDetails.class),
+                any(EmailDeliveryStatus.class),
+                any(), any(), any(Instant.class), any(), anyLong(), any(UUID.class));
         service = new TransactionalEmailDeliveryApplicationService(
                 sourceResolver,
                 composer,

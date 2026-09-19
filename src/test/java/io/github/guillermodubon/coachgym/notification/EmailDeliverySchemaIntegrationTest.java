@@ -22,7 +22,8 @@ class EmailDeliverySchemaIntegrationTest
     @BeforeEach
     void clearEmailDeliveryFixtures() {
         jdbcTemplate.execute(
-                "truncate table gym.email_delivery_attempts, gym.email_deliveries");
+                "truncate table gym.email_delivery_claims, "
+                        + "gym.email_delivery_attempts, gym.email_deliveries");
     }
 
     @Test

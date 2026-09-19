@@ -13,8 +13,10 @@ import java.nio.file.StandardCopyOption;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Component
+@ConditionalOnProperty(prefix = "gym.storage", name = "provider", havingValue = "local", matchIfMissing = true)
 class LocalPaymentReceiptStorage implements PaymentReceiptStorage {
 
     private final Path root;

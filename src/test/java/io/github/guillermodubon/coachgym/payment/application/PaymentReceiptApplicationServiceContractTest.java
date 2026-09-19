@@ -11,13 +11,12 @@ import org.springframework.transaction.annotation.Transactional;
 class PaymentReceiptApplicationServiceContractTest {
 
     @Test
-    void generationUsesWriteTransactionAndCurrentStaffRoles() {
+    void generationKeepsStorageIouOutsideTheDatabaseTransactionAndUsesCurrentStaffRoles() {
         Method method = method("generate");
         Transactional transaction = method.getAnnotation(Transactional.class);
         PreAuthorize security = method.getAnnotation(PreAuthorize.class);
 
-        assertThat(transaction).isNotNull();
-        assertThat(transaction.readOnly()).isFalse();
+        assertThat(transaction).isNull();
         assertThat(security).isNotNull();
         assertThat(security.value()).isEqualTo("hasAnyRole('ADMIN', 'RECEPTIONIST')");
     }

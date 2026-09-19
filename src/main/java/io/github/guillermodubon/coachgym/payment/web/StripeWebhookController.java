@@ -35,14 +35,17 @@ class StripeWebhookController {
     private final ObjectProvider<PaymentProviderWebhookVerifier> verifierProvider;
     private final PaymentProviderEventApplicationService eventService;
     private final PaymentProviderWebhookLimits requestLimits;
+    private final StripeWebhookMetrics webhookMetrics;
 
     StripeWebhookController(
             ObjectProvider<PaymentProviderWebhookVerifier> verifierProvider,
             PaymentProviderEventApplicationService eventService,
-            PaymentProviderWebhookLimits requestLimits) {
+            PaymentProviderWebhookLimits requestLimits,
+            StripeWebhookMetrics webhookMetrics) {
         this.verifierProvider = Objects.requireNonNull(verifierProvider);
         this.eventService = Objects.requireNonNull(eventService);
         this.requestLimits = Objects.requireNonNull(requestLimits);
+        this.webhookMetrics = Objects.requireNonNull(webhookMetrics);
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -79,15 +82,22 @@ class StripeWebhookController {
         enforceLimits(rawPayload, signatureHeader);
         PaymentProviderWebhookVerifier verifier = verifierProvider.getIfAvailable();
         if (verifier == null) {
+            webhookMetrics.recordRejected(PaymentProviderFailureCode.UNAVAILABLE);
             throw new PaymentProviderException(PaymentProviderFailureCode.UNAVAILABLE);
         }
-        VerifiedPaymentProviderEvent verified = verifier.verify(
-                PaymentProvider.STRIPE, rawPayload, signatureHeader);
-        PaymentProviderEventProcessingResult result = eventService.process(verified);
-        if (result == null) {
-            throw new IllegalStateException("Provider event processing result was missing.");
+        try {
+            VerifiedPaymentProviderEvent verified = verifier.verify(
+                    PaymentProvider.STRIPE, rawPayload, signatureHeader);
+            PaymentProviderEventProcessingResult result = eventService.process(verified);
+            if (result == null) {
+                throw new IllegalStateException("Provider event processing result was missing.");
+            }
+            webhookMetrics.record(verified.eventType(), result);
+            return ResponseEntity.noContent().build();
+        } catch (PaymentProviderException exception) {
+            webhookMetrics.recordRejected(exception.failureCode());
+            throw exception;
         }
-        return ResponseEntity.noContent().build();
     }
 
     private void enforceLimits(byte[] rawPayload, String signatureHeader) {

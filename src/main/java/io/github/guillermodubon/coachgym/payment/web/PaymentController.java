@@ -19,6 +19,7 @@ import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -43,6 +44,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Tag(
         name = "Payments",
         description = "Payment registration and retrieval.")
+@SecurityRequirement(name = "sessionCookie")
 class PaymentController {
 
     private final PaymentApplicationService paymentApplicationService;
