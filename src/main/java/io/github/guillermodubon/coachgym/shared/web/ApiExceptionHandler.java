@@ -1,5 +1,6 @@
 package io.github.guillermodubon.coachgym.shared.web;
 
+import io.github.guillermodubon.coachgym.shared.RateLimitExceededException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -68,6 +69,18 @@ class ApiExceptionHandler {
                                 HttpStatus.UNAUTHORIZED,
                                 "INVALID_CREDENTIALS",
                                 "Invalid credentials."));
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    ResponseEntity<ProblemDetail> handleAuthenticationRateLimit(
+            RateLimitExceededException exception) {
+        ProblemDetail problem = ApiProblemFactory.create(
+                HttpStatus.TOO_MANY_REQUESTS,
+                "AUTHENTICATION_RATE_LIMITED",
+                "Too many unsuccessful authentication attempts. Try again later.");
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", Long.toString(exception.retryAfterSeconds()))
+                .body(problem);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
