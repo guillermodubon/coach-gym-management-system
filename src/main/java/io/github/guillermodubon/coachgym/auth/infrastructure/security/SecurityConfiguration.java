@@ -112,6 +112,8 @@ class SecurityConfiguration {
                         .authenticated()
                         .requestMatchers("/api/v1/reporting/**")
                         .authenticated()
+                        .requestMatchers("/api/v1/audit-entries/**")
+                        .authenticated()
                         .anyRequest()
                         .denyAll())
                 .build();
