@@ -49,6 +49,9 @@ class StripeWebhookControllerTest {
     @MockitoBean
     private PaymentProviderEventApplicationService eventService;
 
+    @MockitoBean
+    private StripeWebhookMetrics webhookMetrics;
+
     @Test
     void verifiesBeforeProcessingAndAcceptsDuplicateAcknowledgementWithoutSession() throws Exception {
         when(verifier.verify(PaymentProvider.STRIPE, "{}".getBytes(), "v1=test"))

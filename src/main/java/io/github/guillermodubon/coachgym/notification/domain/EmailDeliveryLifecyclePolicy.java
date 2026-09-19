@@ -83,6 +83,20 @@ public final class EmailDeliveryLifecyclePolicy {
     }
 
     /**
+     * An ambiguous transport result is not a safe retry candidate: the
+     * provider may already have accepted the message. It remains FAILED for
+     * reporting, but requires an explicit operational reconciliation instead
+     * of another blind send.
+     */
+    public boolean isRetryEligible(EmailDeliveryDetails delivery) {
+        return delivery != null
+                && isRetryEligible(delivery.status())
+                && delivery.lastFailureCode()
+                != io.github.guillermodubon.coachgym.notification.EmailDeliveryFailureCode
+                        .AMBIGUOUS_TRANSPORT_OUTCOME;
+    }
+
+    /**
      * Validates an explicit retry against the persisted state and version.
      * {@code attemptCount} includes the initial attempt; the configured limit
      * counts only retries after that initial attempt.
@@ -102,7 +116,7 @@ public final class EmailDeliveryLifecyclePolicy {
             throw new EmailDeliveryVersionConflictException(
                     delivery.id(), expectedVersion, delivery.version());
         }
-        if (!isRetryEligible(delivery.status())) {
+        if (!isRetryEligible(delivery)) {
             throw new EmailDeliveryStateConflictException(
                     delivery.id(), delivery.status(), EmailDeliveryStatus.SENT);
         }

@@ -92,7 +92,6 @@ public class PaymentReceiptApplicationService {
      * Files are written before metadata, and are deleted if metadata cannot become
      * canonical. A duplicate insert is resolved by reading the winning row.
      */
-    @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public PaymentReceiptDetails generate(
             GeneratePaymentReceiptCommand command,

@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.payment.application;
 import io.github.guillermodubon.coachgym.payment.PaymentMethod;
 import io.github.guillermodubon.coachgym.payment.PaymentStatus;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentValidationException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.UUID;
@@ -21,6 +22,7 @@ public record PaymentSearchQuery(
         PaymentSortDirection direction) {
 
     public static final int MAX_SIZE = 100;
+    public static final Duration MAX_DATE_RANGE = Duration.ofDays(366);
 
     public PaymentSearchQuery {
 
@@ -48,6 +50,11 @@ public record PaymentSearchQuery(
                 && paidFrom.isAfter(paidUntil)) {
             throw new PaymentValidationException(
                     "paidFrom must not be after paidUntil.");
+        }
+        if (paidFrom != null && paidUntil != null
+                && MAX_DATE_RANGE.compareTo(Duration.between(paidFrom, paidUntil)) < 0) {
+            throw new PaymentValidationException(
+                    "Payment paid date range must not exceed 366 days.");
         }
     }
 

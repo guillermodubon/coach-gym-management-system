@@ -24,7 +24,6 @@ import java.util.Objects;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -34,18 +33,13 @@ import org.springframework.stereotype.Service;
  * Coordinates transactional email delivery without holding a database
  * transaction across SMTP I/O.
  *
- * <p>Persistence adapters provide transaction A (durable {@code PENDING}) and
- * transaction B (attempt plus versioned finalization). Striped local locks
- * prevent duplicate local sends while PostgreSQL uniqueness and optimistic
- * locking protect the durable boundary across application instances.</p>
+ * <p>Persistence adapters provide transaction A (durable {@code PENDING}), a
+ * short database-owned attempt lease, and transaction B (attempt plus
+ * versioned finalization). No process-local lock is used as a correctness
+ * authority, so concurrent backend instances coordinate through PostgreSQL.</p>
  */
 @Service
 public class TransactionalEmailDeliveryApplicationService {
-
-    private static final String PAYMENT_RECEIPT_LOCK_PREFIX = "payment-receipt:";
-    private static final String ACCESS_CREDENTIAL_LOCK_PREFIX = "access-credential:";
-    private static final String RETRY_LOCK_PREFIX = "retry:";
-    private static final int LOCAL_LOCK_STRIPES = 64;
 
     private final EmailDeliverySourceResolver sourceResolver;
     private final EmailComposer composer;
@@ -55,7 +49,6 @@ public class TransactionalEmailDeliveryApplicationService {
     private final EmailDeliveryLifecyclePolicy lifecyclePolicy;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
-    private final ReentrantLock[] localLocks = createLockStripes();
 
     @Autowired
     public TransactionalEmailDeliveryApplicationService(
@@ -104,8 +97,7 @@ public class TransactionalEmailDeliveryApplicationService {
         requireActor(actor);
         EmailDeliverySource source = sourceResolver.resolvePaymentReceiptForPayment(
                 command.paymentId());
-        return requestCanonical(
-                source, actor.id(), actor.username(), PAYMENT_RECEIPT_LOCK_PREFIX);
+        return requestCanonical(source, actor.id(), actor.username());
     }
 
     /** Requests the current canonical access credential email for a client. */
@@ -117,8 +109,7 @@ public class TransactionalEmailDeliveryApplicationService {
         requireActor(actor);
         EmailDeliverySource source = sourceResolver.resolveCurrentAccessCredentialForClient(
                 command.clientId());
-        return requestCanonical(
-                source, actor.id(), actor.username(), ACCESS_CREDENTIAL_LOCK_PREFIX);
+        return requestCanonical(source, actor.id(), actor.username());
     }
 
     /** Retries one failed delivery using its persisted server-owned snapshots. */
@@ -129,26 +120,18 @@ public class TransactionalEmailDeliveryApplicationService {
         requireCommand(command, "Email delivery retry command");
         requireActor(actor);
 
-        String lockKey = RETRY_LOCK_PREFIX + command.deliveryId();
-        ReentrantLock lock = lockFor(lockKey);
-        lock.lock();
-        try {
-            EmailDeliveryDetails delivery = deliveryQuery.findById(command.deliveryId())
-                    .orElseThrow(() -> new EmailDeliveryNotFoundException(command.deliveryId()));
-            // The state and version are checked again after acquiring the local
-            // lock. A waiting concurrent retry must observe the winner's update.
-            lifecyclePolicy.requireRetryAllowed(delivery, command.expectedVersion());
+        EmailDeliveryDetails delivery = deliveryQuery.findById(command.deliveryId())
+                .orElseThrow(() -> new EmailDeliveryNotFoundException(command.deliveryId()));
+        lifecyclePolicy.requireRetryAllowed(delivery, command.expectedVersion());
 
-            EmailDeliverySource resolved = sourceResolver.resolve(
-                    delivery.deliveryType(), delivery.sourceResourceId());
-            validateRetrySource(delivery, resolved);
-            EmailDeliverySource retrySource = withPersistedRecipient(delivery, resolved);
-            ComposedEmail composed = composeSafely(retrySource);
-            EmailMessage message = messageForRetry(delivery, retrySource, composed);
-            return sendAndFinalize(delivery, message, actor.id(), actor.username());
-        } finally {
-            lock.unlock();
-        }
+        EmailDeliverySource resolved = sourceResolver.resolve(
+                delivery.deliveryType(), delivery.sourceResourceId());
+        validateRetrySource(delivery, resolved);
+        EmailDeliverySource retrySource = withPersistedRecipient(delivery, resolved);
+        ComposedEmail composed = composeSafely(retrySource);
+        EmailMessage message = messageForRetry(delivery, retrySource, composed);
+        EmailDeliveryClaim claim = claimForAttempt(delivery);
+        return sendAndFinalize(delivery, message, actor.id(), actor.username(), claim);
     }
 
     /** Returns one safe operational delivery snapshot for authenticated staff. */
@@ -185,8 +168,7 @@ public class TransactionalEmailDeliveryApplicationService {
     private EmailDeliveryDetails requestCanonical(
             EmailDeliverySource source,
             UUID actorUserId,
-            String actorIdentifier,
-            String lockPrefix) {
+            String actorIdentifier) {
         ComposedEmail composed = composeSafely(source);
         verifyComposedSource(source, composed);
         String digest = EmailDeliveryIdempotency.derive(
@@ -195,45 +177,40 @@ public class TransactionalEmailDeliveryApplicationService {
                 source.recipient(),
                 composed.templateVersion());
 
-        String lockKey = lockPrefix + digest;
-        ReentrantLock lock = lockFor(lockKey);
-        lock.lock();
-        try {
-            Optional<EmailDeliveryDetails> existing = deliveryQuery
-                    .findByIdempotencyKeyDigest(digest);
-            if (existing.isPresent()) {
-                // PENDING is intentionally returned as-is. A crashed process
-                // must not be converted into an uncontrolled automatic resend.
-                return existing.get();
-            }
-
-            Instant requestedAt = now();
-            EmailDeliveryDetails pending = pendingDetails(
-                    source, composed, digest, actorUserId, requestedAt);
-            EmailDeliveryDetails persisted;
-            try {
-                persisted = deliveryStore.createPending(pending);
-            } catch (EmailDeliveryDuplicateException duplicate) {
-                // Another instance may have won the PostgreSQL uniqueness race.
-                return deliveryQuery.findByIdempotencyKeyDigest(digest)
-                        .orElseThrow(() -> duplicate);
-            }
-            if (persisted == null) {
-                throw new EmailDeliveryDataAccessException(
-                        "Email delivery could not be persisted.", null);
-            }
-            return sendAndFinalize(
-                    persisted, composed.message(), actorUserId, actorIdentifier);
-        } finally {
-            lock.unlock();
+        Optional<EmailDeliveryDetails> existing = deliveryQuery
+                .findByIdempotencyKeyDigest(digest);
+        if (existing.isPresent()) {
+            // PENDING is intentionally returned as-is. A crashed process must
+            // not be converted into an uncontrolled automatic resend.
+            return existing.get();
         }
+
+        Instant requestedAt = now();
+        EmailDeliveryDetails pending = pendingDetails(
+                source, composed, digest, actorUserId, requestedAt);
+        EmailDeliveryDetails persisted;
+        try {
+            persisted = deliveryStore.createPending(pending);
+        } catch (EmailDeliveryDuplicateException duplicate) {
+            // Another instance may have won the PostgreSQL uniqueness race.
+            return deliveryQuery.findByIdempotencyKeyDigest(digest)
+                    .orElseThrow(() -> duplicate);
+        }
+        if (persisted == null) {
+            throw new EmailDeliveryDataAccessException(
+                    "Email delivery could not be persisted.", null);
+        }
+        EmailDeliveryClaim claim = claimForAttempt(persisted);
+        return sendAndFinalize(
+                persisted, composed.message(), actorUserId, actorIdentifier, claim);
     }
 
     private EmailDeliveryDetails sendAndFinalize(
             EmailDeliveryDetails delivery,
             EmailMessage message,
             UUID actorUserId,
-            String actorIdentifier) {
+            String actorIdentifier,
+            EmailDeliveryClaim claim) {
         Instant startedAt = atOrAfter(delivery.requestedAt(), now());
         EmailSendResult result = sendSafely(message);
         Instant completedAt = atOrAfter(startedAt, now());
@@ -259,7 +236,8 @@ public class TransactionalEmailDeliveryApplicationService {
                 result.failureMessage(),
                 completedAt,
                 sentAt,
-                delivery.version());
+                claim.expectedVersion(),
+                claim.claimToken());
         if (finalized == null) {
             throw new EmailDeliveryDataAccessException(
                     "Email delivery finalization returned no persisted value.", null);
@@ -279,6 +257,17 @@ public class TransactionalEmailDeliveryApplicationService {
                 EmailDeliveryValuePolicy.maskRecipient(finalized.recipientSnapshot()),
                 actorIdentifier));
         return finalized;
+    }
+
+    private EmailDeliveryClaim claimForAttempt(EmailDeliveryDetails delivery) {
+        Instant claimedAt = now();
+        Instant expiresAt = claimedAt.plus(lifecyclePolicy.stalePendingThreshold());
+        Optional<EmailDeliveryClaim> claim = deliveryStore.claimForAttempt(
+                delivery.id(), delivery.version(), claimedAt, expiresAt);
+        if (claim.isEmpty()) {
+            throw new EmailDeliveryClaimConflictException(delivery.id());
+        }
+        return claim.get();
     }
 
     private EmailSendResult sendSafely(EmailMessage message) {
@@ -452,15 +441,4 @@ public class TransactionalEmailDeliveryApplicationService {
         }
     }
 
-    private ReentrantLock lockFor(String key) {
-        return localLocks[Math.floorMod(key.hashCode(), localLocks.length)];
-    }
-
-    private static ReentrantLock[] createLockStripes() {
-        ReentrantLock[] locks = new ReentrantLock[LOCAL_LOCK_STRIPES];
-        for (int index = 0; index < locks.length; index++) {
-            locks[index] = new ReentrantLock();
-        }
-        return locks;
-    }
 }
