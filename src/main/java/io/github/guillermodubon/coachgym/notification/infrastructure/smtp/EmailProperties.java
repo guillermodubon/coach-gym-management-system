@@ -14,6 +14,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "coach-gym.email")
 public record EmailProperties(
         boolean enabled,
+        String provider,
         String organizationName,
         String templateVersion,
         String fromAddress,
@@ -42,6 +43,7 @@ public record EmailProperties(
 
     @ConstructorBinding
     public EmailProperties {
+        provider = defaultText(provider, "smtp").toLowerCase(Locale.ROOT);
         organizationName = defaultText(organizationName, "Coach Gym");
         templateVersion = defaultText(templateVersion, "v1");
         fromAddress = defaultText(fromAddress, "no-reply@coach-gym.local");
@@ -82,7 +84,7 @@ public record EmailProperties(
             int maxAttachmentBytes,
             int maxSubjectLength,
             int maxRecipientLength) {
-        this(enabled, organizationName, templateVersion, fromAddress, fromName, replyTo,
+        this(enabled, "smtp", organizationName, templateVersion, fromAddress, fromName, replyTo,
                 smtpHost, smtpPort, smtpUsername, smtpPassword, smtpAuthEnabled,
                 smtpStarttlsEnabled, connectionTimeout, readTimeout, writeTimeout,
                 maxMessageBytes, maxAttachmentBytes, maxSubjectLength, maxRecipientLength,
@@ -95,14 +97,16 @@ public record EmailProperties(
         if (!enabled) {
             return true;
         }
-        return validText(organizationName, 200)
+        return (provider.equals("smtp") || provider.equals("resend"))
+                && validText(organizationName, 200)
                 && validVersion(templateVersion)
                 && validEmail(fromAddress)
                 && validOptionalHeader(fromName, 200)
                 && validOptionalEmail(replyTo)
-                && validHost(smtpHost)
-                && smtpPort >= 1 && smtpPort <= 65_535
-                && (!smtpAuthEnabled || (hasText(smtpUsername) && hasText(smtpPassword)))
+                && (provider.equals("resend") ||
+                    (validHost(smtpHost)
+                        && smtpPort >= 1 && smtpPort <= 65_535
+                        && (!smtpAuthEnabled || (hasText(smtpUsername) && hasText(smtpPassword)))))
                 && positiveBounded(connectionTimeout, Duration.ofMinutes(1))
                 && positiveBounded(readTimeout, Duration.ofMinutes(2))
                 && positiveBounded(writeTimeout, Duration.ofMinutes(2))
@@ -117,6 +121,7 @@ public record EmailProperties(
     @Override
     public String toString() {
         return "EmailProperties[enabled=" + enabled
+                + ", provider=" + provider
                 + ", organizationNamePresent=" + hasText(organizationName)
                 + ", templateVersion=" + templateVersion
                 + ", fromAddressPresent=" + hasText(fromAddress)

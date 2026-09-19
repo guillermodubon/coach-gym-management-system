@@ -8,5 +8,5 @@
  */
 @org.springframework.modulith.ApplicationModule(
         displayName = "Access Credentials",
-        allowedDependencies = {"auth", "client", "shared :: web", "user"})
+        allowedDependencies = {"auth", "client", "shared :: web", "shared :: storage", "user"})
 package io.github.guillermodubon.coachgym.accesscredential;

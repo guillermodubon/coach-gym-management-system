@@ -176,7 +176,6 @@ public class AccessCredentialApplicationService {
      * Loads the canonical active PNG after checking persisted artifact metadata.
      * The raw token is never reconstructed from the database.
      */
-    @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public AccessCredentialContent downloadActiveByClientId(UUID clientId) {
         requireIdentifier(clientId, "Client id");
@@ -184,7 +183,6 @@ public class AccessCredentialApplicationService {
     }
 
     /** Compatibility name for callers that address downloads by client. */
-    @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public AccessCredentialContent downloadByClientId(UUID clientId) {
         requireIdentifier(clientId, "Client id");

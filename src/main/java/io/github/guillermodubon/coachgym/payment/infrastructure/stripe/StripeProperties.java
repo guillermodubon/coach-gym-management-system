@@ -20,6 +20,22 @@ public record StripeProperties(
         int maxWebhookPayloadBytes,
         int maxSignatureHeaderLength) {
 
+    @Override
+    public String toString() {
+        return "StripeProperties[enabled=" + enabled
+                + ", sandbox=" + sandbox
+                + ", secretKeyPresent=" + hasText(secretKey)
+                + ", webhookSigningSecretPresent=" + hasText(webhookSigningSecret)
+                + ", successUrlPresent=" + hasText(successUrl)
+                + ", cancelUrlPresent=" + hasText(cancelUrl)
+                + ", connectTimeout=" + connectTimeout
+                + ", readTimeout=" + readTimeout
+                + ", webhookTolerance=" + webhookTolerance
+                + ", maxWebhookPayloadBytes=" + maxWebhookPayloadBytes
+                + ", maxSignatureHeaderLength=" + maxSignatureHeaderLength
+                + ']';
+    }
+
     @AssertTrue(message = "Stripe Test Mode configuration is invalid")
     public boolean isValidWhenEnabled() {
         if (!enabled) {

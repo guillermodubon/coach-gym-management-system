@@ -11,8 +11,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Component
+@ConditionalOnProperty(prefix = "gym.storage", name = "provider", havingValue = "local", matchIfMissing = true)
 class LocalClientPhotoStorage implements ClientPhotoStorage {
 
     private final Path root;

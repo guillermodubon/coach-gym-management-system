@@ -22,9 +22,11 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 /** Local canonical PNG adapter with server-owned keys and atomic promotion. */
 @Component
+@ConditionalOnProperty(prefix = "gym.storage", name = "provider", havingValue = "local", matchIfMissing = true)
 class LocalAccessCredentialStorage implements AccessCredentialStorage {
 
     private static final String CONTENT_TYPE = "image/png";
