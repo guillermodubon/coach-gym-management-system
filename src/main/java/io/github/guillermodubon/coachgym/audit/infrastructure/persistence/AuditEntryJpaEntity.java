@@ -18,6 +18,9 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
 import io.github.guillermodubon.coachgym.maintenance.*;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
+import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
+import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
+import io.github.guillermodubon.coachgym.user.StaffProfileUpdated;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptCreated;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusChanged;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatus;
@@ -1142,6 +1145,70 @@ class AuditEntryJpaEntity {
         }
         entry.metadata = Map.copyOf(metadata);
         entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffProfileUpdated event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Staff profile updated event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = staffProfileEntry(
+                event.userId(), event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "STAFF_PROFILE_UPDATED";
+        entry.summary = "Staff self-profile updated.";
+        entry.metadata = Map.of(
+                "changedFields",
+                event.changedFields().stream().sorted().toList());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffProfilePhotoChanged event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Staff profile photo event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = staffProfileEntry(
+                event.userId(), event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = event.photoPresent()
+                ? "STAFF_PROFILE_PHOTO_UPDATED"
+                : "STAFF_PROFILE_PHOTO_REMOVED";
+        entry.summary = event.photoPresent()
+                ? "Staff profile photo updated."
+                : "Staff profile photo removed.";
+        entry.metadata = Map.of("photoPresent", event.photoPresent());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffPasswordChanged event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Staff password changed event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = staffProfileEntry(
+                event.userId(), event.actorIdentifier(), event.occurredAt());
+        entry.actionCode = "STAFF_PASSWORD_CHANGED";
+        entry.summary = "Staff password changed.";
+        entry.metadata = Map.of(
+                "reauthenticationRequired", event.reauthenticationRequired());
+        return entry;
+    }
+
+    private static AuditEntryJpaEntity staffProfileEntry(
+            UUID userId,
+            String actorIdentifier,
+            Instant occurredAt) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = userId;
+        entry.actorIdentifierSnapshot = actorIdentifier;
+        entry.resourceType = "STAFF_PROFILE";
+        entry.resourceId = userId;
+        entry.resourceCodeSnapshot = null;
+        entry.occurredAt = occurredAt;
         return entry;
     }
 

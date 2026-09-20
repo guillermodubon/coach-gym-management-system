@@ -60,7 +60,8 @@ public final class AuditQueryPolicy {
             "PAYMENT_ATTEMPT",
             "PAYMENT_RECEIPT",
             "PROMOTION",
-            "SETTINGS");
+            "SETTINGS",
+            "STAFF_PROFILE");
 
     private static final Set<String> ALLOWED_ACTION_CODES = immutableSet(
             "ACCESS_DENIED",
@@ -118,7 +119,11 @@ public final class AuditQueryPolicy {
             "PROMOTION_DEACTIVATED",
             "PROMOTION_ELIGIBLE_PLANS_CHANGED",
             "PROMOTION_REACTIVATED",
-            "PROMOTION_UPDATED");
+            "PROMOTION_UPDATED",
+            "STAFF_PASSWORD_CHANGED",
+            "STAFF_PROFILE_PHOTO_REMOVED",
+            "STAFF_PROFILE_PHOTO_UPDATED",
+            "STAFF_PROFILE_UPDATED");
 
     private AuditQueryPolicy() {}
 

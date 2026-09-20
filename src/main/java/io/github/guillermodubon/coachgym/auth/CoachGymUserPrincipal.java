@@ -4,6 +4,7 @@ import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyActor;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyActorProvider;
 import io.github.guillermodubon.coachgym.user.AuthenticatedUser;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.AuthenticatedActorProvider;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -17,7 +18,8 @@ import org.springframework.security.core.userdetails.UserDetails;
  * <p>This is part of the authentication module contract because both its web and security
  * adapters need to read the authenticated identity.</p>
  */
-public final class CoachGymUserPrincipal implements UserDetails, AccessPaymentPolicyActorProvider {
+public final class CoachGymUserPrincipal implements UserDetails,
+        AccessPaymentPolicyActorProvider, AuthenticatedActorProvider {
 
     private final UUID id;
     private final String username;

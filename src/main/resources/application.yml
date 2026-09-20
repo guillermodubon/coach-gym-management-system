@@ -53,6 +53,8 @@ gym:
       directory: ${ACCESS_CREDENTIALS_DIRECTORY:data/access-credentials}
     payment-receipts:
       directory: ${PAYMENT_RECEIPTS_DIRECTORY:data/payment-receipts}
+    staff-photos:
+      directory: ${STAFF_PROFILE_PHOTOS_DIRECTORY:data/staff-profile-photos}
 
 coach-gym:
   security:
