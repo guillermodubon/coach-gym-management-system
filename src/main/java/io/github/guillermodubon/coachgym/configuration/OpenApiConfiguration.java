@@ -37,6 +37,15 @@ class OpenApiConfiguration {
                                         GET /api/v1/auth/csrf and send it using
                                         the X-XSRF-TOKEN request header.
 
+                                        Authenticated ADMIN and RECEPTIONIST users
+                                        can manage only their own self-profile at
+                                        /api/v1/me/profile. Only firstName and
+                                        lastName are editable. Profile mutations,
+                                        private photo upload/removal, and password
+                                        changes require CSRF. Password changes
+                                        require reauthentication; organization and
+                                        branch context is deferred to a later API.
+
                                         Equipment and equipment categories are
                                         never physically deleted through the
                                         public API. Lifecycle and active-state
