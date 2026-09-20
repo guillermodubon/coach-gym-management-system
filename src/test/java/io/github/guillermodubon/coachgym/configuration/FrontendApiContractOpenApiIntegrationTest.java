@@ -26,6 +26,9 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
 
         assertThat(paths.keySet()).contains(
                 "/api/v1/auth/csrf",
+                "/api/v1/me/profile",
+                "/api/v1/me/profile/photo",
+                "/api/v1/me/profile/password",
                 "/api/v1/clients",
                 "/api/v1/plans",
                 "/api/v1/promotions",
@@ -59,6 +62,12 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
         assertThat(schemes).containsKeys("sessionCookie", "stripeWebhookSignature");
         assertSessionSecurity(document, "/api/v1/auth/me", "get");
         assertSessionSecurity(document, "/api/v1/auth/logout", "post");
+        assertSessionSecurity(document, "/api/v1/me/profile", "get");
+        assertSessionSecurity(document, "/api/v1/me/profile", "put");
+        assertSessionSecurity(document, "/api/v1/me/profile/photo", "get");
+        assertSessionSecurity(document, "/api/v1/me/profile/photo", "put");
+        assertSessionSecurity(document, "/api/v1/me/profile/photo", "delete");
+        assertSessionSecurity(document, "/api/v1/me/profile/password", "post");
         assertSessionSecurity(document, "/api/v1/clients", "post");
         assertSessionSecurity(document, "/api/v1/plans", "get");
         assertSessionSecurity(document, "/api/v1/promotions", "get");
@@ -100,6 +109,17 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
 
         assertThat(document)
                 .doesNotContain("ROLE_MAINTENANCE", "passwordHash", "secretKey", "serviceRoleKey", "storageKey");
+        Map<String, Object> profileSchema = JsonPath.read(
+                document, "$.components.schemas.StaffSelfProfile.properties");
+        assertThat(profileSchema.keySet())
+                .contains("displayName", "roles", "status", "photoPresent", "photoUrl", "version")
+                .doesNotContain("organizationId", "organizationScope", "branchId", "branchAssignments");
+        Map<String, Object> passwordSchema = JsonPath.read(
+                document, "$.components.schemas.ChangeStaffPasswordRequest.properties");
+        assertThat(passwordSchema.keySet())
+                .containsExactlyInAnyOrder(
+                        "currentPassword", "newPassword", "newPasswordConfirmation")
+                .doesNotContain("userId", "role", "status", "passwordHash", "sessionId");
     }
 
     @Test

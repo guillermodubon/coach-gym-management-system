@@ -35,7 +35,11 @@ class AuditMetadataSanitizerTest {
                 Map.entry("EMAIL_DELIVERY_SENT", "deliveryType"),
                 Map.entry("EQUIPMENT_REGISTERED", "categoryId"),
                 Map.entry("INCIDENT_REPORTED", "equipmentId"),
-                Map.entry("MAINTENANCE_SCHEDULED", "maintenanceType"));
+                Map.entry("MAINTENANCE_SCHEDULED", "maintenanceType"),
+                Map.entry("STAFF_PROFILE_UPDATED", "changedFields"),
+                Map.entry("STAFF_PROFILE_PHOTO_UPDATED", "photoPresent"),
+                Map.entry("STAFF_PROFILE_PHOTO_REMOVED", "photoPresent"),
+                Map.entry("STAFF_PASSWORD_CHANGED", "reauthenticationRequired"));
 
         for (Map.Entry<String, String> entry : expectedKeys.entrySet()) {
             Set<String> allowlist = AuditMetadataPolicy.allowedKeysForAction(entry.getKey());
@@ -147,6 +151,24 @@ class AuditMetadataSanitizerTest {
         AuditMetadataProjection nullSource = new AuditMetadataSanitizer().sanitize(
                 "PAYMENT_REGISTERED", null);
         assertThat(nullSource).isEqualTo(AuditMetadataProjection.empty());
+    }
+
+    @Test
+    void sanitizesStaffProfileMetadataByPositiveAllowlist() {
+        Map<String, Object> source = new LinkedHashMap<>();
+        source.put("changedFields", List.of("firstName", "lastName"));
+        source.put("passwordHash", "never-return");
+        source.put("storageKey", "never-return");
+
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "STAFF_PROFILE_UPDATED", source);
+
+        assertThat(projection.values()).containsEntry(
+                "changedFields", List.of("firstName", "lastName"));
+        assertThat(projection.values()).doesNotContainKeys(
+                "passwordHash", "storageKey");
+        assertThat(projection.values().toString()).doesNotContain("never-return");
+        assertThat(projection.metadataRedacted()).isTrue();
     }
 
     @Test

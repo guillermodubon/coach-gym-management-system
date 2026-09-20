@@ -34,7 +34,16 @@ class AuditQueryPublicContractTest {
         assertThat(AuditQueryPolicy.allowedResourceTypes())
                 .contains("PAYMENT", "ACCESS_RECORD", "EMAIL_DELIVERY");
         assertThat(AuditQueryPolicy.allowedActionCodes())
-                .contains("PAYMENT_REFUNDED", "ACCESS_DENIED", "CLIENT_REGISTERED");
+                .contains(
+                        "PAYMENT_REFUNDED",
+                        "ACCESS_DENIED",
+                        "CLIENT_REGISTERED",
+                        "STAFF_PROFILE_UPDATED",
+                        "STAFF_PROFILE_PHOTO_UPDATED",
+                        "STAFF_PROFILE_PHOTO_REMOVED",
+                        "STAFF_PASSWORD_CHANGED");
+        assertThat(AuditQueryPolicy.allowedResourceTypes())
+                .contains("STAFF_PROFILE");
     }
 
     @Test
