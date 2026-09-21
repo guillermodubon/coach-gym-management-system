@@ -126,6 +126,10 @@ public final class AuditMetadataPolicy {
                 "changedFields", "photoPresent", "reauthenticationRequired"));
         policy.put("STAFF_PASSWORD_", immutableSet(
                 "reauthenticationRequired"));
+        policy.put("ORGANIZATION_", immutableSet(
+                "changedFields"));
+        policy.put("GYM_BRANCH_", immutableSet(
+                "organizationId", "changedFields", "previousStatus", "newStatus"));
         policy.put("PLAN_", Set.of());
         policy.put("CLIENT_", Set.of());
         return Collections.unmodifiableMap(policy);

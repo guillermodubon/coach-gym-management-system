@@ -29,6 +29,10 @@ import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
+import io.github.guillermodubon.coachgym.organization.GymBranchCreated;
+import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
+import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
+import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
 import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
 import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
 import io.github.guillermodubon.coachgym.user.StaffProfileUpdated;
@@ -83,6 +87,14 @@ public interface AuditEntryStore {
     void recordStaffProfilePhotoChanged(StaffProfilePhotoChanged event);
 
     void recordStaffPasswordChanged(StaffPasswordChanged event);
+
+    void recordOrganizationUpdated(OrganizationUpdated event);
+
+    void recordGymBranchCreated(GymBranchCreated event);
+
+    void recordGymBranchUpdated(GymBranchUpdated event);
+
+    void recordGymBranchStatusChanged(GymBranchStatusChanged event);
 
     void recordDeniedAccessAttempt(AccessAttemptRecorded event);
 

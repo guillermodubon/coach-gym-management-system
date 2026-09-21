@@ -18,6 +18,10 @@ import io.github.guillermodubon.coachgym.equipment.EquipmentUpdatedEvent;
 import io.github.guillermodubon.coachgym.maintenance.*;
 import io.github.guillermodubon.coachgym.membership.*;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
+import io.github.guillermodubon.coachgym.organization.GymBranchCreated;
+import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
+import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
+import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
 import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
 import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
 import io.github.guillermodubon.coachgym.user.StaffProfileUpdated;
@@ -1194,6 +1198,96 @@ class AuditEntryJpaEntity {
         entry.summary = "Staff password changed.";
         entry.metadata = Map.of(
                 "reauthenticationRequired", event.reauthenticationRequired());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(OrganizationUpdated event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Organization updated event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "ORGANIZATION_UPDATED";
+        entry.resourceType = "ORGANIZATION";
+        entry.resourceId = event.organizationId();
+        entry.resourceCodeSnapshot = event.organizationCode();
+        entry.summary = "Organization updated.";
+        entry.metadata = Map.of(
+                "changedFields", event.changedFields().stream().sorted().toList());
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(GymBranchCreated event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Gym branch created event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "GYM_BRANCH_CREATED";
+        entry.resourceType = "GYM_BRANCH";
+        entry.resourceId = event.branchId();
+        entry.resourceCodeSnapshot = event.branchCode();
+        entry.summary = "Gym branch created.";
+        entry.metadata = Map.of("organizationId", event.organizationId().toString());
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(GymBranchUpdated event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Gym branch updated event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "GYM_BRANCH_UPDATED";
+        entry.resourceType = "GYM_BRANCH";
+        entry.resourceId = event.branchId();
+        entry.resourceCodeSnapshot = event.branchCode();
+        entry.summary = "Gym branch updated.";
+        entry.metadata = Map.of(
+                "organizationId", event.organizationId().toString(),
+                "changedFields", event.changedFields().stream().sorted().toList());
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(GymBranchStatusChanged event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Gym branch status event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = event.newStatus().name().equals("ACTIVE")
+                ? "GYM_BRANCH_ACTIVATED"
+                : "GYM_BRANCH_DEACTIVATED";
+        entry.resourceType = "GYM_BRANCH";
+        entry.resourceId = event.branchId();
+        entry.resourceCodeSnapshot = event.branchCode();
+        entry.summary = "ACTIVE".equals(event.newStatus().name())
+                ? "Gym branch activated."
+                : "Gym branch deactivated.";
+        entry.metadata = Map.of(
+                "organizationId", event.organizationId().toString(),
+                "previousStatus", event.previousStatus().name(),
+                "newStatus", event.newStatus().name());
+        entry.occurredAt = event.occurredAt();
         return entry;
     }
 

@@ -32,7 +32,8 @@ class AuditQueryPublicContractTest {
         assertThat(AuditQueryPolicy.DEFAULT_DIRECTION)
                 .isEqualTo(AuditSortDirection.DESC);
         assertThat(AuditQueryPolicy.allowedResourceTypes())
-                .contains("PAYMENT", "ACCESS_RECORD", "EMAIL_DELIVERY");
+                .contains("PAYMENT", "ACCESS_RECORD", "EMAIL_DELIVERY",
+                        "ORGANIZATION", "GYM_BRANCH");
         assertThat(AuditQueryPolicy.allowedActionCodes())
                 .contains(
                         "PAYMENT_REFUNDED",
@@ -41,7 +42,12 @@ class AuditQueryPublicContractTest {
                         "STAFF_PROFILE_UPDATED",
                         "STAFF_PROFILE_PHOTO_UPDATED",
                         "STAFF_PROFILE_PHOTO_REMOVED",
-                        "STAFF_PASSWORD_CHANGED");
+                        "STAFF_PASSWORD_CHANGED",
+                        "ORGANIZATION_UPDATED",
+                        "GYM_BRANCH_CREATED",
+                        "GYM_BRANCH_UPDATED",
+                        "GYM_BRANCH_ACTIVATED",
+                        "GYM_BRANCH_DEACTIVATED");
         assertThat(AuditQueryPolicy.allowedResourceTypes())
                 .contains("STAFF_PROFILE");
     }

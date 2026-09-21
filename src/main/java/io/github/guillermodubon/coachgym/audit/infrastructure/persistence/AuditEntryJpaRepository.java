@@ -22,6 +22,10 @@ import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
 import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
 import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
+import io.github.guillermodubon.coachgym.organization.GymBranchCreated;
+import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
+import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
+import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
 import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
 import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
 import io.github.guillermodubon.coachgym.user.StaffProfileUpdated;
@@ -268,6 +272,30 @@ class AuditEntryPersistenceAdapter
     @Override
     @Transactional
     public void recordStaffPasswordChanged(StaffPasswordChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordOrganizationUpdated(OrganizationUpdated event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordGymBranchCreated(GymBranchCreated event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordGymBranchUpdated(GymBranchUpdated event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordGymBranchStatusChanged(GymBranchStatusChanged event) {
         repository.save(AuditEntryJpaEntity.from(event));
     }
 
