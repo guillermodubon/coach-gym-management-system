@@ -225,9 +225,21 @@ class SecurityConfiguration {
                         .requestMatchers("/api/v1/email-deliveries/**")
                         .authenticated()
                         .requestMatchers("/api/v1/reporting/**")
-                        .authenticated()
+                                .authenticated()
                         .requestMatchers("/api/v1/audit-entries/**")
-                        .authenticated()
+                                .authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/organization")
+                                .hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/branches",
+                                "/api/v1/branches/*/activate",
+                                "/api/v1/branches/*/deactivate")
+                                .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/branches/*")
+                                .hasRole("ADMIN")
+                        .requestMatchers("/api/v1/organization/**", "/api/v1/branches/**")
+                                .authenticated()
                         .anyRequest()
                         .denyAll())
                 .build();
