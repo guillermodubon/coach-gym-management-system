@@ -60,8 +60,10 @@ class StaffProfileSchemaMigrationContractTest {
 
             assertThat(versions).doesNotHaveDuplicates();
             assertThat(versions).contains(29, 30, 31);
-            assertThat(versions).isSortedAccordingTo(Comparator.naturalOrder());
-            assertThat(versions.get(versions.size() - 1)).isEqualTo(31);
+            assertThat(versions)
+                    .isSortedAccordingTo(Comparator.naturalOrder());
+            assertThat(versions.get(versions.size() - 1))
+                    .isEqualTo(31);
         }
     }
 
