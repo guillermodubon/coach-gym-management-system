@@ -2,6 +2,8 @@ package io.github.guillermodubon.coachgym.payment.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.guillermodubon.coachgym.organization.OrganizationIdentityQuery;
+import java.lang.reflect.Field;
 import org.junit.jupiter.api.Test;
 
 class PaymentReceiptPersistenceSqlContractTest {
@@ -22,15 +24,15 @@ class PaymentReceiptPersistenceSqlContractTest {
     }
 
     @Test
-    void snapshotQueryJoinsAuthoritativePaymentMembershipAndSettingsRows() {
+    void snapshotQueryUsesThePublicOrganizationIdentityBoundary() throws Exception {
         assertThat(JdbcPaymentReceiptSnapshotQuery.PAYMENT_SNAPSHOT_SQL)
                 .contains("from gym.payments")
                 .contains("join gym.clients")
                 .contains("join gym.memberships")
                 .contains("join gym.membership_periods")
                 .contains(":paymentId");
-        assertThat(JdbcPaymentReceiptSnapshotQuery.ORGANIZATION_SQL)
-                .contains("from gym.gym_settings")
-                .contains("where id = 1");
+        Field organizationQuery = JdbcPaymentReceiptSnapshotQuery.class
+                .getDeclaredField("organizationQuery");
+        assertThat(organizationQuery.getType()).isEqualTo(OrganizationIdentityQuery.class);
     }
 }

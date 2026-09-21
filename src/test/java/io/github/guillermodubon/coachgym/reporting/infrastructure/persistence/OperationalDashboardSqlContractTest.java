@@ -52,8 +52,8 @@ class OperationalDashboardSqlContractTest {
         String sql = normalized(JdbcDashboardSettingsQuery.SQL);
         assertThat(sql)
                 .contains("membership_expiration_warning_days")
-                .contains("default_currency")
                 .contains("from gym.gym_settings")
+                .doesNotContain("default_currency")
                 .contains("limit 1");
     }
 

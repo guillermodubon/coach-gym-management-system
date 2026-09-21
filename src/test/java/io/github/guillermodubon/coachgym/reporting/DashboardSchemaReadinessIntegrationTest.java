@@ -1,13 +1,18 @@
 package io.github.guillermodubon.coachgym.reporting;
 
+import io.github.guillermodubon.coachgym.reporting.application.DashboardSettingsQuery;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class DashboardSchemaReadinessIntegrationTest
         extends AbstractDashboardApiIntegrationTest {
+
+    @Autowired
+    private DashboardSettingsQuery settingsQuery;
 
     @Test
     void finalAccessSchemaUsesPersistedDecisionColumns() {
@@ -74,12 +79,32 @@ class DashboardSchemaReadinessIntegrationTest
                 """, Integer.class);
         String currency = jdbcTemplate.queryForObject("""
                 select default_currency
-                from gym.gym_settings
-                order by id
-                limit 1
+                from gym.organizations
+                where is_canonical = true
                 """, String.class);
 
         assertThat(warningDays).isBetween(0, 90);
         assertThat(currency).matches("[A-Z]{3}");
+    }
+
+    @Test
+    void dashboardSettingsDelegateCurrencyToCanonicalOrganization() {
+        String previousCurrency = jdbcTemplate.queryForObject("""
+                select default_currency
+                from gym.gym_settings
+                order by id
+                limit 1
+                """, String.class);
+        try {
+            jdbcTemplate.update(
+                    "update gym.gym_settings set default_currency = ?",
+                    "EUR");
+
+            assertThat(settingsQuery.load().currency()).isEqualTo("USD");
+        } finally {
+            jdbcTemplate.update(
+                    "update gym.gym_settings set default_currency = ?",
+                    previousCurrency);
+        }
     }
 }

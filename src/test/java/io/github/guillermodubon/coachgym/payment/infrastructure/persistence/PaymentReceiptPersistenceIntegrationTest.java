@@ -72,6 +72,25 @@ class PaymentReceiptPersistenceIntegrationTest extends AbstractIncidentApiIntegr
         assertThat(organization.timeZone()).isEqualTo("America/El_Salvador");
     }
 
+    @Test
+    void readsReceiptOrganizationFromCanonicalOrganizationSource() {
+        String previousBrandName = jdbcTemplate.queryForObject(
+                "select brand_name from gym.organizations where is_canonical = true",
+                String.class);
+        try {
+            jdbcTemplate.update(
+                    "update gym.organizations set brand_name = ? where is_canonical = true",
+                    "Canonical Receipt Brand");
+
+            assertThat(snapshotQuery.findCurrent().displayName())
+                    .isEqualTo("Canonical Receipt Brand");
+        } finally {
+            jdbcTemplate.update(
+                    "update gym.organizations set brand_name = ? where is_canonical = true",
+                    previousBrandName);
+        }
+    }
+
     private PaymentReceiptDetails details(UUID paymentId, UUID receiptId, String receiptNumber) {
         PaymentReceiptDocument document = PaymentReceiptDocument.fromPdfBytes(
                 "%PDF-1.7\nreceipt".getBytes(StandardCharsets.US_ASCII));

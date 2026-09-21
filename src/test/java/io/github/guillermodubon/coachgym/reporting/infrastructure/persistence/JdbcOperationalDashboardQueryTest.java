@@ -13,7 +13,12 @@ import io.github.guillermodubon.coachgym.reporting.IncidentDashboardDetails;
 import io.github.guillermodubon.coachgym.reporting.MaintenanceDashboardDetails;
 import io.github.guillermodubon.coachgym.reporting.application.DashboardDataAccessException;
 import io.github.guillermodubon.coachgym.reporting.application.DashboardSettings;
+import io.github.guillermodubon.coachgym.organization.OrganizationDetails;
+import io.github.guillermodubon.coachgym.organization.OrganizationIdentityQuery;
+import io.github.guillermodubon.coachgym.organization.OrganizationStatus;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +34,9 @@ class JdbcOperationalDashboardQueryTest {
 
     @Mock
     private NamedParameterJdbcTemplate jdbcTemplate;
+
+    @Mock
+    private OrganizationIdentityQuery organizationQuery;
 
     @Test
     void equipmentReaderReturnsAggregate() {
@@ -90,10 +98,11 @@ class JdbcOperationalDashboardQueryTest {
         when(jdbcTemplate.queryForObject(
                 eq(JdbcDashboardSettingsQuery.SQL),
                 any(MapSqlParameterSource.class),
-                any(RowMapper.class))).thenReturn(expected);
+                any(RowMapper.class))).thenReturn(7);
+        when(organizationQuery.findCanonical()).thenReturn(Optional.of(organization()));
 
-        assertThat(new JdbcDashboardSettingsQuery(jdbcTemplate).load())
-                .isSameAs(expected);
+        assertThat(new JdbcDashboardSettingsQuery(jdbcTemplate, organizationQuery).load())
+                .isEqualTo(expected);
     }
 
     @Test
@@ -108,5 +117,14 @@ class JdbcOperationalDashboardQueryTest {
                 () -> new JdbcEquipmentDashboardQuery(jdbcTemplate).summarize())
                 .isInstanceOf(DashboardDataAccessException.class)
                 .hasMessage("Equipment dashboard metrics could not be read.");
+    }
+
+    private static OrganizationDetails organization() {
+        Instant timestamp = Instant.parse("2026-01-01T00:00:00Z");
+        return new OrganizationDetails(
+                UUID.fromString("30000000-0000-0000-0000-000000000001"),
+                "COACH_GYM", "Coach Gym Legal", "Coach Gym", "support@example.test",
+                "+50370000000", "America/El_Salvador", "USD", OrganizationStatus.ACTIVE,
+                timestamp, timestamp, 0);
     }
 }
