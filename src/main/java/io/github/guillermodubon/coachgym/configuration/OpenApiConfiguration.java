@@ -44,7 +44,11 @@ class OpenApiConfiguration {
                                         private photo upload/removal, and password
                                         changes require CSRF. Password changes
                                         require reauthentication; organization and
-                                        branch context is deferred to a later API.
+                                        branch administration is available through
+                                        the canonical organization and branch catalog
+                                        endpoints. The API does not expose tenant
+                                        selection, branch assignment, or active-branch
+                                        session context yet.
 
                                         Equipment and equipment categories are
                                         never physically deleted through the

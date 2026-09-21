@@ -39,7 +39,10 @@ class AuditMetadataSanitizerTest {
                 Map.entry("STAFF_PROFILE_UPDATED", "changedFields"),
                 Map.entry("STAFF_PROFILE_PHOTO_UPDATED", "photoPresent"),
                 Map.entry("STAFF_PROFILE_PHOTO_REMOVED", "photoPresent"),
-                Map.entry("STAFF_PASSWORD_CHANGED", "reauthenticationRequired"));
+                Map.entry("STAFF_PASSWORD_CHANGED", "reauthenticationRequired"),
+                Map.entry("ORGANIZATION_UPDATED", "changedFields"),
+                Map.entry("GYM_BRANCH_UPDATED", "changedFields"),
+                Map.entry("GYM_BRANCH_DEACTIVATED", "previousStatus"));
 
         for (Map.Entry<String, String> entry : expectedKeys.entrySet()) {
             Set<String> allowlist = AuditMetadataPolicy.allowedKeysForAction(entry.getKey());

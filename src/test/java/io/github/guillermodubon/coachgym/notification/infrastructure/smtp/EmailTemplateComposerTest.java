@@ -3,12 +3,17 @@ package io.github.guillermodubon.coachgym.notification.infrastructure.smtp;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.guillermodubon.coachgym.organization.OrganizationDetails;
+import io.github.guillermodubon.coachgym.organization.OrganizationIdentityQuery;
+import io.github.guillermodubon.coachgym.organization.OrganizationStatus;
 import io.github.guillermodubon.coachgym.notification.EmailAttachment;
 import io.github.guillermodubon.coachgym.notification.EmailDeliverySource;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryTemplateData;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryType;
 import io.github.guillermodubon.coachgym.notification.application.EmailCompositionException;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -57,6 +62,31 @@ class EmailTemplateComposerTest {
                 .doesNotContain("QR-RAW-TOKEN");
         assertThat(composed.message().htmlBody()).contains("CRED-001", "<strong>Security:</strong>")
                 .doesNotContain("{{");
+    }
+
+    @Test
+    void composesUsingCanonicalOrganizationInsteadOfLegacyTemplateData() {
+        EmailDeliveryTemplateData data = new EmailDeliveryTemplateData(
+                "Legacy Gym", "Ana Martinez", "CLI-001", "REC-001", "PAY-001",
+                "CONFIRMED", "2026-09-15T12:00:00Z", "25.00", "USD", "MEM-001",
+                "Premium", null, true);
+        EmailDeliverySource source = source(EmailDeliveryType.PAYMENT_RECEIPT, data,
+                "application/pdf", "receipt.pdf");
+        OrganizationIdentityQuery organizationQuery = () -> Optional.of(
+                new OrganizationDetails(
+                        UUID.fromString("30000000-0000-0000-0000-000000000001"),
+                        "COACH_GYM", "Coach Gym Legal", "Canonical Gym", "support@example.test",
+                        "+50370000000", "America/El_Salvador", "USD", OrganizationStatus.ACTIVE,
+                        Instant.parse("2026-01-01T00:00:00Z"),
+                        Instant.parse("2026-01-01T00:00:00Z"), 0));
+
+        var composed = new EmailTemplateComposer(properties(), organizationQuery).compose(source);
+
+        assertThat(composed.message().subject()).isEqualTo(
+                "Canonical Gym payment receipt REC-001");
+        assertThat(composed.message().plainTextBody())
+                .contains("Canonical Gym")
+                .doesNotContain("Legacy Gym");
     }
 
     @Test

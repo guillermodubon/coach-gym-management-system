@@ -8,12 +8,15 @@ import io.github.guillermodubon.coachgym.notification.EmailMessage;
 import io.github.guillermodubon.coachgym.notification.application.EmailComposer;
 import io.github.guillermodubon.coachgym.notification.application.EmailCompositionException;
 import io.github.guillermodubon.coachgym.notification.domain.EmailDeliveryValuePolicy;
+import io.github.guillermodubon.coachgym.organization.OrganizationDetails;
+import io.github.guillermodubon.coachgym.organization.OrganizationIdentityQuery;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.springframework.core.io.ClassPathResource;
 
 /** Renders the packaged v1 receipt and credential templates without user HTML. */
@@ -23,9 +26,18 @@ class EmailTemplateComposer implements EmailComposer {
     private static final String SUPPORTED_TEMPLATE_VERSION = "v1";
 
     private final EmailProperties properties;
+    private final OrganizationIdentityQuery organizationQuery;
 
     EmailTemplateComposer(EmailProperties properties) {
+        this(properties, () -> Optional.empty());
+    }
+
+    EmailTemplateComposer(
+            EmailProperties properties,
+            OrganizationIdentityQuery organizationQuery) {
         this.properties = Objects.requireNonNull(properties, "Email properties are required.");
+        this.organizationQuery = Objects.requireNonNull(
+                organizationQuery, "Organization query is required.");
     }
 
     @Override
@@ -39,12 +51,13 @@ class EmailTemplateComposer implements EmailComposer {
         }
 
         EmailDeliveryTemplateData data = source.templateData();
-        Map<String, String> values = values(source, data);
+        String organizationName = organizationName(data);
+        Map<String, String> values = values(source, data, organizationName);
         String templateName = source.deliveryType() == EmailDeliveryType.PAYMENT_RECEIPT
                 ? "payment-receipt" : "access-credential";
         String plainText = render(load(templateName + ".txt"), values, false);
         String html = render(load(templateName + ".html"), values, true);
-        String subject = subject(source, data);
+        String subject = subject(source, data, organizationName);
         try {
             return new ComposedEmail(
                     properties.templateVersion(),
@@ -63,9 +76,11 @@ class EmailTemplateComposer implements EmailComposer {
     }
 
     private Map<String, String> values(
-            EmailDeliverySource source, EmailDeliveryTemplateData data) {
+            EmailDeliverySource source,
+            EmailDeliveryTemplateData data,
+            String organizationName) {
         Map<String, String> values = new HashMap<>();
-        values.put("organizationName", firstValue(data.organizationName(), properties.organizationName()));
+        values.put("organizationName", organizationName);
         values.put("clientGreeting", firstValue(data.clientDisplayName(), "there"));
         values.put("primaryReference", firstValue(
                 data.primaryReference(), source.sourceResourceId().toString()));
@@ -83,8 +98,10 @@ class EmailTemplateComposer implements EmailComposer {
         return values;
     }
 
-    private String subject(EmailDeliverySource source, EmailDeliveryTemplateData data) {
-        String organizationName = firstValue(data.organizationName(), properties.organizationName());
+    private String subject(
+            EmailDeliverySource source,
+            EmailDeliveryTemplateData data,
+            String organizationName) {
         String subject = switch (source.deliveryType()) {
             case PAYMENT_RECEIPT -> organizationName
                     + " payment receipt "
@@ -96,6 +113,20 @@ class EmailTemplateComposer implements EmailComposer {
             subject = subject.substring(0, maximum).strip();
         }
         return subject;
+    }
+
+    private String organizationName(EmailDeliveryTemplateData data) {
+        Optional<OrganizationDetails> organization;
+        try {
+            organization = organizationQuery.findCanonical();
+        } catch (RuntimeException exception) {
+            throw new EmailCompositionException(
+                    "Canonical organization could not be read.", exception);
+        }
+        return organization
+                .map(OrganizationDetails::brandName)
+                .filter(value -> !value.isBlank())
+                .orElseGet(() -> firstValue(data.organizationName(), properties.organizationName()));
     }
 
     private String load(String name) {

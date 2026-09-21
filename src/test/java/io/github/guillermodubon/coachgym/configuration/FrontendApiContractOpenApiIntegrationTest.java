@@ -45,6 +45,11 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
                 "/api/v1/audit-entries",
                 "/api/v1/audit-entries/export.csv",
                 "/api/v1/reporting/dashboard",
+                "/api/v1/organization",
+                "/api/v1/branches",
+                "/api/v1/branches/{id}",
+                "/api/v1/branches/{id}/activate",
+                "/api/v1/branches/{id}/deactivate",
                 "/api/v1/equipment-categories",
                 "/api/v1/equipment",
                 "/api/v1/incidents",
@@ -71,6 +76,14 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
         assertSessionSecurity(document, "/api/v1/clients", "post");
         assertSessionSecurity(document, "/api/v1/plans", "get");
         assertSessionSecurity(document, "/api/v1/promotions", "get");
+        assertSessionSecurity(document, "/api/v1/organization", "get");
+        assertSessionSecurity(document, "/api/v1/organization", "put");
+        assertSessionSecurity(document, "/api/v1/branches", "get");
+        assertSessionSecurity(document, "/api/v1/branches", "post");
+        assertSessionSecurity(document, "/api/v1/branches/{id}", "get");
+        assertSessionSecurity(document, "/api/v1/branches/{id}", "put");
+        assertSessionSecurity(document, "/api/v1/branches/{id}/activate", "post");
+        assertSessionSecurity(document, "/api/v1/branches/{id}/deactivate", "post");
         assertSessionSecurity(document, "/api/v1/memberships/{id}", "get");
         assertSessionSecurity(document, "/api/v1/payments", "get");
         assertSessionSecurity(document, "/api/v1/audit-entries", "get");
@@ -120,6 +133,52 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
                 .containsExactlyInAnyOrder(
                         "currentPassword", "newPassword", "newPasswordConfirmation")
                 .doesNotContain("userId", "role", "status", "passwordHash", "sessionId");
+    }
+
+    @Test
+    void exposesOrganizationAndBranchAdministrationWithoutPrematureScopeContracts()
+            throws Exception {
+        String document = openApiDocument();
+        Map<String, Object> schemas = JsonPath.read(
+                document, "$.components.schemas");
+
+        assertThat(schemas).containsKeys(
+                "OrganizationResponse",
+                "BranchResponse",
+                "BranchPageResponse",
+                "CreateBranchRequest",
+                "UpdateBranchRequest",
+                "BranchStatusChangeRequest");
+
+        Map<String, Object> createBranchProperties = JsonPath.read(
+                document, "$.components.schemas.CreateBranchRequest.properties");
+        assertThat(createBranchProperties.keySet())
+                .contains("code", "name", "timezone")
+                .doesNotContain("organizationId", "status", "initialBranch", "version");
+
+        Map<String, Object> updateBranchProperties = JsonPath.read(
+                document, "$.components.schemas.UpdateBranchRequest.properties");
+        assertThat(updateBranchProperties.keySet())
+                .contains("name", "version")
+                .doesNotContain("code", "organizationId", "status", "initialBranch");
+
+        Map<String, Object> branchResponseProperties = JsonPath.read(
+                document, "$.components.schemas.BranchResponse.properties");
+        assertThat(branchResponseProperties.keySet())
+                .contains("id", "code", "name", "status", "version")
+                .doesNotContain("tenantId", "branchAssignments", "activeBranch");
+
+        Map<String, Object> branchCollection = JsonPath.read(
+                document, "$.paths['/api/v1/branches']");
+        Map<String, Object> branchItem = JsonPath.read(
+                document, "$.paths['/api/v1/branches/{id}']");
+        assertThat(branchCollection.keySet())
+                .doesNotContain("delete");
+        assertThat(branchItem.keySet())
+                .doesNotContain("delete");
+        assertThat(document)
+                .contains("canonical organization", "RECEPTIONIST", "Requires CSRF")
+                .doesNotContain("branchAssignments", "activeBranch", "tenantId");
     }
 
     @Test

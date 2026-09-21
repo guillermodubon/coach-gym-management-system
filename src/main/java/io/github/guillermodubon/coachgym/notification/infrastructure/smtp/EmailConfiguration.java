@@ -5,7 +5,9 @@ import io.github.guillermodubon.coachgym.notification.application.EmailSender;
 import io.github.guillermodubon.coachgym.notification.domain.EmailDeliveryLifecyclePolicy;
 import io.github.guillermodubon.coachgym.notification.infrastructure.resend.ResendEmailSender;
 import io.github.guillermodubon.coachgym.notification.infrastructure.resend.ResendProperties;
+import io.github.guillermodubon.coachgym.organization.OrganizationIdentityQuery;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,8 +19,12 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 class EmailConfiguration {
 
     @Bean
-    EmailComposer emailComposer(EmailProperties properties) {
-        return new EmailTemplateComposer(properties);
+    EmailComposer emailComposer(
+            EmailProperties properties,
+            ObjectProvider<OrganizationIdentityQuery> organizationQueries) {
+        return new EmailTemplateComposer(
+                properties,
+                organizationQueries.getIfAvailable(() -> () -> java.util.Optional.empty()));
     }
 
     @Bean

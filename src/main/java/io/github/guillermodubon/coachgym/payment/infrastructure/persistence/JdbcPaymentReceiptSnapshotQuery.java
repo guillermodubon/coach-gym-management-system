@@ -7,6 +7,8 @@ import io.github.guillermodubon.coachgym.payment.PaymentStatus;
 import io.github.guillermodubon.coachgym.payment.application.PaymentReceiptDataAccessException;
 import io.github.guillermodubon.coachgym.payment.application.PaymentReceiptOrganizationQuery;
 import io.github.guillermodubon.coachgym.payment.application.PaymentReceiptSnapshotQuery;
+import io.github.guillermodubon.coachgym.organization.OrganizationDetails;
+import io.github.guillermodubon.coachgym.organization.OrganizationIdentityQuery;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
@@ -44,16 +46,14 @@ class JdbcPaymentReceiptSnapshotQuery
               and mp.currency = p.currency
             """;
 
-    static final String ORGANIZATION_SQL = """
-            select display_name, legal_name, email, phone, address, time_zone
-            from gym.gym_settings
-            where id = 1
-            """;
-
     private final NamedParameterJdbcTemplate jdbcTemplate;
+    private final OrganizationIdentityQuery organizationQuery;
 
-    JdbcPaymentReceiptSnapshotQuery(NamedParameterJdbcTemplate jdbcTemplate) {
+    JdbcPaymentReceiptSnapshotQuery(
+            NamedParameterJdbcTemplate jdbcTemplate,
+            OrganizationIdentityQuery organizationQuery) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate);
+        this.organizationQuery = Objects.requireNonNull(organizationQuery);
     }
 
     @Override
@@ -76,18 +76,19 @@ class JdbcPaymentReceiptSnapshotQuery
     @Transactional(readOnly = true)
     public PaymentReceiptOrganization findCurrent() {
         try {
-            List<PaymentReceiptOrganization> rows = jdbcTemplate.query(
-                    ORGANIZATION_SQL,
-                    new MapSqlParameterSource(),
-                    JdbcPaymentReceiptSnapshotQuery::mapOrganization);
-            return rows.stream().findFirst().orElseThrow(() ->
+            OrganizationDetails organization = organizationQuery.findCanonical()
+                    .orElseThrow(() ->
                     new PaymentReceiptDataAccessException(
-                            "Organization settings could not be read.", null));
+                            "Canonical organization could not be read.", null));
+            return mapOrganization(organization);
         } catch (PaymentReceiptDataAccessException exception) {
             throw exception;
         } catch (DataAccessException exception) {
             throw new PaymentReceiptDataAccessException(
-                    "Organization settings could not be read.", exception);
+                    "Canonical organization could not be read.", exception);
+        } catch (RuntimeException exception) {
+            throw new PaymentReceiptDataAccessException(
+                    "Canonical organization could not be read.", exception);
         }
     }
 
@@ -113,15 +114,14 @@ class JdbcPaymentReceiptSnapshotQuery
                 instant(rs, "paid_at"));
     }
 
-    private static PaymentReceiptOrganization mapOrganization(ResultSet rs, int row)
-            throws SQLException {
+    private static PaymentReceiptOrganization mapOrganization(OrganizationDetails organization) {
         return new PaymentReceiptOrganization(
-                rs.getString("display_name"),
-                rs.getString("legal_name"),
-                rs.getString("email"),
-                rs.getString("phone"),
-                rs.getString("address"),
-                rs.getString("time_zone"));
+                organization.brandName(),
+                organization.legalName(),
+                organization.supportEmail(),
+                organization.supportPhone(),
+                null,
+                organization.defaultTimezone());
     }
 
     private static java.time.Instant instant(ResultSet rs, String column)
