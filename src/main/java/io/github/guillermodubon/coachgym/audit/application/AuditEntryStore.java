@@ -29,6 +29,9 @@ import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
+import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
+import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
+import io.github.guillermodubon.coachgym.user.StaffProfileUpdated;
 
 public interface AuditEntryStore {
 
@@ -74,6 +77,12 @@ public interface AuditEntryStore {
     void recordPaymentReceiptGenerated(PaymentReceiptGenerated event);
 
     void recordEmailDeliveryLifecycle(EmailDeliveryLifecycleEvent event);
+
+    void recordStaffProfileUpdated(StaffProfileUpdated event);
+
+    void recordStaffProfilePhotoChanged(StaffProfilePhotoChanged event);
+
+    void recordStaffPasswordChanged(StaffPasswordChanged event);
 
     void recordDeniedAccessAttempt(AccessAttemptRecorded event);
 

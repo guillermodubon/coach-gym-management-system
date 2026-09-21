@@ -46,6 +46,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -274,6 +275,17 @@ class AccessCredentialControllerTest {
                         .content("{\"reason\":\"lost card\",\"version\":0}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ACCESS_CREDENTIAL_VERSION_CONFLICT"));
+
+        reset(service);
+        doThrow(new CannotAcquireLockException("lock busy"))
+                .when(service).revoke(any(RevokeClientAccessCredentialCommand.class), any());
+        mockMvc.perform(post(path() + "/revoke").with(authenticatedAs("ADMIN")).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"lost card\",\"version\":0}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ACCESS_CREDENTIAL_VERSION_CONFLICT"))
+                .andExpect(jsonPath("$.detail")
+                        .value("The access credential was changed by another request."));
 
         reset(service);
         doThrow(new AccessCredentialTokenGenerationException("internal token", null))

@@ -8,6 +8,7 @@ import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
@@ -27,6 +28,7 @@ import java.time.LocalDate;
 @Tag(
         name = "Promotions",
         description = "Promotion catalog management and queries.")
+@SecurityRequirement(name = "sessionCookie")
 class PromotionController {
 
     private final PromotionApplicationService promotionApplicationService;

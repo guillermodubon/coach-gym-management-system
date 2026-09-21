@@ -1,6 +1,8 @@
 spring:
   application:
     name: coach-gym-management-system
+  lifecycle:
+    timeout-per-shutdown-phase: ${SHUTDOWN_TIMEOUT:PT30S}
   autoconfigure:
     exclude:
       - org.springframework.boot.security.autoconfigure.UserDetailsServiceAutoConfiguration
@@ -10,6 +12,13 @@ spring:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:${POSTGRES_HOST_PORT:5433}/${POSTGRES_DB:coach_gym}}
     username: ${DATABASE_USERNAME:${POSTGRES_USER:coach_gym_app}}
     password: ${DATABASE_PASSWORD:${POSTGRES_PASSWORD:}}
+    hikari:
+      maximum-pool-size: ${DATABASE_MAX_POOL_SIZE:5}
+      minimum-idle: ${DATABASE_MIN_IDLE:1}
+      connection-timeout: ${DATABASE_CONNECTION_TIMEOUT:5000}
+      validation-timeout: ${DATABASE_VALIDATION_TIMEOUT:3000}
+      idle-timeout: ${DATABASE_IDLE_TIMEOUT:600000}
+      max-lifetime: ${DATABASE_MAX_LIFETIME:1800000}
   docker:
     compose:
       enabled: ${DOCKER_COMPOSE_ENABLED:true}
@@ -30,19 +39,43 @@ spring:
       hibernate:
         default_schema: gym
     open-in-view: false
+  servlet:
+    multipart:
+      max-file-size: ${MULTIPART_MAX_FILE_SIZE:6MB}
+      max-request-size: ${MULTIPART_MAX_REQUEST_SIZE:8MB}
 
 gym:
   time-zone: America/El_Salvador
   currency: USD
   storage:
+    provider: ${STORAGE_PROVIDER:local}
     access-credentials:
       directory: ${ACCESS_CREDENTIALS_DIRECTORY:data/access-credentials}
     payment-receipts:
       directory: ${PAYMENT_RECEIPTS_DIRECTORY:data/payment-receipts}
+    staff-photos:
+      directory: ${STAFF_PROFILE_PHOTOS_DIRECTORY:data/staff-profile-photos}
 
 coach-gym:
+  security:
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173}
+      max-age: ${CORS_MAX_AGE:PT1H}
+    session:
+      absolute-timeout: ${SESSION_ABSOLUTE_TIMEOUT:PT8H}
+    headers:
+      hsts-enabled: ${SECURITY_HSTS_ENABLED:false}
+      hsts-max-age: ${SECURITY_HSTS_MAX_AGE:PT8760H}
+    login-rate-limit:
+      max-attempts: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS:10}
+      window: ${LOGIN_RATE_LIMIT_WINDOW:PT1M}
+    request:
+      max-json-body-bytes: ${MAX_JSON_BODY_BYTES:1048576}
+      max-form-body-bytes: ${MAX_FORM_BODY_BYTES:65536}
+      max-multipart-body-bytes: ${MAX_MULTIPART_BODY_BYTES:8388608}
   email:
     enabled: ${EMAIL_ENABLED:false}
+    provider: ${EMAIL_PROVIDER:smtp}
     organization-name: ${EMAIL_ORGANIZATION_NAME:Coach Gym}
     template-version: ${EMAIL_TEMPLATE_VERSION:v1}
     from-address: ${EMAIL_FROM_ADDRESS:no-reply@coach-gym.local}
@@ -60,6 +93,11 @@ coach-gym:
     max-message-bytes: ${EMAIL_MAX_MESSAGE_BYTES:12582912}
     max-retry-count: ${EMAIL_MAX_RETRY_COUNT:3}
     stale-pending-threshold: ${EMAIL_STALE_PENDING_THRESHOLD:PT15M}
+    resend:
+      api-key: ${RESEND_API_KEY:}
+      endpoint: ${RESEND_ENDPOINT:https://api.resend.com/emails}
+      connection-timeout: ${RESEND_CONNECTION_TIMEOUT:PT5S}
+      request-timeout: ${RESEND_REQUEST_TIMEOUT:PT15S}
   payment:
     stripe:
       enabled: ${STRIPE_ENABLED:false}
@@ -92,17 +130,42 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info}
   endpoint:
     health:
       probes:
         enabled: true
+      show-details: never
+      show-components: never
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db,storage,email,stripe
+  health:
+    db:
+      enabled: true
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+  pattern:
+    level: "%5p [corr=%X{correlation_id:-}]"
 
 server:
   port: ${SERVER_PORT:8080}
+  max-http-request-header-size: ${SERVER_MAX_HTTP_REQUEST_HEADER_SIZE:16KB}
+  shutdown: ${SERVER_SHUTDOWN:graceful}
   servlet:
     session:
+      timeout: ${SESSION_IDLE_TIMEOUT:PT30M}
       cookie:
         http-only: true
-        same-site: lax
+        path: /
+        same-site: ${SESSION_COOKIE_SAME_SITE:lax}
         secure: ${SESSION_COOKIE_SECURE:false}
+        max-age: ${SESSION_COOKIE_MAX_AGE:PT30M}

@@ -142,6 +142,17 @@ class PaymentSearchQueryTest {
     }
 
     @Test
+    void rejectsAnOverlyBroadPaidRange() {
+        assertThatThrownBy(() -> PaymentSearchQuery.from(
+                null, null, null, null, null,
+                Instant.parse("2024-01-01T00:00:00Z"),
+                Instant.parse("2026-01-02T00:00:00Z"),
+                0, 25, null, null))
+                .isInstanceOf(PaymentValidationException.class)
+                .hasMessageContaining("366 days");
+    }
+
+    @Test
     void rejectsUnknownSortField() {
         assertThatThrownBy(() -> PaymentSearchQuery.from(
                 null, null, null, null, null, null, null,

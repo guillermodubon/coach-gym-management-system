@@ -12,6 +12,7 @@ import io.github.guillermodubon.coachgym.accesscredential.application.AccessCred
 import io.github.guillermodubon.coachgym.accesscredential.application.AccessCredentialValidationException;
 import io.github.guillermodubon.coachgym.accesscredential.application.AccessCredentialVersionConflictException;
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -112,10 +113,11 @@ class AccessCredentialProblemHandler {
     }
 
     /**
-     * PostgreSQL can report a serialization or deadlock failure while the
-     * outer transaction is committing, after the application service has
-     * already returned. Translate only those transient lock failures to the
-     * same stable optimistic-concurrency response used by row-level checks.
+     * PostgreSQL can report a lock timeout, serialization, or deadlock failure
+     * while the outer transaction is committing, after the application
+     * service has already returned. Translate only those transient lock
+     * failures to the same stable optimistic-concurrency response used by
+     * row-level checks.
      */
     @ExceptionHandler(TransactionSystemException.class)
     ResponseEntity<ProblemDetail> handleTransactionFailure(
@@ -132,9 +134,12 @@ class AccessCredentialProblemHandler {
                 "The access credential operation could not be completed.");
     }
 
-    @ExceptionHandler({OptimisticLockingFailureException.class,
+    @ExceptionHandler({CannotAcquireLockException.class,
+            OptimisticLockingFailureException.class,
+            jakarta.persistence.LockTimeoutException.class,
+            jakarta.persistence.PessimisticLockException.class,
             jakarta.persistence.OptimisticLockException.class})
-    ResponseEntity<ProblemDetail> handleOptimisticLockingFailure(RuntimeException exception) {
+    ResponseEntity<ProblemDetail> handleConcurrencyFailure(RuntimeException exception) {
         return problem(
                 HttpStatus.CONFLICT,
                 "ACCESS_CREDENTIAL_VERSION_CONFLICT",
@@ -144,13 +149,17 @@ class AccessCredentialProblemHandler {
     private static boolean isConcurrencyFailure(Throwable failure) {
         Throwable current = failure;
         while (current != null) {
-            if (current instanceof OptimisticLockingFailureException
+            if (current instanceof CannotAcquireLockException
+                    || current instanceof OptimisticLockingFailureException
+                    || current instanceof jakarta.persistence.LockTimeoutException
+                    || current instanceof jakarta.persistence.PessimisticLockException
                     || current instanceof jakarta.persistence.OptimisticLockException) {
                 return true;
             }
             if (current instanceof java.sql.SQLException sqlException
                     && ("40P01".equals(sqlException.getSQLState())
-                    || "40001".equals(sqlException.getSQLState()))) {
+                    || "40001".equals(sqlException.getSQLState())
+                    || "55P03".equals(sqlException.getSQLState()))) {
                 return true;
             }
             current = current.getCause();

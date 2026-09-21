@@ -2,8 +2,10 @@ package io.github.guillermodubon.coachgym.auth.web;
 
 import io.github.guillermodubon.coachgym.auth.application.AuthenticationService;
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
+import io.github.guillermodubon.coachgym.auth.SessionSecurityPolicy;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,6 +17,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
+import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -30,13 +33,19 @@ class AuthenticationController {
 
     private final AuthenticationService authenticationService;
     private final SecurityContextRepository securityContextRepository;
+    private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
+    private final SessionSecurityPolicy sessionSecurityPolicy;
     private final SecurityContextLogoutHandler logoutHandler = new SecurityContextLogoutHandler();
 
     AuthenticationController(
             AuthenticationService authenticationService,
-            SecurityContextRepository securityContextRepository) {
+            SecurityContextRepository securityContextRepository,
+            SessionAuthenticationStrategy sessionAuthenticationStrategy,
+            SessionSecurityPolicy sessionSecurityPolicy) {
         this.authenticationService = authenticationService;
         this.securityContextRepository = securityContextRepository;
+        this.sessionAuthenticationStrategy = sessionAuthenticationStrategy;
+        this.sessionSecurityPolicy = sessionSecurityPolicy;
     }
 
     @GetMapping("/csrf")
@@ -54,15 +63,18 @@ class AuthenticationController {
             HttpServletRequest servletRequest,
             HttpServletResponse servletResponse) {
         Authentication authentication = authenticationService.authenticate(request.identifier(), request.password());
+        sessionAuthenticationStrategy.onAuthentication(authentication, servletRequest, servletResponse);
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, servletRequest, servletResponse);
+        sessionSecurityPolicy.markAuthenticated(servletRequest);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/me")
     @Operation(summary = "Get the current authenticated staff account")
+    @SecurityRequirement(name = "sessionCookie")
     CurrentUserResponse currentUser(Authentication authentication) {
         CoachGymUserPrincipal principal = (CoachGymUserPrincipal) authentication.getPrincipal();
         return new CurrentUserResponse(
@@ -77,6 +89,7 @@ class AuthenticationController {
 
     @PostMapping("/logout")
     @Operation(summary = "Invalidate the current server-side session")
+    @SecurityRequirement(name = "sessionCookie")
     @ApiResponse(responseCode = "204", description = "Session invalidated")
     ResponseEntity<Void> logout(
             Authentication authentication,

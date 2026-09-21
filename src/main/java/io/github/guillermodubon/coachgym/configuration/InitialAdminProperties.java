@@ -14,6 +14,17 @@ public record InitialAdminProperties(
         String firstName,
         String lastName) {
 
+    @Override
+    public String toString() {
+        return "InitialAdminProperties[enabled=" + enabled
+                + ", usernamePresent=" + hasText(username)
+                + ", emailPresent=" + hasText(email)
+                + ", passwordPresent=" + hasText(password)
+                + ", firstNamePresent=" + hasText(firstName)
+                + ", lastNamePresent=" + hasText(lastName)
+                + ']';
+    }
+
     @AssertTrue(message = "all initial administrator properties must be provided and the password must contain at least 12 characters when bootstrap is enabled")
     public boolean isCompleteWhenEnabled() {
         return !enabled || (hasText(username)
