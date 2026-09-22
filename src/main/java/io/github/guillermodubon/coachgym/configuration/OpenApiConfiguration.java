@@ -46,9 +46,17 @@ class OpenApiConfiguration {
                                         require reauthentication; organization and
                                         branch administration is available through
                                         the canonical organization and branch catalog
-                                        endpoints. The API does not expose tenant
-                                        selection, branch assignment, or active-branch
-                                        session context yet.
+                                        endpoints. GET /api/v1/auth/me exposes the
+                                        authenticated scope, safe available-branch
+                                        summaries, and the server-side active-branch
+                                        preference. Organization-scoped ADMINs can manage
+                                        staff scopes and branch assignments through
+                                        /api/v1/staff; authenticated staff can read and
+                                        select their validated context through
+                                        /api/v1/me/branch-context. Branch selection never
+                                        grants authorization, and no client, payment, or
+                                        access resource is branch-filtered yet. The frontend
+                                        selector itself is outside this backend contract.
 
                                         Equipment and equipment categories are
                                         never physically deleted through the

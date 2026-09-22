@@ -194,8 +194,15 @@ class SecurityConfiguration {
                         .permitAll()
                         .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout")
                         .authenticated()
+                        .requestMatchers("/api/v1/me/branch-context/**")
+                        .authenticated()
                         .requestMatchers("/api/v1/me/**")
                         .authenticated()
+                        .requestMatchers(
+                                "/api/v1/staff/branch-assignments/**",
+                                "/api/v1/staff/*/branch-assignments",
+                                "/api/v1/staff/*/scope")
+                                .hasRole("ADMIN")
                         .requestMatchers("/api/v1/settings/access-payment-policy")
                         .authenticated()
                         .requestMatchers("/api/v1/clients/**")
@@ -225,9 +232,9 @@ class SecurityConfiguration {
                         .requestMatchers("/api/v1/email-deliveries/**")
                         .authenticated()
                         .requestMatchers("/api/v1/reporting/**")
-                                .authenticated()
+                        .authenticated()
                         .requestMatchers("/api/v1/audit-entries/**")
-                                .authenticated()
+                        .authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/v1/organization")
                                 .hasRole("ADMIN")
                         .requestMatchers(
