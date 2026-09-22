@@ -50,6 +50,11 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
                 "/api/v1/branches/{id}",
                 "/api/v1/branches/{id}/activate",
                 "/api/v1/branches/{id}/deactivate",
+                "/api/v1/staff/branch-assignments",
+                "/api/v1/staff/branch-assignments/{assignmentId}/end",
+                "/api/v1/staff/{userId}/branch-assignments",
+                "/api/v1/staff/{userId}/scope",
+                "/api/v1/me/branch-context",
                 "/api/v1/equipment-categories",
                 "/api/v1/equipment",
                 "/api/v1/incidents",
@@ -84,6 +89,15 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
         assertSessionSecurity(document, "/api/v1/branches/{id}", "put");
         assertSessionSecurity(document, "/api/v1/branches/{id}/activate", "post");
         assertSessionSecurity(document, "/api/v1/branches/{id}/deactivate", "post");
+        assertSessionSecurity(document, "/api/v1/staff/branch-assignments", "get");
+        assertSessionSecurity(document, "/api/v1/staff/branch-assignments", "post");
+        assertSessionSecurity(document, "/api/v1/staff/branch-assignments/{assignmentId}/end", "post");
+        assertSessionSecurity(document, "/api/v1/staff/{userId}/branch-assignments", "get");
+        assertSessionSecurity(document, "/api/v1/staff/{userId}/scope", "get");
+        assertSessionSecurity(document, "/api/v1/staff/{userId}/scope", "put");
+        assertSessionSecurity(document, "/api/v1/me/branch-context", "get");
+        assertSessionSecurity(document, "/api/v1/me/branch-context", "put");
+        assertSessionSecurity(document, "/api/v1/me/branch-context", "delete");
         assertSessionSecurity(document, "/api/v1/memberships/{id}", "get");
         assertSessionSecurity(document, "/api/v1/payments", "get");
         assertSessionSecurity(document, "/api/v1/audit-entries", "get");
@@ -162,6 +176,13 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
                 .contains("name", "version")
                 .doesNotContain("code", "organizationId", "status", "initialBranch");
 
+        Map<String, Object> currentUserProperties = JsonPath.read(
+                document, "$.components.schemas.CurrentUserResponse.properties");
+        assertThat(currentUserProperties.keySet())
+                .contains("id", "username", "roles", "organizationScope",
+                        "activeBranch", "availableBranches")
+                .doesNotContain("tenantId", "password", "token");
+
         Map<String, Object> branchResponseProperties = JsonPath.read(
                 document, "$.components.schemas.BranchResponse.properties");
         assertThat(branchResponseProperties.keySet())
@@ -178,7 +199,13 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
                 .doesNotContain("delete");
         assertThat(document)
                 .contains("canonical organization", "RECEPTIONIST", "Requires CSRF")
-                .doesNotContain("branchAssignments", "activeBranch", "tenantId");
+                .doesNotContain("branchAssignments", "tenantId");
+
+        Map<String, Object> assignmentRequest = JsonPath.read(
+                document, "$.components.schemas.StaffBranchAssignmentRequest.properties");
+        assertThat(assignmentRequest.keySet())
+                .containsExactlyInAnyOrder("targetUserId", "branchId", "reason")
+                .doesNotContain("status", "role", "organizationId", "actorUserId");
     }
 
     @Test
