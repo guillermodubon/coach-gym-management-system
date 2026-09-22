@@ -34,8 +34,11 @@ import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
 import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
 import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
 import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
+import io.github.guillermodubon.coachgym.user.StaffBranchAssigned;
+import io.github.guillermodubon.coachgym.user.StaffBranchAssignmentEnded;
 import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
 import io.github.guillermodubon.coachgym.user.StaffProfileUpdated;
+import io.github.guillermodubon.coachgym.user.StaffScopeChanged;
 
 public interface AuditEntryStore {
 
@@ -87,6 +90,12 @@ public interface AuditEntryStore {
     void recordStaffProfilePhotoChanged(StaffProfilePhotoChanged event);
 
     void recordStaffPasswordChanged(StaffPasswordChanged event);
+
+    void recordStaffBranchAssigned(StaffBranchAssigned event);
+
+    void recordStaffBranchAssignmentEnded(StaffBranchAssignmentEnded event);
+
+    void recordStaffScopeChanged(StaffScopeChanged event);
 
     void recordOrganizationUpdated(OrganizationUpdated event);
 

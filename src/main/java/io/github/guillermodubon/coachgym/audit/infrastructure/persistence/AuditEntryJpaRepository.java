@@ -27,8 +27,11 @@ import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
 import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
 import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
 import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
+import io.github.guillermodubon.coachgym.user.StaffBranchAssigned;
+import io.github.guillermodubon.coachgym.user.StaffBranchAssignmentEnded;
 import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
 import io.github.guillermodubon.coachgym.user.StaffProfileUpdated;
+import io.github.guillermodubon.coachgym.user.StaffScopeChanged;
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.payment.PaymentRefunded;
 import io.github.guillermodubon.coachgym.payment.PaymentVoided;
@@ -272,6 +275,24 @@ class AuditEntryPersistenceAdapter
     @Override
     @Transactional
     public void recordStaffPasswordChanged(StaffPasswordChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffBranchAssigned(StaffBranchAssigned event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffBranchAssignmentEnded(StaffBranchAssignmentEnded event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffScopeChanged(StaffScopeChanged event) {
         repository.save(AuditEntryJpaEntity.from(event));
     }
 
