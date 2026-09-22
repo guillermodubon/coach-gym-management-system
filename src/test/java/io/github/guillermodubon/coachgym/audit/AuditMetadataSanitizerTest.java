@@ -40,6 +40,9 @@ class AuditMetadataSanitizerTest {
                 Map.entry("STAFF_PROFILE_PHOTO_UPDATED", "photoPresent"),
                 Map.entry("STAFF_PROFILE_PHOTO_REMOVED", "photoPresent"),
                 Map.entry("STAFF_PASSWORD_CHANGED", "reauthenticationRequired"),
+                Map.entry("STAFF_SCOPE_CHANGED", "previousScope"),
+                Map.entry("STAFF_BRANCH_ASSIGNED", "branchId"),
+                Map.entry("STAFF_BRANCH_ASSIGNMENT_ENDED", "newStatus"),
                 Map.entry("ORGANIZATION_UPDATED", "changedFields"),
                 Map.entry("GYM_BRANCH_UPDATED", "changedFields"),
                 Map.entry("GYM_BRANCH_DEACTIVATED", "previousStatus"));
@@ -52,6 +55,11 @@ class AuditMetadataSanitizerTest {
                 assertThat(allowlist).contains(entry.getValue());
             }
         }
+
+        assertThat(AuditMetadataPolicy.allowedKeysForAction("STAFF_ACTIVE_BRANCH_CHANGED"))
+                .isEmpty();
+        assertThat(AuditMetadataPolicy.allowedKeysForAction("STAFF_ACTIVE_BRANCH_CLEARED"))
+                .isEmpty();
     }
 
     @Test
@@ -170,6 +178,27 @@ class AuditMetadataSanitizerTest {
                 "changedFields", List.of("firstName", "lastName"));
         assertThat(projection.values()).doesNotContainKeys(
                 "passwordHash", "storageKey");
+        assertThat(projection.values().toString()).doesNotContain("never-return");
+        assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void projectsStaffAssignmentMetadataAndOmitsSessionOrReasonDetails() {
+        Map<String, Object> source = new LinkedHashMap<>();
+        source.put("assignmentId", UUID.randomUUID().toString());
+        source.put("targetUserId", UUID.randomUUID().toString());
+        source.put("branchId", UUID.randomUUID().toString());
+        source.put("newStatus", "ACTIVE");
+        source.put("reasonPresent", true);
+        source.put("sessionId", "never-return");
+        source.put("reasonText", "never-return");
+
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "STAFF_BRANCH_ASSIGNED", source);
+
+        assertThat(projection.values())
+                .containsKeys("assignmentId", "targetUserId", "branchId", "newStatus", "reasonPresent")
+                .doesNotContainKeys("sessionId", "reasonText");
         assertThat(projection.values().toString()).doesNotContain("never-return");
         assertThat(projection.metadataRedacted()).isTrue();
     }

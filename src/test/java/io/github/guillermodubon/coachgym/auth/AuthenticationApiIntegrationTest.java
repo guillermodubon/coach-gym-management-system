@@ -97,7 +97,10 @@ class AuthenticationApiIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value(ADMIN_USERNAME))
                 .andExpect(jsonPath("$.fullName").value("Coach Administrator"))
-                .andExpect(jsonPath("$.roles[0]").value("ADMIN"));
+                .andExpect(jsonPath("$.roles[0]").value("ADMIN"))
+                .andExpect(jsonPath("$.organizationScope").value("ORGANIZATION"))
+                .andExpect(jsonPath("$.activeBranch").doesNotExist())
+                .andExpect(jsonPath("$.availableBranches[0].code").value("PRINCIPAL"));
     }
 
     @Test

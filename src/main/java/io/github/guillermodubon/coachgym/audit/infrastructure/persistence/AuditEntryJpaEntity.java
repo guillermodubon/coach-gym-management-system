@@ -23,8 +23,11 @@ import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
 import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
 import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
 import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
+import io.github.guillermodubon.coachgym.user.StaffBranchAssigned;
+import io.github.guillermodubon.coachgym.user.StaffBranchAssignmentEnded;
 import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
 import io.github.guillermodubon.coachgym.user.StaffProfileUpdated;
+import io.github.guillermodubon.coachgym.user.StaffScopeChanged;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptCreated;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptProviderStatusChanged;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatus;
@@ -1198,6 +1201,86 @@ class AuditEntryJpaEntity {
         entry.summary = "Staff password changed.";
         entry.metadata = Map.of(
                 "reauthenticationRequired", event.reauthenticationRequired());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffBranchAssigned event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Staff branch assigned event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = staffAssignmentEntry(
+                event.assignmentId(), event.actorUserId(), event.actorIdentifier(),
+                event.occurredAt());
+        entry.actionCode = "STAFF_BRANCH_ASSIGNED";
+        entry.summary = "Staff branch assignment created.";
+        entry.metadata = Map.of(
+                "assignmentId", event.assignmentId().toString(),
+                "targetUserId", event.targetUserId().toString(),
+                "branchId", event.branchId().toString(),
+                "newStatus", "ACTIVE",
+                "reasonPresent", event.reasonPresent());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffBranchAssignmentEnded event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Staff branch assignment ended event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = staffAssignmentEntry(
+                event.assignmentId(), event.actorUserId(), event.actorIdentifier(),
+                event.occurredAt());
+        entry.actionCode = "STAFF_BRANCH_ASSIGNMENT_ENDED";
+        entry.summary = "Staff branch assignment ended.";
+        entry.metadata = Map.of(
+                "assignmentId", event.assignmentId().toString(),
+                "targetUserId", event.targetUserId().toString(),
+                "branchId", event.branchId().toString(),
+                "previousStatus", "ACTIVE",
+                "newStatus", "ENDED",
+                "reasonPresent", event.reasonPresent());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffScopeChanged event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Staff scope changed event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "STAFF_SCOPE_CHANGED";
+        entry.resourceType = "STAFF_SCOPE";
+        entry.resourceId = event.targetUserId();
+        entry.summary = "Staff organizational scope changed.";
+        entry.metadata = Map.of(
+                "targetUserId", event.targetUserId().toString(),
+                "previousScope", event.previousScope().name(),
+                "newScope", event.newScope().name(),
+                "reasonPresent", event.reasonPresent());
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    private static AuditEntryJpaEntity staffAssignmentEntry(
+            UUID assignmentId,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = actorUserId;
+        entry.actorIdentifierSnapshot = actorIdentifier;
+        entry.resourceType = "STAFF_BRANCH_ASSIGNMENT";
+        entry.resourceId = assignmentId;
+        entry.resourceCodeSnapshot = null;
+        entry.occurredAt = occurredAt;
         return entry;
     }
 

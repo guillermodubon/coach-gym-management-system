@@ -126,6 +126,11 @@ public final class AuditMetadataPolicy {
                 "changedFields", "photoPresent", "reauthenticationRequired"));
         policy.put("STAFF_PASSWORD_", immutableSet(
                 "reauthenticationRequired"));
+        policy.put("STAFF_SCOPE_", immutableSet(
+                "targetUserId", "previousScope", "newScope", "reasonPresent"));
+        policy.put("STAFF_BRANCH_", immutableSet(
+                "assignmentId", "targetUserId", "branchId", "previousStatus",
+                "newStatus", "reasonPresent"));
         policy.put("ORGANIZATION_", immutableSet(
                 "changedFields"));
         policy.put("GYM_BRANCH_", immutableSet(

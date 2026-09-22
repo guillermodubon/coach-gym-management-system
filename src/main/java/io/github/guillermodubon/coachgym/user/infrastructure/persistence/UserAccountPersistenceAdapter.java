@@ -18,10 +18,15 @@ class UserAccountPersistenceAdapter
 
     private final UserAccountJpaRepository userRepository;
     private final RoleJpaRepository roleRepository;
+    private final InitialAdministratorScopeProvisioner scopeProvisioner;
 
-    UserAccountPersistenceAdapter(UserAccountJpaRepository userRepository, RoleJpaRepository roleRepository) {
+    UserAccountPersistenceAdapter(
+            UserAccountJpaRepository userRepository,
+            RoleJpaRepository roleRepository,
+            InitialAdministratorScopeProvisioner scopeProvisioner) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
+        this.scopeProvisioner = scopeProvisioner;
     }
 
     @Override
@@ -52,6 +57,8 @@ class UserAccountPersistenceAdapter
                 administratorRole,
                 grantedAt);
         userRepository.save(user);
+        userRepository.flush();
+        scopeProvisioner.provision(user.id(), grantedAt);
     }
 
     @Override

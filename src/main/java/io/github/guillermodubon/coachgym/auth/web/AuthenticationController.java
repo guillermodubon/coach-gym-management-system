@@ -3,6 +3,9 @@ package io.github.guillermodubon.coachgym.auth.web;
 import io.github.guillermodubon.coachgym.auth.application.AuthenticationService;
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.auth.SessionSecurityPolicy;
+import io.github.guillermodubon.coachgym.user.ActiveBranchContextResolver;
+import io.github.guillermodubon.coachgym.user.AuthorizedBranchSummary;
+import io.github.guillermodubon.coachgym.user.StaffBranchContext;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -11,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.util.Comparator;
+import java.util.Objects;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -35,17 +39,20 @@ class AuthenticationController {
     private final SecurityContextRepository securityContextRepository;
     private final SessionAuthenticationStrategy sessionAuthenticationStrategy;
     private final SessionSecurityPolicy sessionSecurityPolicy;
+    private final ActiveBranchContextResolver activeBranchContextResolver;
     private final SecurityContextLogoutHandler logoutHandler = new SecurityContextLogoutHandler();
 
     AuthenticationController(
             AuthenticationService authenticationService,
             SecurityContextRepository securityContextRepository,
             SessionAuthenticationStrategy sessionAuthenticationStrategy,
-            SessionSecurityPolicy sessionSecurityPolicy) {
+            SessionSecurityPolicy sessionSecurityPolicy,
+            ActiveBranchContextResolver activeBranchContextResolver) {
         this.authenticationService = authenticationService;
         this.securityContextRepository = securityContextRepository;
         this.sessionAuthenticationStrategy = sessionAuthenticationStrategy;
         this.sessionSecurityPolicy = sessionSecurityPolicy;
+        this.activeBranchContextResolver = Objects.requireNonNull(activeBranchContextResolver);
     }
 
     @GetMapping("/csrf")
@@ -77,6 +84,11 @@ class AuthenticationController {
     @SecurityRequirement(name = "sessionCookie")
     CurrentUserResponse currentUser(Authentication authentication) {
         CoachGymUserPrincipal principal = (CoachGymUserPrincipal) authentication.getPrincipal();
+        StaffBranchContext context = activeBranchContextResolver.resolve(principal.id());
+        AuthorizedBranchSummary activeBranch = context.availableBranches().stream()
+                .filter(branch -> branch.id().equals(context.activeBranchId()))
+                .findFirst()
+                .orElse(null);
         return new CurrentUserResponse(
                 principal.id(),
                 principal.getUsername(),
@@ -84,7 +96,10 @@ class AuthenticationController {
                 principal.getAuthorities().stream()
                         .map(authority -> authority.getAuthority().replaceFirst("^ROLE_", ""))
                         .sorted(Comparator.naturalOrder())
-                        .toList());
+                        .toList(),
+                context.scopeType(),
+                activeBranch,
+                context.availableBranches());
     }
 
     @PostMapping("/logout")
