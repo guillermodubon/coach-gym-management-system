@@ -56,7 +56,7 @@ class OrganizationSchemaIntegrationTest extends AbstractIncidentApiIntegrationTe
         Integer migrationCount = jdbcTemplate.queryForObject("""
                 select count(*)
                 from flyway_schema_history
-                where version = '31'
+                where version = '32'
                   and success = true
                 """, Integer.class);
         assertThat(migrationCount).isEqualTo(1);
