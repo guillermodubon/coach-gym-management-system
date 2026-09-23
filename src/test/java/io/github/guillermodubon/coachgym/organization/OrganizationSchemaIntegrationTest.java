@@ -136,7 +136,7 @@ class OrganizationSchemaIntegrationTest extends AbstractIncidentApiIntegrationTe
     }
 
     @Test
-    void preservesExistingSettingsAndDoesNotAddPrematureBranchColumns() {
+    void preservesExistingSettingsAndExposesOperationalBranchColumns() {
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from gym.gym_settings where id = 1",
                 Integer.class)).isEqualTo(1);
@@ -149,10 +149,27 @@ class OrganizationSchemaIntegrationTest extends AbstractIncidentApiIntegrationTe
                 from information_schema.columns
                 where table_schema = 'gym'
                   and table_name in (
-                      'clients', 'memberships', 'payments', 'access_records',
-                      'equipment', 'incidents', 'maintenances', 'audit_entries')
-                  and column_name in ('branch_id', 'organization_id')
+                      'clients', 'memberships', 'membership_periods', 'payments',
+                      'payment_attempts', 'payment_receipts', 'email_deliveries',
+                      'access_records', 'equipment', 'incidents', 'maintenances',
+                      'notifications', 'audit_entries')
+                  and column_name in (
+                      'home_branch_id', 'registered_at_branch_id',
+                      'initiated_at_branch_id', 'branch_id', 'organization_id')
                 """, String.class);
-        assertThat(branchColumns).isEmpty();
+        assertThat(branchColumns)
+                .containsExactlyInAnyOrder(
+                        "clients.home_branch_id",
+                        "memberships.registered_at_branch_id",
+                        "membership_periods.registered_at_branch_id",
+                        "payments.registered_at_branch_id",
+                        "payment_attempts.initiated_at_branch_id",
+                        "payment_receipts.branch_id",
+                        "email_deliveries.branch_id",
+                        "access_records.branch_id",
+                        "equipment.branch_id",
+                        "incidents.branch_id",
+                        "maintenances.branch_id",
+                        "notifications.branch_id");
     }
 }
