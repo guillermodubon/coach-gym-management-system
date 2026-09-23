@@ -16,7 +16,17 @@ public record PaymentAttemptCreated(
         String currency,
         UUID createdByUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public PaymentAttemptCreated(UUID paymentAttemptId, UUID clientId,
+            UUID membershipId, UUID membershipPeriodId, PaymentProvider provider,
+            BigDecimal expectedAmount, String currency, UUID createdByUserId,
+            String actorIdentifier, Instant occurredAt) {
+        this(paymentAttemptId, clientId, membershipId, membershipPeriodId,
+                provider, expectedAmount, currency, createdByUserId,
+                actorIdentifier, occurredAt, null);
+    }
 
     public PaymentAttemptCreated {
         requireIdentifier(paymentAttemptId, "Payment attempt id");

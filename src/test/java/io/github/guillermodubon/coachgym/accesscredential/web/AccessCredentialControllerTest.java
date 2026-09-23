@@ -118,8 +118,9 @@ class AccessCredentialControllerTest {
 
     @Test
     void returnsMetadataToReceptionistAndDownloadsPrivateNoStorePng() throws Exception {
-        when(service.findActiveByClientId(CLIENT_ID)).thenReturn(activeDetails());
-        when(service.downloadActiveByClientId(CLIENT_ID))
+        when(service.findActiveByClientId(eq(CLIENT_ID), any(AuthenticatedActor.class)))
+                .thenReturn(activeDetails());
+        when(service.downloadActiveByClientId(eq(CLIENT_ID), any(AuthenticatedActor.class)))
                 .thenReturn(new AccessCredentialContent(
                         activeDetails(), new AccessCredentialDocument(MediaType.IMAGE_PNG_VALUE, PNG)));
 
@@ -208,7 +209,8 @@ class AccessCredentialControllerTest {
                 ISSUED_AT,
                 USER_ID,
                 null);
-        when(service.findHistoryByClientId(CLIENT_ID, 0, 25))
+        when(service.findHistoryByClientId(
+                eq(CLIENT_ID), eq(0), eq(25), any(AuthenticatedActor.class)))
                 .thenReturn(new AccessCredentialHistoryPage(List.of(entry), 0, 25, 1, 1));
 
         mockMvc.perform(get(path() + "/history").with(authenticatedAs("ADMIN")))
@@ -244,7 +246,7 @@ class AccessCredentialControllerTest {
 
     @Test
     void mapsFailuresToStablePrivacySafeProblemDetails() throws Exception {
-        when(service.findActiveByClientId(CLIENT_ID))
+        when(service.findActiveByClientId(eq(CLIENT_ID), any(AuthenticatedActor.class)))
                 .thenThrow(new AccessCredentialNotFoundException(CLIENT_ID));
         mockMvc.perform(get(path()).with(authenticatedAs("ADMIN")))
                 .andExpect(status().isNotFound())
@@ -298,7 +300,7 @@ class AccessCredentialControllerTest {
 
     @Test
     void mapsRemainingStorageAndStateFailuresWithoutLeakingDetails() throws Exception {
-        when(service.downloadActiveByClientId(CLIENT_ID))
+        when(service.downloadActiveByClientId(eq(CLIENT_ID), any(AuthenticatedActor.class)))
                 .thenThrow(new AccessCredentialStorageException("C:\\secret\\path"));
         mockMvc.perform(get(path() + "/content").with(authenticatedAs("ADMIN")))
                 .andExpect(status().isInternalServerError())

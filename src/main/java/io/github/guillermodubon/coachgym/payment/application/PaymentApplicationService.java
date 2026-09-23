@@ -15,10 +15,14 @@ import io.github.guillermodubon.coachgym.payment.domain.PaymentRegistration;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentRegistrationPolicy;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentValidationException;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.ActiveBranchContextUnavailableException;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,17 +34,30 @@ public class PaymentApplicationService {
     private final MembershipPaymentQuery membershipPaymentQuery;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
 
+    @Autowired
     public PaymentApplicationService(
             PaymentStore paymentStore,
             MembershipPaymentQuery membershipPaymentQuery,
             ApplicationEventPublisher eventPublisher,
-            Clock clock) {
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
 
         this.paymentStore = paymentStore;
         this.membershipPaymentQuery = membershipPaymentQuery;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
+        this.branchContextResolver = branchContextResolver;
+    }
+
+    /** Compatibility constructor for existing isolated application tests. */
+    public PaymentApplicationService(
+            PaymentStore paymentStore,
+            MembershipPaymentQuery membershipPaymentQuery,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock) {
+        this(paymentStore, membershipPaymentQuery, eventPublisher, clock, null);
     }
 
     @Transactional
@@ -52,6 +69,7 @@ public class PaymentApplicationService {
         validateCommand(command);
         validateActor(actor);
         PaymentRegistrationPolicy.requireManualPaymentMethod(command.paymentMethod());
+        UUID branchId = branchId(actor);
 
         MembershipPaymentDetails membership =
                 membershipPaymentQuery
@@ -103,18 +121,33 @@ public class PaymentApplicationService {
                     registration.externalReference());
         }
 
-        PaymentDetails payment =
-                paymentStore.register(
-                        registration.clientId(),
-                        registration.membershipId(),
-                        registration.membershipPeriodId(),
-                        registration.amount(),
-                        registration.currency(),
-                        registration.paymentMethod(),
-                        registration.externalReference(),
-                        registration.paidAt(),
-                        actor,
-                        now);
+        PaymentDetails payment;
+        if (branchContextResolver == null) {
+            payment = paymentStore.register(
+                    registration.clientId(),
+                    registration.membershipId(),
+                    registration.membershipPeriodId(),
+                    registration.amount(),
+                    registration.currency(),
+                    registration.paymentMethod(),
+                    registration.externalReference(),
+                    registration.paidAt(),
+                    actor,
+                    now);
+        } else {
+            payment = paymentStore.register(
+                    registration.clientId(),
+                    registration.membershipId(),
+                    registration.membershipPeriodId(),
+                    registration.amount(),
+                    registration.currency(),
+                    registration.paymentMethod(),
+                    registration.externalReference(),
+                    registration.paidAt(),
+                    actor,
+                    now,
+                    branchId);
+        }
 
         eventPublisher.publishEvent(
                 new PaymentRegistered(
@@ -131,7 +164,8 @@ public class PaymentApplicationService {
                         PaymentStatus.PAID,
                         actor.id(),
                         actor.username(),
-                        now));
+                        now,
+                        payment.registeredAtBranchId()));
 
         return payment;
     }
@@ -145,7 +179,22 @@ public class PaymentApplicationService {
                     "Payment search query must be provided.");
         }
 
-        return paymentStore.findAll(query);
+        return paymentStore.findAll(query, query.branchId());
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public PaymentPage findAll(PaymentSearchQuery query, AuthenticatedActor actor) {
+        validateActor(actor);
+        if (query == null) {
+            throw new PaymentValidationException("Payment search query must be provided.");
+        }
+        if (branchContextResolver == null) {
+            throw new ActiveBranchContextUnavailableException();
+        }
+        UUID branchId = BranchResourceAuthorizationPolicy.requireListBranch(
+                branchContextResolver.resolveOperation(actor.id()), query.branchId());
+        return paymentStore.findAll(query, branchId);
     }
 
     @Transactional(readOnly = true)
@@ -160,6 +209,25 @@ public class PaymentApplicationService {
         return paymentStore.findById(paymentId)
                 .orElseThrow(() ->
                         new PaymentNotFoundException(paymentId));
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public PaymentDetails findById(UUID paymentId, AuthenticatedActor actor) {
+        validateActor(actor);
+        if (paymentId == null) {
+            throw new PaymentValidationException("Payment identifier must be provided.");
+        }
+        return paymentStore.findById(paymentId, branchId(actor))
+                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
+    }
+
+    private UUID branchId(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(
+                branchContextResolver.resolveOperation(actor.id()));
     }
 
     // ------------------------------------------------------------------

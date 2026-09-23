@@ -156,7 +156,8 @@ public class CanonicalEmailDeliverySourceResolver implements EmailDeliverySource
                         source.receipt().membershipCode(),
                         source.receipt().planName(),
                         null,
-                        source.receipt().testMode()));
+                        source.receipt().testMode()),
+                source.receipt().branchId());
     }
 
     private EmailDeliverySource resolveCredential(UUID credentialId) {
@@ -205,7 +206,8 @@ public class CanonicalEmailDeliverySourceResolver implements EmailDeliverySource
                         null,
                         null,
                         source.credential().credentialCode(),
-                        false));
+                        false),
+                resolvedRecipient.client().homeBranchId());
     }
 
     private ResolvedRecipient recipientFor(

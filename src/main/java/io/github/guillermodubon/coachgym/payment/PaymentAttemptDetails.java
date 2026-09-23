@@ -25,7 +25,30 @@ public record PaymentAttemptDetails(
         Instant createdAt,
         Instant updatedAt,
         Instant completedAt,
-        long version) {
+        long version,
+        UUID initiatedAtBranchId) {
+
+    /** Compatibility constructor for non-scoped in-memory fixtures. */
+    public PaymentAttemptDetails(
+            UUID id,
+            UUID clientId,
+            UUID membershipId,
+            UUID membershipPeriodId,
+            PaymentProvider provider,
+            PaymentAttemptStatus status,
+            BigDecimal expectedAmount,
+            String currency,
+            PaymentAttemptFailureCode failureCode,
+            UUID confirmedPaymentId,
+            UUID createdByUserId,
+            Instant createdAt,
+            Instant updatedAt,
+            Instant completedAt,
+            long version) {
+        this(id, clientId, membershipId, membershipPeriodId, provider, status,
+                expectedAmount, currency, failureCode, confirmedPaymentId,
+                createdByUserId, createdAt, updatedAt, completedAt, version, null);
+    }
 
     public PaymentAttemptDetails {
         requireIdentifier(id, "Payment attempt id");

@@ -21,7 +21,26 @@ public record NotificationDetails(
         Instant readAt,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID branchId) {
+
+    public NotificationDetails(
+            UUID id,
+            UUID recipientUserId,
+            NotificationType notificationType,
+            NotificationSeverity severity,
+            String title,
+            String body,
+            NotificationResourceType resourceType,
+            UUID resourceId,
+            Instant readAt,
+            Instant createdAt,
+            Instant updatedAt,
+            long version) {
+        this(id, recipientUserId, notificationType, severity, title, body,
+                resourceType, resourceId, readAt, createdAt, updatedAt, version,
+                null);
+    }
 
     /** Returns whether the notification has already been read. */
     public boolean read() {

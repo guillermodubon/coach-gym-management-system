@@ -11,12 +11,25 @@ public interface EmailDeliveryQuery {
 
     Optional<EmailDeliveryDetails> findById(UUID deliveryId);
 
+    default Optional<EmailDeliveryDetails> findById(UUID deliveryId, UUID branchId) {
+        return findById(deliveryId);
+    }
+
     Optional<EmailDeliveryDetails> findByIdempotencyKeyDigest(String idempotencyKeyDigest);
 
     EmailDeliveryPage findAll(EmailDeliverySearchQuery query);
 
+    default EmailDeliveryPage findAll(EmailDeliverySearchQuery query, UUID branchId) {
+        return findAll(query);
+    }
+
     /** Returns immutable attempts in chronological order. */
     default List<EmailDeliveryAttemptDetails> findAttempts(UUID deliveryId) {
         return List.of();
+    }
+
+    default List<EmailDeliveryAttemptDetails> findAttempts(
+            UUID deliveryId, UUID branchId) {
+        return findAttempts(deliveryId);
     }
 }

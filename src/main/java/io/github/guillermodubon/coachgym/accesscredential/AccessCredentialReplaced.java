@@ -13,7 +13,18 @@ public record AccessCredentialReplaced(
         UUID actorUserId,
         String actorIdentifier,
         Instant occurredAt,
-        boolean reasonPresent) {
+        boolean reasonPresent,
+        UUID branchId) {
+
+    public AccessCredentialReplaced(UUID previousCredentialId,
+            UUID replacementCredentialId, UUID clientId,
+            AccessCredentialStatus previousStatus,
+            AccessCredentialStatus replacementStatus, UUID actorUserId,
+            String actorIdentifier, Instant occurredAt, boolean reasonPresent) {
+        this(previousCredentialId, replacementCredentialId, clientId,
+                previousStatus, replacementStatus, actorUserId, actorIdentifier,
+                occurredAt, reasonPresent, null);
+    }
 
     public AccessCredentialReplaced {
         previousCredentialId = requiredId(

@@ -15,5 +15,20 @@ public record PersistPaymentAttemptCommand(
         BigDecimal expectedAmount,
         String currency,
         UUID createdByUserId,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID initiatedAtBranchId) {
+
+    public PersistPaymentAttemptCommand(
+            UUID paymentAttemptId,
+            UUID clientId,
+            UUID membershipId,
+            UUID membershipPeriodId,
+            PaymentProvider provider,
+            BigDecimal expectedAmount,
+            String currency,
+            UUID createdByUserId,
+            Instant occurredAt) {
+        this(paymentAttemptId, clientId, membershipId, membershipPeriodId, provider,
+                expectedAmount, currency, createdByUserId, occurredAt, null);
+    }
 }

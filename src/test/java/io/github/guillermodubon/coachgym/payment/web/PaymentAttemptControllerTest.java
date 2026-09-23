@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.payment.web;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -117,7 +118,8 @@ class PaymentAttemptControllerTest {
 
     @Test
     void readsAndCancelsAttemptForReceptionist() throws Exception {
-        when(paymentAttemptService.findById(ATTEMPT_ID)).thenReturn(details(PaymentAttemptStatus.PROCESSING));
+        when(paymentAttemptService.findById(eq(ATTEMPT_ID), any()))
+                .thenReturn(details(PaymentAttemptStatus.PROCESSING));
         when(paymentAttemptService.cancel(any(), any())).thenReturn(details(PaymentAttemptStatus.CANCELLED));
 
         mockMvc.perform(get("/api/v1/payment-attempts/{id}", ATTEMPT_ID)

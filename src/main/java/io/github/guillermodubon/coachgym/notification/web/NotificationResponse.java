@@ -20,7 +20,8 @@ public record NotificationResponse(
         Instant readAt,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID branchId) {
 
     static NotificationResponse from(NotificationDetails details) {
         return new NotificationResponse(
@@ -36,6 +37,7 @@ public record NotificationResponse(
                 details.readAt(),
                 details.createdAt(),
                 details.updatedAt(),
-                details.version());
+                details.version(),
+                details.branchId());
     }
 }

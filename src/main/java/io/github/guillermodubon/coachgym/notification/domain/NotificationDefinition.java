@@ -11,7 +11,8 @@ public record NotificationDefinition(
         NotificationType notificationType,
         NotificationSeverity severity,
         NotificationContent content,
-        NotificationReference reference) {
+        NotificationReference reference,
+        UUID branchId) {
 
     public NotificationDefinition {
         if (recipientUserId == null) {
@@ -48,6 +49,34 @@ public record NotificationDefinition(
                 notificationType,
                 severity,
                 new NotificationContent(title, body),
-                new NotificationReference(resourceType, resourceId));
+                new NotificationReference(resourceType, resourceId),
+                null);
+    }
+
+    public NotificationDefinition(
+            UUID recipientUserId,
+            NotificationType notificationType,
+            NotificationSeverity severity,
+            NotificationContent content,
+            NotificationReference reference) {
+        this(recipientUserId, notificationType, severity, content, reference, null);
+    }
+
+    public NotificationDefinition(
+            UUID recipientUserId,
+            NotificationType notificationType,
+            NotificationSeverity severity,
+            String title,
+            String body,
+            NotificationResourceType resourceType,
+            UUID resourceId,
+            UUID branchId) {
+        this(
+                recipientUserId,
+                notificationType,
+                severity,
+                new NotificationContent(title, body),
+                new NotificationReference(resourceType, resourceId),
+                branchId);
     }
 }

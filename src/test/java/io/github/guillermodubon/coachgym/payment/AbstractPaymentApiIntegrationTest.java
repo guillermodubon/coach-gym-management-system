@@ -293,7 +293,6 @@ abstract class AbstractPaymentApiIntegrationTest {
                     email, passwordEncoder.encode(password), userId);
         }
 
-        jdbcTemplate.update("delete from gym.user_roles where user_id=?", userId);
         jdbcTemplate.update(
                 """
                 insert into gym.user_roles(user_id,role_id)
@@ -301,5 +300,26 @@ abstract class AbstractPaymentApiIntegrationTest {
                 on conflict(user_id,role_id) do nothing
                 """,
                 userId, roleCode);
+        jdbcTemplate.update(
+                """
+                insert into gym.staff_scopes (user_id, scope_type, version)
+                values (?, ?, 0)
+                on conflict (user_id) do nothing
+                """,
+                userId, "ADMIN".equals(roleCode) ? "ORGANIZATION" : "BRANCH");
+        if ("RECEPTIONIST".equals(roleCode)) {
+            jdbcTemplate.update(
+                    """
+                    insert into gym.staff_branch_assignments
+                        (id, user_id, branch_id, status, assigned_at, version)
+                    values (?, ?, ?, 'ACTIVE', current_timestamp, 0)
+                    on conflict (id) do nothing
+                    """,
+                    UUID.nameUUIDFromBytes(
+                            (userId + ":initial-branch")
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                    userId,
+                    UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002"));
+        }
     }
 }

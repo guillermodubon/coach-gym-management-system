@@ -11,7 +11,14 @@ public record PaymentProviderPaymentConfirmed(
         PaymentProvider provider,
         BigDecimal amount,
         String currency,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public PaymentProviderPaymentConfirmed(UUID paymentAttemptId, UUID paymentId,
+            PaymentProvider provider, BigDecimal amount, String currency,
+            Instant occurredAt) {
+        this(paymentAttemptId, paymentId, provider, amount, currency, occurredAt, null);
+    }
 
     public PaymentProviderPaymentConfirmed {
         if (paymentAttemptId == null || paymentId == null || provider == null

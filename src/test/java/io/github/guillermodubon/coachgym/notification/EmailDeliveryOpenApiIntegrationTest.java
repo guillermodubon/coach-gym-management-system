@@ -34,12 +34,15 @@ class EmailDeliveryOpenApiIntegrationTest extends AbstractNotificationApiIntegra
                 .andExpect(jsonPath("$.paths['/api/v1/email-deliveries'].get.parameters[*].name")
                         .value(containsInAnyOrder(
                                 "deliveryType", "status", "clientId", "sourceResourceId",
-                                "requestedFrom", "requestedUntil", "page", "size", "sort", "direction")))
+                                "requestedFrom", "requestedUntil", "page", "size", "sort", "direction",
+                                "branchId")))
                 .andExpect(jsonPath("$.paths['/api/v1/email-deliveries'].get.security[0].sessionCookie")
                         .exists())
                 .andExpect(jsonPath("$.paths['/api/v1/email-deliveries/{id}/retry'].post.security[0].sessionCookie")
                         .exists())
                 .andExpect(jsonPath("$.components.schemas.EmailDeliveryResponse.properties.maskedRecipient")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.EmailDeliveryResponse.properties.branchId")
                         .exists())
                 .andExpect(jsonPath("$.components.schemas.EmailDeliveryResponse.properties.recipientSnapshot")
                         .doesNotExist())

@@ -34,7 +34,7 @@ class JdbcPaymentAttemptAdapter implements PaymentAttemptStore {
             select id, client_id, membership_id, membership_period_id, provider, status,
                    expected_amount, currency, failure_code, confirmed_payment_id,
                    created_by_user_id, created_at, updated_at, completed_at, version,
-                   checkout_reference, checkout_expires_at
+                   checkout_reference, checkout_expires_at, initiated_at_branch_id
             from gym.payment_attempts
             where id = :id
             """;
@@ -60,14 +60,17 @@ class JdbcPaymentAttemptAdapter implements PaymentAttemptStore {
                 .addValue("amount", command.expectedAmount())
                 .addValue("currency", command.currency().strip().toUpperCase())
                 .addValue("userId", command.createdByUserId())
+                .addValue("branchId", command.initiatedAtBranchId())
                 .addValue("occurredAt", offset(command.occurredAt()));
 
         jdbcTemplate.update("""
                 insert into gym.payment_attempts
                     (id, client_id, membership_id, membership_period_id, provider, status,
-                     expected_amount, currency, created_by_user_id, created_at, updated_at, version)
+                     expected_amount, currency, created_by_user_id, created_at, updated_at,
+                     version, initiated_at_branch_id)
                 values (:id, :clientId, :membershipId, :periodId, :provider, 'CREATED',
-                        :amount, :currency, :userId, :occurredAt, :occurredAt, 0)
+                        :amount, :currency, :userId, :occurredAt, :occurredAt, 0,
+                        COALESCE(:branchId, '7b0bf7d5-5184-43d2-8f9a-200000000002'::uuid))
                 """, parameters);
         jdbcTemplate.update("""
                 insert into gym.payment_attempt_status_history
@@ -92,12 +95,38 @@ class JdbcPaymentAttemptAdapter implements PaymentAttemptStore {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<PaymentAttemptDetails> findById(UUID paymentAttemptId, UUID branchId) {
+        if (paymentAttemptId == null) {
+            throw new IllegalArgumentException("Payment attempt id is required.");
+        }
+        return jdbcTemplate.query(ATTEMPT_SELECT + " and initiated_at_branch_id = :branchId",
+                new MapSqlParameterSource().addValue("id", paymentAttemptId)
+                        .addValue("branchId", branchId),
+                JdbcPaymentAttemptAdapter::map).stream().findFirst();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<PaymentAttemptProviderDetails> findProviderDetails(UUID paymentAttemptId) {
         if (paymentAttemptId == null) {
             throw new IllegalArgumentException("Payment attempt id is required.");
         }
         return jdbcTemplate.query(ATTEMPT_SELECT,
                 new MapSqlParameterSource("id", paymentAttemptId),
+                JdbcPaymentAttemptAdapter::mapProvider).stream().findFirst();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<PaymentAttemptProviderDetails> findProviderDetails(
+            UUID paymentAttemptId, UUID branchId) {
+        if (paymentAttemptId == null) {
+            throw new IllegalArgumentException("Payment attempt id is required.");
+        }
+        return jdbcTemplate.query(
+                ATTEMPT_SELECT + " and initiated_at_branch_id = :branchId",
+                new MapSqlParameterSource().addValue("id", paymentAttemptId)
+                        .addValue("branchId", branchId),
                 JdbcPaymentAttemptAdapter::mapProvider).stream().findFirst();
     }
 
@@ -276,7 +305,8 @@ class JdbcPaymentAttemptAdapter implements PaymentAttemptStore {
                 resultSet.getObject("created_at", OffsetDateTime.class).toInstant(),
                 resultSet.getObject("updated_at", OffsetDateTime.class).toInstant(),
                 completedAt == null ? null : completedAt.toInstant(),
-                resultSet.getLong("version"));
+                resultSet.getLong("version"),
+                resultSet.getObject("initiated_at_branch_id", UUID.class));
     }
 
     private static PaymentAttemptProviderDetails mapProvider(

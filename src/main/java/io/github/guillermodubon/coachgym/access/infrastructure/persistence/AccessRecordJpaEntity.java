@@ -18,6 +18,9 @@ import java.util.UUID;
 @Table(schema = "gym", name = "access_records")
 class AccessRecordJpaEntity {
 
+    private static final UUID INITIAL_BRANCH_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002");
+
     @Id
     private UUID id;
 
@@ -99,6 +102,9 @@ class AccessRecordJpaEntity {
     @Column(name = "access_credential_id", updatable = false)
     private UUID accessCredentialId;
 
+    @Column(name = "branch_id", nullable = false, updatable = false)
+    private UUID branchId;
+
     protected AccessRecordJpaEntity() {
     }
 
@@ -117,6 +123,35 @@ class AccessRecordJpaEntity {
 
         return create(
                 presentedIdentifier,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                membershipPeriodId,
+                result,
+                reasonCode,
+                reason,
+                checkedInAt,
+                processedByUserId,
+                null);
+    }
+
+    static AccessRecordJpaEntity create(
+            String presentedIdentifier,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            UUID membershipPeriodId,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            String reason,
+            Instant checkedInAt,
+            UUID processedByUserId,
+            UUID branchId) {
+
+        return create(
+                presentedIdentifier,
                 AccessIdentifierType.UNKNOWN,
                 null,
                 clientId,
@@ -128,7 +163,8 @@ class AccessRecordJpaEntity {
                 reasonCode,
                 reason,
                 checkedInAt,
-                processedByUserId);
+                processedByUserId,
+                branchId);
     }
 
     static AccessRecordJpaEntity createQr(
@@ -145,6 +181,37 @@ class AccessRecordJpaEntity {
             Instant checkedInAt,
             UUID processedByUserId) {
 
+        return createQr(
+                presentedIdentifier,
+                accessCredentialId,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                membershipPeriodId,
+                result,
+                reasonCode,
+                reason,
+                checkedInAt,
+                processedByUserId,
+                null);
+    }
+
+    static AccessRecordJpaEntity createQr(
+            String presentedIdentifier,
+            UUID accessCredentialId,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            UUID membershipPeriodId,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            String reason,
+            Instant checkedInAt,
+            UUID processedByUserId,
+            UUID branchId) {
+
         return create(
                 presentedIdentifier,
                 AccessIdentifierType.QR_CREDENTIAL,
@@ -158,7 +225,8 @@ class AccessRecordJpaEntity {
                 reasonCode,
                 reason,
                 checkedInAt,
-                processedByUserId);
+                processedByUserId,
+                branchId);
     }
 
     private static AccessRecordJpaEntity create(
@@ -174,7 +242,8 @@ class AccessRecordJpaEntity {
             AccessReasonCode reasonCode,
             String reason,
             Instant checkedInAt,
-            UUID processedByUserId) {
+            UUID processedByUserId,
+            UUID branchId) {
 
         validateRequiredValues(
                 presentedIdentifier,
@@ -213,6 +282,7 @@ class AccessRecordJpaEntity {
         entity.processedByUserId = processedByUserId;
         entity.identificationSource = identificationSource;
         entity.accessCredentialId = accessCredentialId;
+        entity.branchId = branchId == null ? INITIAL_BRANCH_ID : branchId;
 
         return entity;
     }
@@ -229,7 +299,8 @@ class AccessRecordJpaEntity {
                 reasonCode,
                 reason,
                 checkedInAt,
-                processedByUserId);
+                processedByUserId,
+                branchId);
     }
 
     UUID id() {
@@ -246,6 +317,10 @@ class AccessRecordJpaEntity {
 
     UUID accessCredentialId() {
         return accessCredentialId;
+    }
+
+    UUID branchId() {
+        return branchId;
     }
 
     private static void validateSourceConsistency(

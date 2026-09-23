@@ -13,6 +13,7 @@ import io.github.guillermodubon.coachgym.notification.application.TransactionalE
 import io.github.guillermodubon.coachgym.notification.domain.EmailDeliveryValidationException;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -105,12 +106,14 @@ class EmailDeliveryController {
     @Operation(
             summary = "List transactional email delivery history",
             description = "ADMIN and RECEPTIONIST may read bounded, allowlisted operational history. "
-                    + "Recipient addresses are masked.")
+                    + "Recipient addresses are masked. An explicit branchId is available only to organization administrators for an active authorized branch; otherwise the active branch is required.")
     @ApiResponse(responseCode = "200", description = "Delivery history returned",
             content = @Content(schema = @Schema(implementation = EmailDeliveryPageResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid filter, pagination, or sort")
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
+    @ApiResponse(responseCode = "404", description = "Requested branch is not available")
+    @ApiResponse(responseCode = "409", description = "No valid active branch is selected")
     EmailDeliveryPageResponse findAll(
             @RequestParam(required = false) String deliveryType,
             @RequestParam(required = false) String status,
@@ -118,6 +121,8 @@ class EmailDeliveryController {
             @RequestParam(required = false) UUID sourceResourceId,
             @RequestParam(required = false) String requestedFrom,
             @RequestParam(required = false) String requestedUntil,
+            @Parameter(description = "Optional active branch UUID for organization administrators; other staff are restricted to their active branch")
+            @RequestParam(required = false) UUID branchId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
             @RequestParam(defaultValue = "REQUESTED_AT") String sort,
@@ -133,7 +138,8 @@ class EmailDeliveryController {
                 page,
                 size,
                 EmailDeliverySortField.from(sort),
-                EmailDeliverySortDirection.from(direction)));
+                EmailDeliverySortDirection.from(direction)),
+                actor(authentication), branchId);
         return EmailDeliveryPageResponse.from(result);
     }
 
@@ -147,7 +153,7 @@ class EmailDeliveryController {
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
     @ApiResponse(responseCode = "404", description = "Delivery not found")
     EmailDeliveryResponse findById(@PathVariable UUID id, Authentication authentication) {
-        return EmailDeliveryResponse.from(service.findById(id));
+        return EmailDeliveryResponse.from(service.findById(id, actor(authentication)));
     }
 
     @GetMapping("/{id}/attempts")
@@ -161,7 +167,8 @@ class EmailDeliveryController {
     java.util.List<EmailDeliveryAttemptResponse> findAttempts(
             @PathVariable UUID id,
             Authentication authentication) {
-        return service.findAttempts(id).stream().map(EmailDeliveryAttemptResponse::from).toList();
+        return service.findAttempts(id, actor(authentication)).stream()
+                .map(EmailDeliveryAttemptResponse::from).toList();
     }
 
     @PostMapping("/{id}/retry")

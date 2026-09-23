@@ -31,6 +31,8 @@ class JdbcTransactionalEmailDeliveryAdapterIntegrationTest
         extends AbstractIncidentApiIntegrationTest {
 
     private static final Instant NOW = Instant.parse("2026-09-15T12:00:00Z");
+    private static final UUID INITIAL_BRANCH_ID = UUID.fromString(
+            "7b0bf7d5-5184-43d2-8f9a-200000000002");
 
     @Autowired private EmailDeliveryStore deliveryStore;
     @Autowired private EmailDeliveryQuery deliveryQuery;
@@ -196,7 +198,8 @@ class JdbcTransactionalEmailDeliveryAdapterIntegrationTest
                 "recipient@example.com", "Your Coach Gym receipt", "receipt-v1",
                 "PAYMENT_RECEIPT", sourceId, "payment-receipt-" + sourceId + ".pdf",
                 "application/pdf", 128, digest, digest, EmailDeliveryStatus.PENDING, 0,
-                null, null, NOW, actor, null, null, NOW, NOW, 0);
+                null, null, NOW, actor, null, null, NOW, NOW, 0,
+                INITIAL_BRANCH_ID);
     }
 
     private UUID insertClient(String suffix) {

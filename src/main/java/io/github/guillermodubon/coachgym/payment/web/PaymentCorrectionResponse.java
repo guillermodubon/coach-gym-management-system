@@ -16,7 +16,8 @@ record PaymentCorrectionResponse(
         Instant correctedAt,
         UUID correctedByUserId,
         long version,
-        PaymentRefundResponse refund) {
+        PaymentRefundResponse refund,
+        UUID branchId) {
 
     static PaymentCorrectionResponse from(PaymentCorrectionDetails details) {
         return new PaymentCorrectionResponse(
@@ -29,6 +30,7 @@ record PaymentCorrectionResponse(
                 details.correctedAt(),
                 details.correctedByUserId(),
                 details.version(),
-                PaymentRefundResponse.from(details.refund()));
+                PaymentRefundResponse.from(details.refund()),
+                details.branchId());
     }
 }

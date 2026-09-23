@@ -8,6 +8,8 @@ import io.github.guillermodubon.coachgym.payment.PaymentReceiptOrganization;
 import io.github.guillermodubon.coachgym.payment.PaymentReceiptSnapshot;
 import io.github.guillermodubon.coachgym.payment.PaymentReceiptSourceSnapshot;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -45,6 +47,7 @@ public class PaymentReceiptApplicationService {
     private final PaymentReceiptNumberGenerator numberGenerator;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
 
     @Autowired
     public PaymentReceiptApplicationService(
@@ -56,7 +59,8 @@ public class PaymentReceiptApplicationService {
             PaymentReceiptStorage storage,
             PaymentReceiptNumberGenerator numberGenerator,
             ApplicationEventPublisher eventPublisher,
-            Clock clock) {
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
         this.receiptStore = Objects.requireNonNull(receiptStore);
         this.receiptQuery = Objects.requireNonNull(receiptQuery);
         this.snapshotQuery = Objects.requireNonNull(snapshotQuery);
@@ -66,6 +70,7 @@ public class PaymentReceiptApplicationService {
         this.numberGenerator = Objects.requireNonNull(numberGenerator);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.clock = Objects.requireNonNull(clock);
+        this.branchContextResolver = branchContextResolver;
     }
 
     /**
@@ -84,7 +89,21 @@ public class PaymentReceiptApplicationService {
         this(receiptStore, receiptQuery, snapshotQuery, organizationQuery, renderer, storage,
                 () -> "REC-" + UUID.randomUUID().toString().replace("-", "").substring(0, 28)
                         .toUpperCase(java.util.Locale.ROOT),
-                eventPublisher, clock);
+                eventPublisher, clock, null);
+    }
+
+    public PaymentReceiptApplicationService(
+            PaymentReceiptStore receiptStore,
+            PaymentReceiptQuery receiptQuery,
+            PaymentReceiptSnapshotQuery snapshotQuery,
+            PaymentReceiptOrganizationQuery organizationQuery,
+            PaymentReceiptRenderer renderer,
+            PaymentReceiptStorage storage,
+            PaymentReceiptNumberGenerator numberGenerator,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock) {
+        this(receiptStore, receiptQuery, snapshotQuery, organizationQuery, renderer, storage,
+                numberGenerator, eventPublisher, clock, null);
     }
 
     /**
@@ -101,8 +120,11 @@ public class PaymentReceiptApplicationService {
         }
         requireActor(actor);
         UUID paymentId = command.paymentId();
+        UUID branchId = branchId(actor);
 
-        Optional<PaymentReceiptDetails> existing = receiptQuery.findByPaymentId(paymentId);
+        Optional<PaymentReceiptDetails> existing = branchContextResolver == null
+                ? receiptQuery.findByPaymentId(paymentId)
+                : receiptQuery.findByPaymentId(paymentId, branchId);
         if (existing.isPresent()) {
             return existing.get();
         }
@@ -110,6 +132,7 @@ public class PaymentReceiptApplicationService {
         PaymentReceiptSourceSnapshot source = snapshotQuery.findByPaymentId(paymentId)
                 .orElseThrow(() -> new PaymentNotFoundException(paymentId));
         PaymentReceiptPolicy.requireGenerationAllowed(paymentId, source.paymentStatus());
+        requireBranch(source.branchId(), branchId);
 
         // PostgreSQL TIMESTAMPTZ stores microsecond precision. Normalize the
         // server timestamp before rendering and persisting so the immutable
@@ -142,7 +165,8 @@ public class PaymentReceiptApplicationService {
                 generatedAt,
                 actor.id(),
                 actor.username(),
-                isTestMode(source));
+                isTestMode(source),
+                source.branchId());
 
         PaymentReceiptOrganization organization = organizationQuery.findCurrent();
         PaymentReceiptDocument document = renderer.render(snapshot, organization);
@@ -173,7 +197,9 @@ public class PaymentReceiptApplicationService {
             return persisted;
         } catch (PaymentReceiptDuplicateException duplicate) {
             compensateOrThrow(storageKey, duplicate);
-            return receiptQuery.findByPaymentId(paymentId)
+            return (branchContextResolver == null
+                    ? receiptQuery.findByPaymentId(paymentId)
+                    : receiptQuery.findByPaymentId(paymentId, branchId))
                     .orElseThrow(() -> duplicate);
         } catch (RuntimeException failure) {
             compensateOrThrow(storageKey, failure);
@@ -191,9 +217,31 @@ public class PaymentReceiptApplicationService {
 
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public PaymentReceiptDetails findById(
+            UUID receiptId,
+            AuthenticatedActor actor) {
+        requireActor(actor);
+        requireIdentifier(receiptId, "Receipt id");
+        return receiptQuery.findById(receiptId, branchId(actor))
+                .orElseThrow(() -> new PaymentReceiptNotFoundException(receiptId));
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public PaymentReceiptDetails findByPaymentId(UUID paymentId) {
         requireIdentifier(paymentId, "Payment id");
         return receiptQuery.findByPaymentId(paymentId)
+                .orElseThrow(() -> new PaymentReceiptNotFoundException(paymentId));
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public PaymentReceiptDetails findByPaymentId(
+            UUID paymentId,
+            AuthenticatedActor actor) {
+        requireActor(actor);
+        requireIdentifier(paymentId, "Payment id");
+        return receiptQuery.findByPaymentId(paymentId, branchId(actor))
                 .orElseThrow(() -> new PaymentReceiptNotFoundException(paymentId));
     }
 
@@ -204,6 +252,9 @@ public class PaymentReceiptApplicationService {
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public PaymentReceiptContent downloadByPaymentId(UUID paymentId) {
+        if (branchContextResolver != null) {
+            throw new io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException();
+        }
         requireIdentifier(paymentId, "Payment id");
         PaymentReceiptDetails details = receiptQuery.findByPaymentId(paymentId)
                 .orElseThrow(() -> new PaymentReceiptNotFoundException(paymentId));
@@ -211,6 +262,28 @@ public class PaymentReceiptApplicationService {
                 PaymentReceiptStorageKey.forReceipt(details.id()),
                 details.contentType(),
                 details.checksumSha256());
+        if (document.sizeBytes() != details.sizeBytes()
+                || !document.contentType().equals(details.contentType())
+                || !document.checksumSha256().equals(details.checksumSha256())) {
+            throw new PaymentReceiptDataAccessException(
+                    "Stored payment receipt does not match its metadata.", null);
+        }
+        return new PaymentReceiptContent(details, document);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public PaymentReceiptContent downloadByPaymentId(
+            UUID paymentId,
+            AuthenticatedActor actor) {
+        requireActor(actor);
+        requireIdentifier(paymentId, "Payment id");
+        PaymentReceiptDetails details = receiptQuery.findByPaymentId(
+                paymentId, branchId(actor))
+                .orElseThrow(() -> new PaymentReceiptNotFoundException(paymentId));
+        PaymentReceiptDocument document = storage.load(
+                PaymentReceiptStorageKey.forReceipt(details.id()),
+                details.contentType(), details.checksumSha256());
         if (document.sizeBytes() != details.sizeBytes()
                 || !document.contentType().equals(details.contentType())
                 || !document.checksumSha256().equals(details.checksumSha256())) {
@@ -255,7 +328,8 @@ public class PaymentReceiptApplicationService {
                 document.sizeBytes(),
                 document.checksumSha256(),
                 safeRendererVersion,
-                0L);
+                0L,
+                snapshot.branchId());
     }
 
     private static PaymentReceiptGenerated event(PaymentReceiptDetails details) {
@@ -270,7 +344,8 @@ public class PaymentReceiptApplicationService {
                 details.generatedByUserId(),
                 details.generatedByDisplayName(),
                 details.testMode(),
-                details.generatedAt());
+                details.generatedAt(),
+                details.branchId());
     }
 
     private static boolean isTestMode(PaymentReceiptSourceSnapshot source) {
@@ -283,6 +358,7 @@ public class PaymentReceiptApplicationService {
             PaymentReceiptDetails candidate,
             PaymentReceiptDocument document) {
         if (!candidate.id().equals(persisted.id())
+                || !Objects.equals(candidate.branchId(), persisted.branchId())
                 || !candidate.receiptNumber().equals(persisted.receiptNumber())
                 || !candidate.paymentId().equals(persisted.paymentId())
                 || !candidate.paymentCode().equals(persisted.paymentCode())
@@ -360,6 +436,21 @@ public class PaymentReceiptApplicationService {
     private static void requireIdentifier(UUID value, String label) {
         if (value == null) {
             throw new PaymentReceiptValidationException(label + " is required.");
+        }
+    }
+
+    private UUID branchId(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(
+                branchContextResolver.resolveOperation(actor.id()));
+    }
+
+    private static void requireBranch(UUID resourceBranchId, UUID activeBranchId) {
+        if (activeBranchId != null && (resourceBranchId == null
+                || !activeBranchId.equals(resourceBranchId))) {
+            throw new io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException();
         }
     }
 }

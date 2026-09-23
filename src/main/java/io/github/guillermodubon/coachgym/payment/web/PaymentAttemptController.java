@@ -76,8 +76,11 @@ class PaymentAttemptController {
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
     @ApiResponse(responseCode = "404", description = "Payment attempt not found")
-    PaymentAttemptResponse findById(@PathVariable UUID attemptId) {
-        return PaymentAttemptResponse.from(paymentAttemptService.findById(attemptId));
+    PaymentAttemptResponse findById(
+            @PathVariable UUID attemptId,
+            Authentication authentication) {
+        return PaymentAttemptResponse.from(
+                paymentAttemptService.findById(attemptId, actor(authentication)));
     }
 
     @PostMapping("/{attemptId}/cancel")

@@ -25,7 +25,8 @@ class PaymentCorrectionPortContractTest {
     void writePortExposesExactlyVoidAndFullRefundOperations() {
         assertThat(PaymentCorrectionStore.class.getDeclaredMethods())
                 .extracting(Method::getName)
-                .containsExactlyInAnyOrder("voidPayment", "refundPayment");
+                .containsOnly("voidPayment", "refundPayment")
+                .hasSize(4);
     }
 
     @Test

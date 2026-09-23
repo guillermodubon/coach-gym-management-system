@@ -28,16 +28,22 @@ import org.springframework.transaction.annotation.Transactional;
 class JdbcPaymentReceiptAdapter implements PaymentReceiptStore, PaymentReceiptQuery {
 
     static final String SELECT = """
-            select id, receipt_number, payment_id, payment_code_snapshot,
-                   payment_status_snapshot, client_code_snapshot,
-                   client_display_name_snapshot, membership_code_snapshot,
-                   plan_name_snapshot, promotion_name_snapshot,
-                   membership_period_number, period_starts_on, period_ends_on,
-                   list_price, discount_amount, amount, currency, payment_method,
-                   paid_at, generated_at, generated_by_user_id,
-                   generated_by_display_name, test_mode, content_type, size_bytes,
-                   checksum_sha256, renderer_version, version
-            from gym.payment_receipts
+            select receipt.id, receipt.receipt_number, receipt.payment_id,
+                   receipt.payment_code_snapshot, receipt.payment_status_snapshot,
+                   receipt.client_code_snapshot, receipt.client_display_name_snapshot,
+                   receipt.membership_code_snapshot, receipt.plan_name_snapshot,
+                   receipt.promotion_name_snapshot, receipt.membership_period_number,
+                   receipt.period_starts_on, receipt.period_ends_on, receipt.list_price,
+                   receipt.discount_amount, receipt.amount, receipt.currency,
+                   receipt.payment_method, receipt.paid_at, receipt.generated_at,
+                   receipt.generated_by_user_id, receipt.generated_by_display_name,
+                   receipt.test_mode, receipt.content_type, receipt.size_bytes,
+                   receipt.checksum_sha256, receipt.renderer_version, receipt.version,
+                   receipt.branch_id
+            from gym.payment_receipts receipt
+            join gym.payments source_payment
+              on source_payment.id = receipt.payment_id
+             and source_payment.registered_at_branch_id = receipt.branch_id
             """;
 
     static final String INSERT = """
@@ -49,8 +55,8 @@ class JdbcPaymentReceiptAdapter implements PaymentReceiptStore, PaymentReceiptQu
                 membership_period_number, period_starts_on, period_ends_on,
                 list_price, discount_amount, amount, currency, payment_method,
                 paid_at, generated_at, generated_by_user_id,
-                generated_by_display_name, test_mode, storage_key, content_type,
-                size_bytes, checksum_sha256, renderer_version, version)
+                 generated_by_display_name, test_mode, storage_key, content_type,
+                 size_bytes, checksum_sha256, renderer_version, version, branch_id)
             values (
                 :id, :receiptNumber, :paymentId, :paymentCode,
                 :paymentStatus, :clientCode, :clientDisplayName, :membershipCode,
@@ -58,7 +64,8 @@ class JdbcPaymentReceiptAdapter implements PaymentReceiptStore, PaymentReceiptQu
                 :periodEndsOn, :listPrice, :discountAmount, :amount, :currency,
                 :paymentMethod, :paidAt, :generatedAt, :generatedByUserId,
                 :generatedByDisplayName, :testMode, :storageKey, :contentType,
-                :sizeBytes, :checksumSha256, :rendererVersion, :version)
+                 :sizeBytes, :checksumSha256, :rendererVersion, :version,
+                 COALESCE(:branchId, '7b0bf7d5-5184-43d2-8f9a-200000000002'::uuid))
             on conflict (payment_id) do nothing
             returning id, receipt_number, payment_id, payment_code_snapshot,
                       payment_status_snapshot, client_code_snapshot,
@@ -68,7 +75,7 @@ class JdbcPaymentReceiptAdapter implements PaymentReceiptStore, PaymentReceiptQu
                       list_price, discount_amount, amount, currency, payment_method,
                       paid_at, generated_at, generated_by_user_id,
                       generated_by_display_name, test_mode, content_type, size_bytes,
-                      checksum_sha256, renderer_version, version
+                      checksum_sha256, renderer_version, version, branch_id
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -103,21 +110,44 @@ class JdbcPaymentReceiptAdapter implements PaymentReceiptStore, PaymentReceiptQu
     @Transactional(readOnly = true)
     public Optional<PaymentReceiptDetails> findById(UUID receiptId) {
         requireIdentifier(receiptId, "Receipt id");
-        return find(SELECT + "where id = :id", "id", receiptId);
+        return find(SELECT + "where receipt.id = :id", "id", receiptId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<PaymentReceiptDetails> findById(UUID receiptId, UUID branchId) {
+        requireIdentifier(receiptId, "Receipt id");
+        return find(SELECT + "where receipt.id = :id and receipt.branch_id = :branchId",
+                new MapSqlParameterSource().addValue("id", receiptId)
+                        .addValue("branchId", branchId));
     }
 
     @Override
     @Transactional(readOnly = true)
     public Optional<PaymentReceiptDetails> findByPaymentId(UUID paymentId) {
         requireIdentifier(paymentId, "Payment id");
-        return find(SELECT + "where payment_id = :id", "id", paymentId);
+        return find(SELECT + "where receipt.payment_id = :id", "id", paymentId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<PaymentReceiptDetails> findByPaymentId(UUID paymentId, UUID branchId) {
+        requireIdentifier(paymentId, "Payment id");
+        return find(SELECT + "where receipt.payment_id = :id and receipt.branch_id = :branchId",
+                new MapSqlParameterSource().addValue("id", paymentId)
+                        .addValue("branchId", branchId));
     }
 
     private Optional<PaymentReceiptDetails> find(String sql, String parameter, UUID value) {
+        return find(sql, new MapSqlParameterSource(parameter, value));
+    }
+
+    private Optional<PaymentReceiptDetails> find(
+            String sql, MapSqlParameterSource parameters) {
         try {
             return jdbcTemplate.query(
                     sql,
-                    new MapSqlParameterSource(parameter, value),
+                    parameters,
                     JdbcPaymentReceiptAdapter::mapDetails)
                     .stream()
                     .findFirst();
@@ -157,7 +187,8 @@ class JdbcPaymentReceiptAdapter implements PaymentReceiptStore, PaymentReceiptQu
                 .addValue("sizeBytes", details.sizeBytes())
                 .addValue("checksumSha256", details.checksumSha256())
                 .addValue("rendererVersion", details.rendererVersion())
-                .addValue("version", details.version());
+                .addValue("version", details.version())
+                .addValue("branchId", details.branchId());
     }
 
     private static PaymentReceiptDetails mapDetails(ResultSet rs, int row)
@@ -190,7 +221,8 @@ class JdbcPaymentReceiptAdapter implements PaymentReceiptStore, PaymentReceiptQu
                 rs.getLong("size_bytes"),
                 rs.getString("checksum_sha256"),
                 rs.getString("renderer_version"),
-                rs.getLong("version"));
+                rs.getLong("version"),
+                rs.getObject("branch_id", UUID.class));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {

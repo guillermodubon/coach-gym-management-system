@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.access;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
@@ -69,6 +70,12 @@ abstract class AbstractAccessApiIntegrationTest {
 
     protected MockHttpSession loginAsReceptionist() throws Exception {
         return login(RECEPTIONIST_USERNAME, RECEPTIONIST_PASSWORD);
+    }
+
+    protected MockHttpSession loginAsAdminWithActiveBranch() throws Exception {
+        MockHttpSession session = loginAsAdmin();
+        selectInitialBranch(session);
+        return session;
     }
 
     protected UUID userId(String username) {
@@ -319,6 +326,17 @@ abstract class AbstractAccessApiIntegrationTest {
         return (MockHttpSession) result.getRequest().getSession(false);
     }
 
+    private void selectInitialBranch(MockHttpSession session) throws Exception {
+        UUID initialBranchId = UUID.fromString(
+                "7b0bf7d5-5184-43d2-8f9a-200000000002");
+        mockMvc.perform(put("/api/v1/me/branch-context")
+                        .session(session)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"branchId\":\"%s\"}".formatted(initialBranchId)))
+                .andExpect(status().isOk());
+    }
+
     private void provisionUser(String username, String email,
             String password, String roleCode) {
         UUID id = jdbcTemplate.query("select id from gym.users where lower(username)=lower(?)",
@@ -332,11 +350,39 @@ abstract class AbstractAccessApiIntegrationTest {
                     status='ACTIVE'
                 """, id, username, email, passwordEncoder.encode(password),
                 "Access", "Staff");
-        jdbcTemplate.update("delete from gym.user_roles where user_id=?", id);
+        jdbcTemplate.update("""
+                delete from gym.user_roles
+                where user_id = ?
+                  and not exists (
+                      select 1 from gym.staff_scopes where user_id = ?
+                  )
+                """, id, id);
         jdbcTemplate.update("""
                 insert into gym.user_roles(user_id,role_id)
                 select ?,id from gym.roles where role_code=?
+                on conflict (user_id, role_id) do nothing
                 """, id, roleCode);
+        UUID initialBranchId = UUID.fromString(
+                "7b0bf7d5-5184-43d2-8f9a-200000000002");
+        String scopeType = "ADMIN".equals(roleCode)
+                ? "ORGANIZATION"
+                : "BRANCH";
+        jdbcTemplate.update("""
+                insert into gym.staff_scopes
+                    (user_id, scope_type, granted_by_user_id)
+                values (?, ?, ?)
+                on conflict (user_id) do nothing
+                """, id, scopeType, id);
+        jdbcTemplate.update("""
+                insert into gym.staff_branch_assignments
+                    (id, user_id, branch_id, assigned_by_user_id)
+                select ?, ?, ?, ?
+                where not exists (
+                    select 1
+                    from gym.staff_branch_assignments
+                    where user_id = ? and branch_id = ? and status = 'ACTIVE'
+                )
+                """, UUID.randomUUID(), id, initialBranchId, id, id, initialBranchId);
     }
 
     protected record ClientFixture(UUID id, String code) { }
