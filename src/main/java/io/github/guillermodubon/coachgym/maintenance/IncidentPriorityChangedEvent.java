@@ -7,7 +7,13 @@ import java.util.UUID;
 /** Published when an administrator changes incident priority. */
 public record IncidentPriorityChangedEvent(UUID incidentId, String incidentCode,
         IncidentPriority previousPriority, IncidentPriority newPriority, String reason,
-        UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        UUID actorUserId, String actorIdentifier, Instant occurredAt, UUID branchId) {
+    public IncidentPriorityChangedEvent(UUID incidentId, String incidentCode,
+            IncidentPriority previousPriority, IncidentPriority newPriority, String reason,
+            UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        this(incidentId, incidentCode, previousPriority, newPriority, reason,
+                actorUserId, actorIdentifier, occurredAt, null);
+    }
     public static final int MAX_REASON_LENGTH = 2_000;
     public IncidentPriorityChangedEvent {
         Objects.requireNonNull(incidentId, "Incident id is required.");

@@ -13,7 +13,17 @@ public record PaymentAttemptProviderStatusChanged(
         PaymentAttemptFailureCode failureCode,
         UUID confirmedPaymentId,
         boolean providerEventReferencePresent,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public PaymentAttemptProviderStatusChanged(UUID paymentAttemptId,
+            PaymentProvider provider, PaymentAttemptStatus previousStatus,
+            PaymentAttemptStatus currentStatus, PaymentAttemptFailureCode failureCode,
+            UUID confirmedPaymentId, boolean providerEventReferencePresent,
+            Instant occurredAt) {
+        this(paymentAttemptId, provider, previousStatus, currentStatus, failureCode,
+                confirmedPaymentId, providerEventReferencePresent, occurredAt, null);
+    }
 
     public PaymentAttemptProviderStatusChanged {
         if (paymentAttemptId == null || provider == null || previousStatus == null

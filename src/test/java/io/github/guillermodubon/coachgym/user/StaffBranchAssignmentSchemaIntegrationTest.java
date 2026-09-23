@@ -46,7 +46,7 @@ class StaffBranchAssignmentSchemaIntegrationTest {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void currentFlywayChainContainsV32AndExpectedSchemaObjects() {
+    void currentFlywayChainContainsV32AndV33AndExpectedSchemaObjects() {
         List<String> tables = jdbcTemplate.queryForList("""
                 select table_name
                 from information_schema.tables
@@ -64,6 +64,41 @@ class StaffBranchAssignmentSchemaIntegrationTest {
                   and success = true
                 """, Integer.class);
         assertThat(migrationCount).isEqualTo(1);
+
+        Integer ownershipMigrationCount = jdbcTemplate.queryForObject("""
+                select count(*)
+                from flyway_schema_history
+                where version = '33'
+                  and success = true
+                """, Integer.class);
+        assertThat(ownershipMigrationCount).isEqualTo(1);
+
+        Map<String, String> ownershipNullability = jdbcTemplate.query(
+                """
+                select table_name, is_nullable
+                from information_schema.columns
+                where table_schema = 'gym'
+                  and ((table_name = 'clients'
+                        and column_name = 'home_branch_id')
+                    or (table_name = 'memberships'
+                        and column_name = 'registered_at_branch_id')
+                    or (table_name = 'membership_periods'
+                        and column_name = 'registered_at_branch_id'))
+                order by table_name
+                """,
+                resultSet -> {
+                    Map<String, String> values = new java.util.LinkedHashMap<>();
+                    while (resultSet.next()) {
+                        values.put(
+                                resultSet.getString("table_name"),
+                                resultSet.getString("is_nullable"));
+                    }
+                    return values;
+                });
+        assertThat(ownershipNullability)
+                .containsEntry("clients", "NO")
+                .containsEntry("memberships", "NO")
+                .containsEntry("membership_periods", "NO");
 
         List<String> indexes = jdbcTemplate.queryForList("""
                 select indexname

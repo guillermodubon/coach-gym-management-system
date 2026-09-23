@@ -36,7 +36,46 @@ public record PaymentReceiptDetails(
         long sizeBytes,
         String checksumSha256,
         String rendererVersion,
-        long version) {
+        long version,
+        UUID branchId) {
+
+    /** Compatibility constructor for pre-scoping receipt fixtures. */
+    public PaymentReceiptDetails(
+            UUID id,
+            String receiptNumber,
+            UUID paymentId,
+            String paymentCode,
+            PaymentStatus paymentStatus,
+            String clientCode,
+            String clientDisplayName,
+            String membershipCode,
+            String planName,
+            String promotionName,
+            int membershipPeriodNumber,
+            LocalDate periodStartsOn,
+            LocalDate periodEndsOn,
+            BigDecimal listPrice,
+            BigDecimal discountAmount,
+            BigDecimal amount,
+            String currency,
+            PaymentMethod paymentMethod,
+            Instant paidAt,
+            Instant generatedAt,
+            UUID generatedByUserId,
+            String generatedByDisplayName,
+            boolean testMode,
+            String contentType,
+            long sizeBytes,
+            String checksumSha256,
+            String rendererVersion,
+            long version) {
+        this(id, receiptNumber, paymentId, paymentCode, paymentStatus, clientCode,
+                clientDisplayName, membershipCode, planName, promotionName,
+                membershipPeriodNumber, periodStartsOn, periodEndsOn, listPrice,
+                discountAmount, amount, currency, paymentMethod, paidAt, generatedAt,
+                generatedByUserId, generatedByDisplayName, testMode, contentType,
+                sizeBytes, checksumSha256, rendererVersion, version, null);
+    }
 
     private static final int MONEY_SCALE = 2;
     private static final int MAX_TEXT_LENGTH = 200;
@@ -124,7 +163,8 @@ public record PaymentReceiptDetails(
                 generatedAt,
                 generatedByUserId,
                 generatedByDisplayName,
-                testMode);
+                testMode,
+                branchId);
     }
 
     private static UUID requiredIdentifier(UUID value, String field) {

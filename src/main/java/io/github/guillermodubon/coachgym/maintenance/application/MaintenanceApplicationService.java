@@ -25,13 +25,19 @@ import io.github.guillermodubon.coachgym.maintenance.domain.MaintenanceCancellat
 import io.github.guillermodubon.coachgym.maintenance.domain.MaintenanceCompletion;
 import io.github.guillermodubon.coachgym.maintenance.domain.MaintenanceStatusPolicy;
 import io.github.guillermodubon.coachgym.maintenance.domain.MaintenanceStatusTransition;
+import io.github.guillermodubon.coachgym.maintenance.domain.MaintenanceDefinition;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.ActiveBranchContextUnavailableException;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,6 +55,7 @@ public class MaintenanceApplicationService {
     private final MaintenanceStatusPolicy statusPolicy;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
+    private final BranchOperationContextResolver branchContextResolver;
 
     public MaintenanceApplicationService(
             MaintenanceStore maintenanceStore,
@@ -57,6 +64,19 @@ public class MaintenanceApplicationService {
             EquipmentMaintenanceOperations equipmentOperations,
             Clock clock,
             ApplicationEventPublisher eventPublisher) {
+        this(maintenanceStore, equipmentLookup, incidentLookup, equipmentOperations,
+                clock, eventPublisher, null);
+    }
+
+    @Autowired
+    public MaintenanceApplicationService(
+            MaintenanceStore maintenanceStore,
+            EquipmentLookup equipmentLookup,
+            IncidentLookup incidentLookup,
+            EquipmentMaintenanceOperations equipmentOperations,
+            Clock clock,
+            ApplicationEventPublisher eventPublisher,
+            BranchOperationContextResolver branchContextResolver) {
 
         this.maintenanceStore = Objects.requireNonNull(
                 maintenanceStore,
@@ -77,6 +97,7 @@ public class MaintenanceApplicationService {
         this.eventPublisher = Objects.requireNonNull(
                 eventPublisher,
                 "Application event publisher is required.");
+        this.branchContextResolver = branchContextResolver;
     }
 
     @Transactional
@@ -88,13 +109,14 @@ public class MaintenanceApplicationService {
         Objects.requireNonNull(command, "Schedule command is required.");
         requireActor(actor);
 
-        EquipmentDetails equipment = requireEquipment(command.equipmentId());
+        UUID branchId = branchId(actor);
+        EquipmentDetails equipment = requireEquipment(command.equipmentId(), branchId);
         requireNotRetired(equipment);
-        validateIncidentLink(command.incidentId(), command.equipmentId());
+        validateIncidentLink(command.incidentId(), command.equipmentId(), branchId);
 
         Instant occurredAt = now();
-        MaintenanceDetails result = maintenanceStore.schedule(
-                command.definition(), actor, occurredAt);
+        MaintenanceDetails result = scheduleInBranch(
+                command.definition(), actor, occurredAt, branchId);
 
         eventPublisher.publishEvent(new MaintenanceScheduledEvent(
                 result.id(),
@@ -108,7 +130,8 @@ public class MaintenanceApplicationService {
                 result.currency(),
                 actor.id(),
                 actor.username(),
-                occurredAt));
+                occurredAt,
+                result.branchId()));
 
         return result;
     }
@@ -122,7 +145,7 @@ public class MaintenanceApplicationService {
         Objects.requireNonNull(command, "Update command is required.");
         requireActor(actor);
 
-        MaintenanceDetails current = requireMaintenance(command.maintenanceId());
+        MaintenanceDetails current = requireMaintenance(command.maintenanceId(), branchId(actor));
         requireStatus(
                 current,
                 MaintenanceStatus.SCHEDULED,
@@ -147,7 +170,8 @@ public class MaintenanceApplicationService {
                 result.currency(),
                 actor.id(),
                 actor.username(),
-                occurredAt));
+                occurredAt,
+                result.branchId()));
 
         return result;
     }
@@ -160,9 +184,41 @@ public class MaintenanceApplicationService {
 
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public MaintenanceDetails findById(
+            UUID maintenanceId,
+            AuthenticatedActor actor) {
+        return requireMaintenance(maintenanceId, branchId(actor));
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public MaintenancePage findAll(MaintenanceSearchQuery query) {
         Objects.requireNonNull(query, "Maintenance search query is required.");
         return maintenanceStore.findAll(query);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public MaintenancePage findAll(
+            MaintenanceSearchQuery query,
+            AuthenticatedActor actor) {
+        return findAll(query, actor, null);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public MaintenancePage findAll(
+            MaintenanceSearchQuery query,
+            AuthenticatedActor actor,
+            UUID requestedBranchId) {
+        Objects.requireNonNull(query, "Maintenance search query is required.");
+        Objects.requireNonNull(actor, "Authenticated actor is required.");
+        if (branchContextResolver == null) {
+            throw new ActiveBranchContextUnavailableException();
+        }
+        UUID branchId = BranchResourceAuthorizationPolicy.requireListBranch(
+                branchContextResolver.resolveOperation(actor.id()), requestedBranchId);
+        return maintenanceStore.findAll(query, branchId);
     }
 
     @Transactional(readOnly = true)
@@ -174,6 +230,16 @@ public class MaintenanceApplicationService {
         return maintenanceStore.findStatusHistory(maintenanceId);
     }
 
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public List<MaintenanceStatusHistoryDetails> findStatusHistory(
+            UUID maintenanceId,
+            AuthenticatedActor actor) {
+        UUID branchId = branchId(actor);
+        requireMaintenance(maintenanceId, branchId);
+        return findHistoryInBranch(maintenanceId, branchId);
+    }
+
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public MaintenanceDetails start(
@@ -183,14 +249,14 @@ public class MaintenanceApplicationService {
         Objects.requireNonNull(command, "Start command is required.");
         requireActor(actor);
 
-        MaintenanceDetails current = requireMaintenance(command.maintenanceId());
+        MaintenanceDetails current = requireMaintenance(command.maintenanceId(), branchId(actor));
         requireStatus(
                 current,
                 MaintenanceStatus.SCHEDULED,
                 "Only scheduled maintenance can be started.");
 
-        if (maintenanceStore.existsByEquipmentIdAndStatus(
-                current.equipmentId(), MaintenanceStatus.IN_PROGRESS)) {
+        if (existsInBranch(
+                current.equipmentId(), MaintenanceStatus.IN_PROGRESS, current.branchId())) {
             throw new MaintenanceActiveOrderConflictException(current.equipmentId());
         }
 
@@ -222,7 +288,8 @@ public class MaintenanceApplicationService {
                 result.status(),
                 actor.id(),
                 actor.username(),
-                command.startedAt()));
+                command.startedAt(),
+                result.branchId()));
 
         return result;
     }
@@ -236,7 +303,7 @@ public class MaintenanceApplicationService {
         Objects.requireNonNull(command, "Complete command is required.");
         requireActor(actor);
 
-        MaintenanceDetails current = requireMaintenance(command.maintenanceId());
+        MaintenanceDetails current = requireMaintenance(command.maintenanceId(), branchId(actor));
         requireStatus(
                 current,
                 MaintenanceStatus.IN_PROGRESS,
@@ -278,7 +345,8 @@ public class MaintenanceApplicationService {
                 result.currency(),
                 actor.id(),
                 actor.username(),
-                command.completedAt()));
+                command.completedAt(),
+                result.branchId()));
 
         return result;
     }
@@ -292,7 +360,7 @@ public class MaintenanceApplicationService {
         Objects.requireNonNull(command, "Cancel command is required.");
         requireActor(actor);
 
-        MaintenanceDetails current = requireMaintenance(command.maintenanceId());
+        MaintenanceDetails current = requireMaintenance(command.maintenanceId(), branchId(actor));
         MaintenanceStatus previousStatus = current.status();
         MaintenanceCancellation cancellation = command.cancellation();
         cancellation.validateFor(previousStatus);
@@ -331,7 +399,8 @@ public class MaintenanceApplicationService {
                 command.equipmentOutcome(),
                 actor.id(),
                 actor.username(),
-                occurredAt));
+                occurredAt,
+                result.branchId()));
 
         return result;
     }
@@ -345,6 +414,16 @@ public class MaintenanceApplicationService {
                 .orElseThrow(() -> new MaintenanceNotFoundException(maintenanceId));
     }
 
+    private MaintenanceDetails requireMaintenance(
+            UUID maintenanceId,
+            UUID branchId) {
+        if (maintenanceId == null) {
+            throw new IllegalArgumentException("Maintenance id is required.");
+        }
+        return findMaintenanceInBranch(maintenanceId, branchId)
+                .orElseThrow(() -> new MaintenanceNotFoundException(maintenanceId));
+    }
+
     private EquipmentDetails requireEquipment(UUID equipmentId) {
         if (equipmentId == null) {
             throw new MaintenanceEquipmentUnavailableException(
@@ -352,6 +431,19 @@ public class MaintenanceApplicationService {
         }
 
         return equipmentLookup.findById(equipmentId)
+                .orElseThrow(() -> new MaintenanceEquipmentUnavailableException(
+                        equipmentId, "Equipment does not exist."));
+    }
+
+    private EquipmentDetails requireEquipment(UUID equipmentId, UUID branchId) {
+        if (equipmentId == null) {
+            throw new MaintenanceEquipmentUnavailableException(
+                    null, "Equipment id is required.");
+        }
+        Optional<EquipmentDetails> equipment = branchContextResolver == null
+                ? equipmentLookup.findById(equipmentId)
+                : equipmentLookup.findById(equipmentId, branchId);
+        return equipment
                 .orElseThrow(() -> new MaintenanceEquipmentUnavailableException(
                         equipmentId, "Equipment does not exist."));
     }
@@ -375,12 +467,85 @@ public class MaintenanceApplicationService {
         }
     }
 
+    private void validateIncidentLink(
+            UUID incidentId,
+            UUID equipmentId,
+            UUID branchId) {
+        if (incidentId == null) {
+            return;
+        }
+        Optional<IncidentDetails> incidentResult = branchContextResolver == null
+                ? incidentLookup.findById(incidentId)
+                : incidentLookup.findById(incidentId, branchId);
+        IncidentDetails incident = incidentResult
+                .orElseThrow(() -> new MaintenanceIncidentNotFoundException(incidentId));
+        if (!equipmentId.equals(incident.equipmentId())) {
+            throw new MaintenanceIncidentMismatchException(incidentId, equipmentId);
+        }
+        if (incident.status() == IncidentStatus.RESOLVED) {
+            throw new MaintenanceStateConflictException(
+                    null,
+                    "Resolved incidents cannot receive new maintenance work orders.");
+        }
+    }
+
     private static void requireNotRetired(EquipmentDetails equipment) {
         if (equipment.status() == EquipmentStatus.RETIRED) {
             throw new MaintenanceEquipmentUnavailableException(
                     equipment.id(),
                     "Retired equipment cannot receive maintenance work orders.");
         }
+    }
+
+    private MaintenanceDetails scheduleInBranch(
+            MaintenanceDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
+        return branchContextResolver == null
+                ? maintenanceStore.schedule(definition, actor, occurredAt)
+                : maintenanceStore.schedule(definition, actor, occurredAt, branchId);
+    }
+
+    private Optional<MaintenanceDetails> findMaintenanceInBranch(
+            UUID maintenanceId,
+            UUID branchId) {
+        return branchContextResolver == null
+                ? maintenanceStore.findById(maintenanceId)
+                : maintenanceStore.findById(maintenanceId, branchId);
+    }
+
+    private MaintenancePage findAllInBranch(
+            MaintenanceSearchQuery query,
+            UUID branchId) {
+        return branchContextResolver == null
+                ? maintenanceStore.findAll(query)
+                : maintenanceStore.findAll(query, branchId);
+    }
+
+    private List<MaintenanceStatusHistoryDetails> findHistoryInBranch(
+            UUID maintenanceId,
+            UUID branchId) {
+        return branchContextResolver == null
+                ? maintenanceStore.findStatusHistory(maintenanceId)
+                : maintenanceStore.findStatusHistory(maintenanceId, branchId);
+    }
+
+    private boolean existsInBranch(
+            UUID equipmentId,
+            MaintenanceStatus status,
+            UUID branchId) {
+        return branchContextResolver == null
+                ? maintenanceStore.existsByEquipmentIdAndStatus(equipmentId, status)
+                : maintenanceStore.existsByEquipmentIdAndStatus(equipmentId, status, branchId);
+    }
+
+    private UUID branchId(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(
+                branchContextResolver.resolveOperation(actor.id()));
     }
 
     private static void requireStatus(

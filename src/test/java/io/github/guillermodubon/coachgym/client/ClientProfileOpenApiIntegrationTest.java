@@ -45,6 +45,7 @@ class ClientProfileOpenApiIntegrationTest
                                 "search",
                                 "status",
                                 "membershipStatus",
+                                "branchId",
                                 "page",
                                 "size",
                                 "sort",

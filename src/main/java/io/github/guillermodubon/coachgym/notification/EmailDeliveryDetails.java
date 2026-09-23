@@ -35,7 +35,44 @@ public record EmailDeliveryDetails(
         Instant lastAttemptAt,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID branchId) {
+
+    /** Compatibility constructor for non-scoped delivery fixtures. */
+    public EmailDeliveryDetails(
+            UUID id,
+            EmailDeliveryType deliveryType,
+            UUID sourceResourceId,
+            UUID clientId,
+            String recipientSnapshot,
+            String subjectSnapshot,
+            String templateVersion,
+            String attachmentResourceType,
+            UUID attachmentResourceId,
+            String attachmentFilename,
+            String attachmentContentType,
+            long attachmentSizeBytes,
+            String attachmentChecksumSha256,
+            String idempotencyKeyDigest,
+            EmailDeliveryStatus status,
+            int attemptCount,
+            EmailDeliveryFailureCode lastFailureCode,
+            String lastFailureMessage,
+            Instant requestedAt,
+            UUID requestedByUserId,
+            Instant sentAt,
+            Instant lastAttemptAt,
+            Instant createdAt,
+            Instant updatedAt,
+            long version) {
+        this(id, deliveryType, sourceResourceId, clientId, recipientSnapshot,
+                subjectSnapshot, templateVersion, attachmentResourceType,
+                attachmentResourceId, attachmentFilename, attachmentContentType,
+                attachmentSizeBytes, attachmentChecksumSha256, idempotencyKeyDigest,
+                status, attemptCount, lastFailureCode, lastFailureMessage,
+                requestedAt, requestedByUserId, sentAt, lastAttemptAt, createdAt,
+                updatedAt, version, null);
+    }
 
     private static final int MAX_RESOURCE_TYPE_LENGTH = 32;
 

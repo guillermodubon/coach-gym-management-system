@@ -55,7 +55,7 @@ class OrganizationPersistenceIntegrationTest extends AbstractIncidentApiIntegrat
     @BeforeEach
     void resetOrganizationFixtures() {
         jdbcTemplate.execute(
-                "truncate table gym.staff_branch_assignments, gym.gym_branches");
+                "truncate table gym.staff_branch_assignments, gym.gym_branches cascade");
         jdbcTemplate.update("""
                 insert into gym.gym_branches
                     (id, organization_id, code, name, country_code,

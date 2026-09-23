@@ -58,6 +58,25 @@ class PaymentPersistenceAdapter
             AuthenticatedActor actor,
             Instant occurredAt) {
 
+        return register(clientId, membershipId, membershipPeriodId, amount, currency,
+                paymentMethod, externalReference, paidAt, actor, occurredAt, null);
+    }
+
+    @Override
+    @Transactional
+    public PaymentDetails register(
+            UUID clientId,
+            UUID membershipId,
+            UUID membershipPeriodId,
+            BigDecimal amount,
+            String currency,
+            PaymentMethod paymentMethod,
+            String externalReference,
+            Instant paidAt,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID registeredAtBranchId) {
+
         PaymentJpaEntity payment =
                 paymentRepository.saveAndFlush(
                         PaymentJpaEntity.register(
@@ -70,7 +89,8 @@ class PaymentPersistenceAdapter
                                 externalReference,
                                 paidAt,
                                 actor,
-                                occurredAt));
+                                occurredAt,
+                                registeredAtBranchId));
 
         // Refresh to retrieve DB-generated payment_number and payment_code.
         entityManager.refresh(payment);
@@ -100,7 +120,8 @@ class PaymentPersistenceAdapter
                         command.currency(),
                         command.registeredByUserId(),
                         command.paidAt(),
-                        command.occurredAt()));
+                        command.occurredAt(),
+                        command.registeredAtBranchId()));
         entityManager.refresh(payment);
         historyRepository.saveAndFlush(
                 PaymentStatusHistoryJpaEntity.providerConfirmation(
@@ -132,9 +153,26 @@ class PaymentPersistenceAdapter
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<PaymentDetails> findById(UUID paymentId, UUID branchId) {
+        if (branchId == null) {
+            return findById(paymentId);
+        }
+        return paymentRepository
+                .findByIdAndRegisteredAtBranchId(paymentId, branchId)
+                .map(PaymentJpaEntity::toDetails);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PaymentPage findAll(PaymentSearchQuery query) {
+        return findAll(query, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PaymentPage findAll(PaymentSearchQuery query, UUID branchId) {
         Page<PaymentJpaEntity> page = paymentRepository.findAll(
-                toSpecification(query),
+                toSpecification(query, branchId),
                 PageRequest.of(
                         query.page(),
                         query.size(),
@@ -163,10 +201,16 @@ class PaymentPersistenceAdapter
     }
 
     private static Specification<PaymentJpaEntity> toSpecification(
-            PaymentSearchQuery query) {
+            PaymentSearchQuery query,
+            UUID branchId) {
 
         return (root, criteriaQuery, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
+
+            if (branchId != null) {
+                predicates.add(criteriaBuilder.equal(
+                        root.get("registeredAtBranchId"), branchId));
+            }
 
             if (query.clientId() != null) {
                 predicates.add(

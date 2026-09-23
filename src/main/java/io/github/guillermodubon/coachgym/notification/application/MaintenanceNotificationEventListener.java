@@ -35,7 +35,7 @@ public class MaintenanceNotificationEventListener {
     @EventListener
     public void on(MaintenanceScheduledEvent event) {
         MaintenanceNotificationDetails details =
-                requireDetails(event.maintenanceId());
+                requireDetails(event.maintenanceId(), event.branchId());
 
         deliverTo(
                 recipientSet(details.assignedToUserId()),
@@ -51,7 +51,7 @@ public class MaintenanceNotificationEventListener {
     @EventListener
     public void on(MaintenanceUpdatedEvent event) {
         MaintenanceNotificationDetails details =
-                requireDetails(event.maintenanceId());
+                requireDetails(event.maintenanceId(), event.branchId());
 
         deliverTo(
                 recipientSet(details.assignedToUserId()),
@@ -67,7 +67,7 @@ public class MaintenanceNotificationEventListener {
     @EventListener
     public void on(MaintenanceStartedEvent event) {
         MaintenanceNotificationDetails details =
-                requireDetails(event.maintenanceId());
+                requireDetails(event.maintenanceId(), event.branchId());
 
         deliverTo(
                 recipientSet(details.createdByUserId()),
@@ -83,7 +83,7 @@ public class MaintenanceNotificationEventListener {
     @EventListener
     public void on(MaintenanceCompletedEvent event) {
         MaintenanceNotificationDetails details =
-                requireDetails(event.maintenanceId());
+                requireDetails(event.maintenanceId(), event.branchId());
 
         NotificationSeverity severity =
                 event.equipmentOutcome()
@@ -108,7 +108,8 @@ public class MaintenanceNotificationEventListener {
 
     @EventListener
     public void on(MaintenanceCancelledEvent event) {
-        MaintenanceNotificationDetails details = requireDetails(event.maintenanceId());
+        MaintenanceNotificationDetails details = requireDetails(
+                event.maintenanceId(), event.branchId());
         LinkedHashSet<UUID> recipients = new LinkedHashSet<>();
         if (details.createdByUserId() != null) {
             recipients.add(details.createdByUserId());
@@ -125,10 +126,15 @@ public class MaintenanceNotificationEventListener {
                 details);
     }
 
-    private MaintenanceNotificationDetails requireDetails(UUID maintenanceId) {
-        return maintenanceLookup.findById(maintenanceId)
+    private MaintenanceNotificationDetails requireDetails(
+            UUID maintenanceId, UUID eventBranchId) {
+        MaintenanceNotificationDetails details = maintenanceLookup.findById(maintenanceId)
                 .orElseThrow(() -> new MaintenanceNotificationUnavailableException(
                         maintenanceId));
+        if (eventBranchId != null && !eventBranchId.equals(details.branchId())) {
+            throw new MaintenanceNotificationUnavailableException(maintenanceId);
+        }
+        return details;
     }
 
     private void deliverTo(
@@ -153,7 +159,8 @@ public class MaintenanceNotificationEventListener {
                             title,
                             body,
                             NotificationResourceType.MAINTENANCE,
-                            details.maintenanceId()));
+                            details.maintenanceId(),
+                            details.branchId()));
         }
     }
 

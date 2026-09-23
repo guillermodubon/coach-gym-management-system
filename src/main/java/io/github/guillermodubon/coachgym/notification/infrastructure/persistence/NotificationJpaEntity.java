@@ -27,6 +27,9 @@ class NotificationJpaEntity {
     @Column(name = "recipient_user_id", nullable = false, updatable = false)
     private UUID recipientUserId;
 
+    @Column(name = "branch_id", updatable = false)
+    private UUID branchId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "notification_type", nullable = false, length = 40, updatable = false)
     private NotificationType notificationType;
@@ -73,6 +76,7 @@ class NotificationJpaEntity {
         NotificationJpaEntity entity = new NotificationJpaEntity();
         entity.id = UUID.randomUUID();
         entity.recipientUserId = definition.recipientUserId();
+        entity.branchId = definition.branchId();
         entity.notificationType = definition.notificationType();
         entity.severity = definition.severity();
         entity.title = definition.content().title();
@@ -117,6 +121,7 @@ class NotificationJpaEntity {
                 readAt,
                 createdAt,
                 updatedAt,
-                version);
+                version,
+                branchId);
     }
 }

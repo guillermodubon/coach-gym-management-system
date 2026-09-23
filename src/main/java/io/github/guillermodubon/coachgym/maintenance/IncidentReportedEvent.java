@@ -7,7 +7,13 @@ import java.util.UUID;
 /** Published after an equipment incident has been successfully persisted. */
 public record IncidentReportedEvent(UUID incidentId, String incidentCode, UUID equipmentId,
         String equipmentCode, IncidentPriority priority, boolean takenOutOfService,
-        UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        UUID actorUserId, String actorIdentifier, Instant occurredAt, UUID branchId) {
+    public IncidentReportedEvent(UUID incidentId, String incidentCode, UUID equipmentId,
+            String equipmentCode, IncidentPriority priority, boolean takenOutOfService,
+            UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        this(incidentId, incidentCode, equipmentId, equipmentCode, priority,
+                takenOutOfService, actorUserId, actorIdentifier, occurredAt, null);
+    }
     public IncidentReportedEvent {
         Objects.requireNonNull(incidentId, "Incident id is required.");
         Objects.requireNonNull(equipmentId, "Equipment id is required.");

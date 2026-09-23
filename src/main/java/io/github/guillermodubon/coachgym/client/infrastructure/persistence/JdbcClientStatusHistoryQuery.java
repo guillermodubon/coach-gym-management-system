@@ -23,15 +23,28 @@ class JdbcClientStatusHistoryQuery implements ClientStatusHistoryQuery {
 
     @Override
     public List<ClientStatusHistoryDetails> findByClientId(UUID clientId) {
+        return findByClientId(clientId, null);
+    }
+
+    @Override
+    public List<ClientStatusHistoryDetails> findByClientId(UUID clientId, UUID branchId) {
         try {
             return List.copyOf(jdbc.query("""
                     select id, client_id, previous_status, new_status,
                            reason, occurred_at, changed_by_user_id
                     from gym.client_status_history
                     where client_id = :clientId
+                      and (cast(:branchId as uuid) is null
+                           or exists (
+                               select 1
+                               from gym.clients client
+                               where client.id = client_status_history.client_id
+                                 and client.home_branch_id = cast(:branchId as uuid)))
                     order by occurred_at desc, id asc
                     """,
-                    new MapSqlParameterSource("clientId", clientId),
+                    new MapSqlParameterSource()
+                            .addValue("clientId", clientId)
+                            .addValue("branchId", branchId),
                     (rs, row) -> new ClientStatusHistoryDetails(
                             rs.getObject("id", UUID.class),
                             rs.getObject("client_id", UUID.class),

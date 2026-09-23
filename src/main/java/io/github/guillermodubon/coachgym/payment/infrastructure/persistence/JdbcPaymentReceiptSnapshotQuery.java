@@ -28,7 +28,7 @@ class JdbcPaymentReceiptSnapshotQuery
 
     static final String PAYMENT_SNAPSHOT_SQL = """
             select p.id, p.payment_code, p.status, p.amount, p.currency,
-                   p.payment_method, p.paid_at,
+                   p.payment_method, p.paid_at, p.registered_at_branch_id,
                    c.client_code,
                    trim(c.first_name || ' ' || c.last_name) as client_display_name,
                    m.membership_code,
@@ -111,7 +111,8 @@ class JdbcPaymentReceiptSnapshotQuery
                 rs.getBigDecimal("amount"),
                 rs.getString("currency"),
                 PaymentMethod.valueOf(rs.getString("payment_method")),
-                instant(rs, "paid_at"));
+                instant(rs, "paid_at"),
+                rs.getObject("registered_at_branch_id", UUID.class));
     }
 
     private static PaymentReceiptOrganization mapOrganization(OrganizationDetails organization) {

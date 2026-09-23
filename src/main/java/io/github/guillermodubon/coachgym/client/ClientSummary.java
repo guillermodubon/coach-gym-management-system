@@ -17,7 +17,26 @@ public record ClientSummary(
         LocalDate membershipExpiresOn,
         boolean photoAvailable,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID homeBranchId) {
+
+    public ClientSummary(
+            UUID id,
+            String clientCode,
+            String firstName,
+            String lastName,
+            String phone,
+            String email,
+            ClientStatus status,
+            String membershipStatus,
+            LocalDate membershipExpiresOn,
+            boolean photoAvailable,
+            Instant updatedAt,
+            long version) {
+        this(id, clientCode, firstName, lastName, phone, email, status,
+                membershipStatus, membershipExpiresOn, photoAvailable,
+                updatedAt, version, null);
+    }
 
     public ClientSummary {
         require(id, "Client id");

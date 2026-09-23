@@ -35,6 +35,7 @@ class PaymentProviderEventApplicationServiceTest {
     private static final UUID MEMBERSHIP_ID = UUID.fromString("00000000-0000-0000-0000-000000000704");
     private static final UUID PERIOD_ID = UUID.fromString("00000000-0000-0000-0000-000000000705");
     private static final UUID ACTOR_ID = UUID.fromString("00000000-0000-0000-0000-000000000706");
+    private static final UUID BRANCH_ID = UUID.fromString("00000000-0000-0000-0000-000000000707");
     private static final Instant NOW = Instant.parse("2026-09-10T16:00:00Z");
 
     private PaymentProviderEventStore eventStore;
@@ -81,7 +82,7 @@ class PaymentProviderEventApplicationServiceTest {
     }
 
     @Test
-    void duplicateProcessedEventHasNoSideEffects() {
+    void duplicateProcessedEventDoesNotChangePaymentStateAndAuditsPersistedBranch() {
         VerifiedPaymentProviderEvent event = completedEvent("evt_duplicate");
         given(eventStore.reserve(any())).willReturn(PaymentProviderEventReservation.ALREADY_RESERVED);
         given(eventStore.findForProcessing(event.provider(), event.providerEventReference()))
@@ -89,14 +90,23 @@ class PaymentProviderEventApplicationServiceTest {
                         UUID.randomUUID(), PaymentProvider.STRIPE, event.providerEventReference(),
                         event.eventType(), ATTEMPT_ID,
                         PaymentProviderEventProcessingResult.PROCESSED, NOW, NOW));
+        given(attemptStore.findProviderDetails(ATTEMPT_ID))
+                .willReturn(java.util.Optional.of(new PaymentAttemptProviderDetails(
+                        attempt(PaymentAttemptStatus.SUCCEEDED, 2L, null, PAYMENT_ID),
+                        "cs_test_701")));
 
         assertThat(service.process(event))
                 .isEqualTo(PaymentProviderEventProcessingResult.PROCESSED);
 
-        verify(attemptStore, never()).findProviderDetails(any());
+        verify(attemptStore).findProviderDetails(ATTEMPT_ID);
+        verify(attemptStore, never()).markProviderSucceeded(any());
+        verify(attemptStore, never()).markProviderFailure(any());
         verify(paymentStore, never()).register(any());
         verify(eventStore, never()).finalizeProcessing(any());
-        verify(eventPublisher).publishEvent(any(PaymentProviderEventAcknowledged.class));
+        ArgumentCaptor<PaymentProviderEventAcknowledged> acknowledgement =
+                ArgumentCaptor.forClass(PaymentProviderEventAcknowledged.class);
+        verify(eventPublisher).publishEvent(acknowledgement.capture());
+        assertThat(acknowledgement.getValue().branchId()).isEqualTo(BRANCH_ID);
     }
 
     @Test
@@ -167,7 +177,7 @@ class PaymentProviderEventApplicationServiceTest {
         return new PaymentAttemptDetails(
                 ATTEMPT_ID, CLIENT_ID, MEMBERSHIP_ID, PERIOD_ID, PaymentProvider.STRIPE,
                 status, new BigDecimal("25.00"), "USD", failureCode, confirmedPaymentId,
-                ACTOR_ID, NOW, NOW, status.isTerminal() ? NOW : null, version);
+                ACTOR_ID, NOW, NOW, status.isTerminal() ? NOW : null, version, BRANCH_ID);
     }
 
     private static PaymentDetails paymentDetails() {

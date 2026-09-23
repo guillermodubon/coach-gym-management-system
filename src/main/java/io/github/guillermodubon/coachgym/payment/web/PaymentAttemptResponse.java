@@ -26,7 +26,8 @@ record PaymentAttemptResponse(
         Instant createdAt,
         Instant updatedAt,
         Instant completedAt,
-        long version) {
+        long version,
+        UUID initiatedAtBranchId) {
 
     static PaymentAttemptResponse from(PaymentAttemptDetails details) {
         return new PaymentAttemptResponse(
@@ -44,6 +45,7 @@ record PaymentAttemptResponse(
                 details.createdAt(),
                 details.updatedAt(),
                 details.completedAt(),
-                details.version());
+                details.version(),
+                details.initiatedAtBranchId());
     }
 }

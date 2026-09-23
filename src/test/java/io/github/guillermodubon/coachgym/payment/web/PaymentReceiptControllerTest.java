@@ -108,7 +108,7 @@ class PaymentReceiptControllerTest {
 
     @Test
     void returnsMetadataToReceptionist() throws Exception {
-        when(service.findByPaymentId(PAYMENT_ID)).thenReturn(details());
+        when(service.findByPaymentId(eq(PAYMENT_ID), any())).thenReturn(details());
 
         mockMvc.perform(get("/api/v1/payments/{paymentId}/receipt", PAYMENT_ID)
                         .with(authenticatedAs("RECEPTIONIST")))
@@ -125,7 +125,7 @@ class PaymentReceiptControllerTest {
     void downloadsValidatedPdfWithPrivateNoStoreHeaders() throws Exception {
         PaymentReceiptDetails details = details();
         PaymentReceiptDocument document = PaymentReceiptDocument.fromPdfBytes(PDF);
-        when(service.downloadByPaymentId(PAYMENT_ID))
+        when(service.downloadByPaymentId(eq(PAYMENT_ID), any()))
                 .thenReturn(new PaymentReceiptContent(details, document));
 
         mockMvc.perform(get("/api/v1/payments/{paymentId}/receipt.pdf", PAYMENT_ID)
@@ -202,14 +202,14 @@ class PaymentReceiptControllerTest {
 
     @Test
     void mapsReceiptAndPaymentFailuresToStableProblemDetails() throws Exception {
-        when(service.findByPaymentId(PAYMENT_ID))
+        when(service.findByPaymentId(eq(PAYMENT_ID), any()))
                 .thenThrow(new PaymentReceiptNotFoundException(RECEIPT_ID));
         mockMvc.perform(get("/api/v1/payments/{paymentId}/receipt", PAYMENT_ID)
                         .with(authenticatedAs("ADMIN")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("PAYMENT_RECEIPT_NOT_FOUND"));
 
-        when(service.downloadByPaymentId(PAYMENT_ID))
+        when(service.downloadByPaymentId(eq(PAYMENT_ID), any()))
                 .thenThrow(new PaymentReceiptStorageException("internal path must not leak"));
         mockMvc.perform(get("/api/v1/payments/{paymentId}/receipt.pdf", PAYMENT_ID)
                         .with(authenticatedAs("ADMIN")))
@@ -281,7 +281,7 @@ class PaymentReceiptControllerTest {
         reset(service);
         doThrow(new PaymentReceiptDataAccessException("internal data detail", null))
                 .when(service)
-                .downloadByPaymentId(PAYMENT_ID);
+                .downloadByPaymentId(eq(PAYMENT_ID), any());
         mockMvc.perform(get("/api/v1/payments/{paymentId}/receipt.pdf", PAYMENT_ID)
                         .with(authenticatedAs("ADMIN")))
                 .andExpect(status().isInternalServerError())

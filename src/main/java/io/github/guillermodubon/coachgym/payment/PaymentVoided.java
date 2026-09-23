@@ -11,7 +11,15 @@ public record PaymentVoided(
         PaymentStatus newStatus,
         UUID changedByUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public PaymentVoided(UUID paymentId, String paymentCode,
+            PaymentStatus previousStatus, PaymentStatus newStatus,
+            UUID changedByUserId, String actorIdentifier, Instant occurredAt) {
+        this(paymentId, paymentCode, previousStatus, newStatus, changedByUserId,
+                actorIdentifier, occurredAt, null);
+    }
 
     public PaymentVoided {
         if (paymentId == null) throw new IllegalArgumentException("Payment id is required.");

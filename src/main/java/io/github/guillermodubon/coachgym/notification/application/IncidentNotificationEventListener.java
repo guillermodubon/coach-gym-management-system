@@ -63,7 +63,8 @@ public class IncidentNotificationEventListener {
                     title,
                     body,
                     NotificationResourceType.INCIDENT,
-                    event.incidentId()));
+                    event.incidentId(),
+                    event.branchId()));
         }
     }
 }

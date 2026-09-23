@@ -27,7 +27,7 @@ class JdbcClientOperationalProfileQuery implements ClientOperationalProfileQuery
     static final String SQL = """
             select c.id, c.client_code, c.first_name, c.last_name, c.email,
                    c.phone, c.date_of_birth, c.status, c.created_at, c.updated_at,
-                   c.version,
+                   c.version, c.home_branch_id,
                    ec.id as contact_id, ec.full_name as contact_name,
                    ec.relationship as contact_relationship,
                    ec.phone as contact_phone,
@@ -90,6 +90,8 @@ class JdbcClientOperationalProfileQuery implements ClientOperationalProfileQuery
             ) ar on true
             left join gym.client_photos photo on photo.client_id = c.id
             where c.id = :clientId
+              and (cast(:branchId as uuid) is null
+                   or c.home_branch_id = cast(:branchId as uuid))
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -100,11 +102,18 @@ class JdbcClientOperationalProfileQuery implements ClientOperationalProfileQuery
 
     @Override
     public Optional<ClientOperationalProfile> findById(UUID clientId) {
+        return findById(clientId, null);
+    }
+
+    @Override
+    public Optional<ClientOperationalProfile> findById(UUID clientId, UUID branchId) {
         Objects.requireNonNull(clientId, "Client id is required.");
         try {
             List<ClientOperationalProfile> rows = jdbcTemplate.query(
                     SQL,
-                    new MapSqlParameterSource("clientId", clientId),
+                    new MapSqlParameterSource()
+                            .addValue("clientId", clientId)
+                            .addValue("branchId", branchId),
                     JdbcClientOperationalProfileQuery::mapProfile);
             return rows.stream().findFirst();
         } catch (DataAccessException exception) {
@@ -126,7 +135,8 @@ class JdbcClientOperationalProfileQuery implements ClientOperationalProfileQuery
                 ClientStatus.valueOf(rs.getString("status")),
                 contact(rs), membership(rs), payment(rs), access(rs), photo(rs),
                 instant(rs, "created_at"), instant(rs, "updated_at"),
-                rs.getLong("version"));
+                rs.getLong("version"),
+                rs.getObject("home_branch_id", UUID.class));
     }
 
     private static ClientEmergencyContactDetails contact(ResultSet rs) throws SQLException {

@@ -19,6 +19,10 @@ import io.github.guillermodubon.coachgym.payment.PaymentReceiptSnapshot;
 import io.github.guillermodubon.coachgym.payment.PaymentReceiptSourceSnapshot;
 import io.github.guillermodubon.coachgym.payment.PaymentStatus;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException;
+import io.github.guillermodubon.coachgym.user.StaffScopeType;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -26,6 +30,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -55,6 +60,7 @@ class PaymentReceiptApplicationServiceTest {
     @Mock private PaymentReceiptStorage storage;
     @Mock private PaymentReceiptNumberGenerator numberGenerator;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private BranchOperationContextResolver branchContextResolver;
 
     private PaymentReceiptApplicationService service;
     private PaymentReceiptDocument document;
@@ -266,6 +272,44 @@ class PaymentReceiptApplicationServiceTest {
         assertThatThrownBy(() -> service.downloadByPaymentId(PAYMENT_ID))
                 .isInstanceOf(PaymentReceiptDataAccessException.class)
                 .hasMessage("Stored payment receipt does not match its metadata.");
+    }
+
+    @Test
+    void branchAwareServiceRejectsLegacyActorlessDownloadBeforeLookup() {
+        assertThatThrownBy(() -> branchAwareService().downloadByPaymentId(PAYMENT_ID))
+                .isInstanceOf(BranchResourceAuthorizationException.class);
+
+        verifyNoInteractions(receiptQuery, storage);
+    }
+
+    @Test
+    void branchScopedReceiptDownloadUsesBranchFilteredMetadataBeforeStorage() {
+        UUID activeBranchId = UUID.randomUUID();
+        given(branchContextResolver.resolveOperation(ACTOR_ID)).willReturn(
+                new BranchOperationContext(
+                        ACTOR_ID, UUID.randomUUID(), StaffScopeType.BRANCH,
+                        activeBranchId, Set.of(activeBranchId)));
+
+        assertThatThrownBy(() -> branchAwareService()
+                .downloadByPaymentId(PAYMENT_ID, ACTOR))
+                .isInstanceOf(PaymentReceiptNotFoundException.class);
+
+        verify(receiptQuery).findByPaymentId(PAYMENT_ID, activeBranchId);
+        verifyNoInteractions(storage);
+    }
+
+    private PaymentReceiptApplicationService branchAwareService() {
+        return new PaymentReceiptApplicationService(
+                receiptStore,
+                receiptQuery,
+                snapshotQuery,
+                organizationQuery,
+                renderer,
+                storage,
+                numberGenerator,
+                eventPublisher,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                branchContextResolver);
     }
 
     private static PaymentReceiptSourceSnapshot source(

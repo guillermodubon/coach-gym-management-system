@@ -15,7 +15,14 @@ public record EquipmentUpdatedEvent(
         String equipmentCode,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public EquipmentUpdatedEvent(UUID equipmentId, String equipmentCode,
+            UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        this(equipmentId, equipmentCode, actorUserId, actorIdentifier,
+                occurredAt, null);
+    }
 
     public EquipmentUpdatedEvent {
         if (equipmentId == null) {

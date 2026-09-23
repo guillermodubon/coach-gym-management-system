@@ -27,7 +27,42 @@ public record AccessAttemptRecorded(
         Instant checkedInAt,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    /** Compatibility constructor for the pre-scoping event contract. */
+    public AccessAttemptRecorded(
+            UUID accessRecordId,
+            String presentedIdentifier,
+            String presentedIdentifierType,
+            UUID accessCredentialId,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            Instant checkedInAt,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+        this(
+                accessRecordId,
+                presentedIdentifier,
+                presentedIdentifierType,
+                accessCredentialId,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                result,
+                reasonCode,
+                checkedInAt,
+                actorUserId,
+                actorIdentifier,
+                occurredAt,
+                null);
+    }
 
     /**
      * Compatibility constructor for manual access publishers.
@@ -66,7 +101,42 @@ public record AccessAttemptRecorded(
                 checkedInAt,
                 actorUserId,
                 actorIdentifier,
-                occurredAt);
+                occurredAt,
+                null);
+    }
+
+    /** Branch-aware compatibility constructor for manual access publishers. */
+    public AccessAttemptRecorded(
+            UUID accessRecordId,
+            String presentedIdentifier,
+            String presentedIdentifierType,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            Instant checkedInAt,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt,
+            UUID branchId) {
+        this(
+                accessRecordId,
+                presentedIdentifier,
+                presentedIdentifierType,
+                null,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                result,
+                reasonCode,
+                checkedInAt,
+                actorUserId,
+                actorIdentifier,
+                occurredAt,
+                branchId);
     }
 
     public AccessAttemptRecorded {

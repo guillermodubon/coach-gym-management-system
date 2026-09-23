@@ -57,8 +57,8 @@ class ClientController {
     @Operation(summary = "Get a client by id")
     @ApiResponse(responseCode = "200", description = "Client found")
     @ApiResponse(responseCode = "404", description = "Client not found")
-    ClientResponse findById(@PathVariable UUID id) {
-        return ClientResponse.from(clientApplicationService.findById(id));
+    ClientResponse findById(@PathVariable UUID id, Authentication authentication) {
+        return ClientResponse.from(clientApplicationService.findById(id, actor(authentication)));
     }
 
     private static AuthenticatedActor actor(Authentication authentication) {

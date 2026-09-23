@@ -37,6 +37,9 @@ class MembershipPeriodJpaEntity {
             nullable = false)
     private UUID membershipId;
 
+    @Column(name = "registered_at_branch_id", nullable = false)
+    private UUID registeredAtBranchId;
+
     @Column(
             name = "period_number",
             nullable = false)
@@ -184,7 +187,8 @@ class MembershipPeriodJpaEntity {
             UUID membershipId,
             MembershipCreation creation,
             AuthenticatedActor actor,
-            Instant occurredAt) {
+            Instant occurredAt,
+            UUID registeredAtBranchId) {
 
         MembershipPricingSnapshot pricing =
                 creation.pricing();
@@ -197,6 +201,8 @@ class MembershipPeriodJpaEntity {
 
         period.membershipId =
                 membershipId;
+
+        period.registeredAtBranchId = registeredAtBranchId;
 
         period.periodNumber =
                 1;
@@ -258,11 +264,20 @@ class MembershipPeriodJpaEntity {
         return period;
     }
 
+    static MembershipPeriodJpaEntity initial(
+            UUID membershipId,
+            MembershipCreation creation,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        return initial(membershipId, creation, actor, occurredAt, null);
+    }
+
     static MembershipPeriodJpaEntity renewal(
             UUID membershipId,
             MembershipRenewal renewal,
             AuthenticatedActor actor,
-            Instant occurredAt) {
+            Instant occurredAt,
+            UUID registeredAtBranchId) {
 
         MembershipPricingSnapshot pricing =
                 renewal.pricing();
@@ -275,6 +290,8 @@ class MembershipPeriodJpaEntity {
 
         period.membershipId =
                 membershipId;
+
+        period.registeredAtBranchId = registeredAtBranchId;
 
         period.periodNumber =
                 renewal.periodNumber();
@@ -336,6 +353,14 @@ class MembershipPeriodJpaEntity {
         return period;
     }
 
+    static MembershipPeriodJpaEntity renewal(
+            UUID membershipId,
+            MembershipRenewal renewal,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        return renewal(membershipId, renewal, actor, occurredAt, null);
+    }
+
     private void applyPromotion(
             MembershipPromotionSnapshot promotion) {
 
@@ -395,7 +420,8 @@ class MembershipPeriodJpaEntity {
                 baseEndsOn,
                 effectiveEndsOn,
                 createdAt,
-                version);
+                version,
+                registeredAtBranchId);
     }
 
     private MembershipPromotionSnapshot
@@ -429,6 +455,10 @@ class MembershipPeriodJpaEntity {
 
     UUID membershipId() {
         return membershipId;
+    }
+
+    UUID registeredAtBranchId() {
+        return registeredAtBranchId;
     }
 
     LocalDate startsOn() {

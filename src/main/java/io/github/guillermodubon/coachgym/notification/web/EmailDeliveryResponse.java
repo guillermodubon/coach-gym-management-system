@@ -30,7 +30,8 @@ record EmailDeliveryResponse(
         Instant lastAttemptAt,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID branchId) {
 
     static EmailDeliveryResponse from(EmailDeliveryDetails details) {
         return new EmailDeliveryResponse(
@@ -53,6 +54,7 @@ record EmailDeliveryResponse(
                 details.lastAttemptAt(),
                 details.createdAt(),
                 details.updatedAt(),
-                details.version());
+                details.version(),
+                details.branchId());
     }
 }

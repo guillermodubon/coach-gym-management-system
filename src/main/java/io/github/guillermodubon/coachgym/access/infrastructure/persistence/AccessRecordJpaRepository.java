@@ -18,4 +18,14 @@ interface AccessRecordJpaRepository
             AccessIdentifierType identificationSource,
             AccessResult result,
             Instant occurredAtFromInclusive);
+
+    Optional<AccessRecordJpaEntity>
+    findFirstByAccessCredentialIdAndBranchIdAndIdentificationSourceAndResultAndCheckedInAtGreaterThanEqualOrderByCheckedInAtDescIdAsc(
+            UUID accessCredentialId,
+            UUID branchId,
+            AccessIdentifierType identificationSource,
+            AccessResult result,
+            Instant occurredAtFromInclusive);
+
+    Optional<AccessRecordJpaEntity> findByIdAndBranchId(UUID id, UUID branchId);
 }

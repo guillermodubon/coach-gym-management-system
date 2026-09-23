@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.notification.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -38,6 +39,7 @@ class MaintenanceNotificationEventListenerTest {
     private UUID maintenanceId;
     private UUID creatorId;
     private UUID assignedId;
+    private UUID branchId;
 
     @BeforeEach
     void setUp() {
@@ -46,10 +48,11 @@ class MaintenanceNotificationEventListenerTest {
         maintenanceId = UUID.randomUUID();
         creatorId = UUID.randomUUID();
         assignedId = UUID.randomUUID();
+        branchId = UUID.randomUUID();
         when(maintenanceLookup.findById(maintenanceId)).thenReturn(Optional.of(
                 new MaintenanceNotificationDetails(
                         maintenanceId, "MNT-000001", UUID.randomUUID(),
-                        "EQP-000001", creatorId, assignedId)));
+                        "EQP-000001", creatorId, assignedId, branchId)));
     }
 
     @Test
@@ -58,12 +61,13 @@ class MaintenanceNotificationEventListenerTest {
         listener.on(new MaintenanceScheduledEvent(
                 maintenanceId, "MNT-000001", UUID.randomUUID(), "EQP-000001",
                 null, MaintenanceType.PREVENTIVE, LocalDate.of(2026, 9, 10),
-                BigDecimal.TEN, "USD", actorId, "admin", now()));
+                BigDecimal.TEN, "USD", actorId, "admin", now(), branchId));
 
         ArgumentCaptor<NotificationDefinition> captor =
                 ArgumentCaptor.forClass(NotificationDefinition.class);
         verify(deliveryService).deliver(captor.capture());
         assertThat(captor.getValue().recipientUserId()).isEqualTo(assignedId);
+        assertThat(captor.getValue().branchId()).isEqualTo(branchId);
     }
 
     @Test
@@ -72,7 +76,7 @@ class MaintenanceNotificationEventListenerTest {
                 maintenanceId, "MNT-000001", UUID.randomUUID(), "EQP-000001",
                 null, MaintenanceStatus.IN_PROGRESS, MaintenanceStatus.COMPLETED,
                 EquipmentMaintenanceOutcome.OUT_OF_SERVICE, BigDecimal.TEN, "USD",
-                assignedId, "assigned-user", now()));
+                assignedId, "assigned-user", now(), branchId));
 
         ArgumentCaptor<NotificationDefinition> captor =
                 ArgumentCaptor.forClass(NotificationDefinition.class);
@@ -86,11 +90,11 @@ class MaintenanceNotificationEventListenerTest {
         when(maintenanceLookup.findById(maintenanceId)).thenReturn(Optional.of(
                 new MaintenanceNotificationDetails(
                         maintenanceId, "MNT-000001", UUID.randomUUID(),
-                        "EQP-000001", creatorId, creatorId)));
+                        "EQP-000001", creatorId, creatorId, branchId)));
         listener.on(new MaintenanceCancelledEvent(
                 maintenanceId, "MNT-000001", UUID.randomUUID(), "EQP-000001",
                 null, MaintenanceStatus.SCHEDULED, MaintenanceStatus.CANCELLED,
-                null, assignedId, "admin", now()));
+                null, assignedId, "admin", now(), branchId));
         verify(deliveryService, times(1)).deliver(any());
     }
 
@@ -99,7 +103,21 @@ class MaintenanceNotificationEventListenerTest {
         listener.on(new MaintenanceScheduledEvent(
                 maintenanceId, "MNT-000001", UUID.randomUUID(), "EQP-000001",
                 null, MaintenanceType.PREVENTIVE, LocalDate.of(2026, 9, 10),
-                null, "USD", assignedId, "assigned-user", now()));
+                null, "USD", assignedId, "assigned-user", now(), branchId));
+        verify(deliveryService, never()).deliver(any());
+    }
+
+    @Test
+    void rejectsEventWhoseBranchDoesNotMatchPersistedWorkOrderBeforeDelivery() {
+        UUID mismatchedBranchId = UUID.randomUUID();
+        MaintenanceScheduledEvent event = new MaintenanceScheduledEvent(
+                maintenanceId, "MNT-000001", UUID.randomUUID(), "EQP-000001",
+                null, MaintenanceType.PREVENTIVE, LocalDate.of(2026, 9, 10),
+                BigDecimal.TEN, "USD", UUID.randomUUID(), "admin", now(),
+                mismatchedBranchId);
+
+        assertThatThrownBy(() -> listener.on(event))
+                .isInstanceOf(MaintenanceNotificationUnavailableException.class);
         verify(deliveryService, never()).deliver(any());
     }
 

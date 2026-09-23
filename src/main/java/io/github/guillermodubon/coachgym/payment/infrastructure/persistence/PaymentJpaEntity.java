@@ -23,6 +23,9 @@ import java.util.UUID;
         name = "payments")
 class PaymentJpaEntity {
 
+    private static final UUID HISTORICAL_BRANCH_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002");
+
     @Id
     private UUID id;
 
@@ -101,6 +104,11 @@ class PaymentJpaEntity {
     private UUID registeredByUserId;
 
     @Column(
+            name = "registered_at_branch_id",
+            nullable = false)
+    private UUID registeredAtBranchId;
+
+    @Column(
             name = "created_at",
             nullable = false)
     private Instant createdAt;
@@ -129,6 +137,23 @@ class PaymentJpaEntity {
             AuthenticatedActor actor,
             Instant occurredAt) {
 
+        return register(clientId, membershipId, membershipPeriodId, amount, currency,
+                paymentMethod, externalReference, paidAt, actor, occurredAt, null);
+    }
+
+    static PaymentJpaEntity register(
+            UUID clientId,
+            UUID membershipId,
+            UUID membershipPeriodId,
+            BigDecimal amount,
+            String currency,
+            PaymentMethod paymentMethod,
+            String externalReference,
+            Instant paidAt,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID registeredAtBranchId) {
+
         PaymentJpaEntity entity = new PaymentJpaEntity();
 
         entity.id = UUID.randomUUID();
@@ -142,6 +167,8 @@ class PaymentJpaEntity {
         entity.externalReference = externalReference;
         entity.paidAt = paidAt;
         entity.registeredByUserId = actor.id();
+        entity.registeredAtBranchId = registeredAtBranchId == null
+                ? HISTORICAL_BRANCH_ID : registeredAtBranchId;
         entity.createdAt = occurredAt;
         entity.updatedAt = occurredAt;
 
@@ -159,6 +186,23 @@ class PaymentJpaEntity {
             Instant paidAt,
             Instant occurredAt) {
 
+        return registerProviderConfirmed(paymentId, clientId, membershipId,
+                membershipPeriodId, amount, currency, registeredByUserId, paidAt,
+                occurredAt, null);
+    }
+
+    static PaymentJpaEntity registerProviderConfirmed(
+            UUID paymentId,
+            UUID clientId,
+            UUID membershipId,
+            UUID membershipPeriodId,
+            BigDecimal amount,
+            String currency,
+            UUID registeredByUserId,
+            Instant paidAt,
+            Instant occurredAt,
+            UUID registeredAtBranchId) {
+
         PaymentJpaEntity entity = new PaymentJpaEntity();
 
         entity.id = paymentId;
@@ -172,6 +216,8 @@ class PaymentJpaEntity {
         entity.externalReference = null;
         entity.paidAt = paidAt;
         entity.registeredByUserId = registeredByUserId;
+        entity.registeredAtBranchId = registeredAtBranchId == null
+                ? HISTORICAL_BRANCH_ID : registeredAtBranchId;
         entity.createdAt = occurredAt;
         entity.updatedAt = occurredAt;
 
@@ -194,7 +240,8 @@ class PaymentJpaEntity {
                 registeredByUserId,
                 createdAt,
                 updatedAt,
-                version);
+                version,
+                registeredAtBranchId);
     }
 
     UUID id() {

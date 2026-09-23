@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.equipment.web;
 
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.equipment.EquipmentDetails;
+import io.github.guillermodubon.coachgym.equipment.application.EquipmentPage;
 import io.github.guillermodubon.coachgym.equipment.application.EquipmentApplicationService;
 import io.github.guillermodubon.coachgym.equipment.application.EquipmentSearchQuery;
 import io.github.guillermodubon.coachgym.equipment.application.exception.DuplicateSerialNumberException;
@@ -119,8 +120,12 @@ class EquipmentController {
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
     @ApiResponse(responseCode = "404", description = "Equipment not found")
-    EquipmentResponse findById(@PathVariable UUID id) {
-        return EquipmentResponse.from(equipmentService.findById(id));
+    EquipmentResponse findById(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        EquipmentDetails details = equipmentService.findByIdForActor(id, actor(authentication));
+        return EquipmentResponse.from(
+                details);
     }
 
     // GET /api/v1/equipment
@@ -130,7 +135,9 @@ class EquipmentController {
             description = """
                 Returns a paginated equipment catalog.
                 Approved filters: categoryId, status (AVAILABLE|OUT_OF_SERVICE|RETIRED|MAINTENANCE),
-                search (name ILIKE), location (location ILIKE).
+                search (name ILIKE), location (location ILIKE), and branchId.
+                An explicit branchId is available only to organization administrators for an
+                active authorized branch. Without it, the selected active branch is required.
                 Approved sort fields: name (default), createdAt, status, id.
                 Direction: asc (default), desc.
                 Secondary sort is always id ASC for stable pagination.
@@ -139,6 +146,8 @@ class EquipmentController {
     @ApiResponse(responseCode = "400", description = "Invalid filter, sort, or pagination value")
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
+    @ApiResponse(responseCode = "404", description = "Requested branch is not available")
+    @ApiResponse(responseCode = "409", description = "No valid active branch is selected")
     EquipmentPageResponse findAll(
             @Parameter(description = "Filter by category UUID")
             @RequestParam(required = false) UUID categoryId,
@@ -152,6 +161,9 @@ class EquipmentController {
             @Parameter(description = "Case-insensitive partial location search")
             @RequestParam(required = false) String location,
 
+            @Parameter(description = "Optional active branch UUID for organization administrators; other staff are restricted to their active branch")
+            @RequestParam(required = false) UUID branchId,
+
             @Parameter(description = "Zero-based page index", example = "0")
             @RequestParam(defaultValue = "0") int page,
 
@@ -162,11 +174,14 @@ class EquipmentController {
             @RequestParam(defaultValue = "name") String sort,
 
             @Parameter(description = "Sort direction: asc, desc", example = "asc")
-            @RequestParam(defaultValue = "asc") String direction) {
+            @RequestParam(defaultValue = "asc") String direction,
+            Authentication authentication) {
 
         EquipmentSearchQuery query = EquipmentSearchQuery.from(
                 categoryId, status, search, location, page, size, sort, direction);
-        return EquipmentPageResponse.from(equipmentService.findAll(query));
+        EquipmentPage pageResult = equipmentService.findAllForActor(
+                query, actor(authentication), branchId);
+        return EquipmentPageResponse.from(pageResult);
     }
 
     // POST /api/v1/equipment/{id}/out-of-service

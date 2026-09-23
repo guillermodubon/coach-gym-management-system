@@ -29,6 +29,9 @@ class PaymentAuditEntryJpaEntityTest {
     private static final UUID ACTOR_ID =
             UUID.fromString("50000000-0000-0000-0000-000000000001");
 
+    private static final UUID BRANCH_ID =
+            UUID.fromString("60000000-0000-0000-0000-000000000001");
+
     private static final Instant PAID_AT =
             Instant.parse("2026-08-25T18:30:00Z");
 
@@ -106,7 +109,8 @@ class PaymentAuditEntryJpaEntityTest {
                 .containsKey("paymentMethod")
                 .containsKey("paidAt")
                 .containsKey("resultingStatus")
-                .containsKey("hasExternalReference");
+                .containsKey("hasExternalReference")
+                .containsKey("branchId");
     }
 
     @Test
@@ -122,7 +126,8 @@ class PaymentAuditEntryJpaEntityTest {
                 .containsEntry("paymentMethod", "CASH")
                 .containsEntry("paidAt", PAID_AT.toString())
                 .containsEntry("resultingStatus", "PAID")
-                .containsEntry("hasExternalReference", false);
+                .containsEntry("hasExternalReference", false)
+                .containsEntry("branchId", BRANCH_ID.toString());
     }
 
     @Test
@@ -179,7 +184,8 @@ class PaymentAuditEntryJpaEntityTest {
                 PaymentStatus.PAID,
                 ACTOR_ID,
                 "coach-admin",
-                NOW);
+                NOW,
+                BRANCH_ID);
     }
 
     @SuppressWarnings("unchecked")

@@ -8,4 +8,10 @@ import java.util.UUID;
 public interface ClientStatusHistoryQuery {
 
     List<ClientStatusHistoryDetails> findByClientId(UUID clientId);
+
+    default List<ClientStatusHistoryDetails> findByClientId(
+            UUID clientId,
+            UUID branchId) {
+        return findByClientId(clientId);
+    }
 }

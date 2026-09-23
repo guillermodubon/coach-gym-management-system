@@ -14,7 +14,19 @@ public interface ClientStore {
     ClientDetails register(
             ClientRegistration registration,
             AuthenticatedActor actor,
-            Instant occurredAt);
+            Instant occurredAt,
+            UUID homeBranchId);
+
+    default ClientDetails register(
+            ClientRegistration registration,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        return register(registration, actor, occurredAt, null);
+    }
 
     Optional<ClientDetails> findById(UUID id);
+
+    default Optional<ClientDetails> findById(UUID id, UUID homeBranchId) {
+        return findById(id);
+    }
 }

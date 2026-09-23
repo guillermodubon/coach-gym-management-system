@@ -17,7 +17,17 @@ public record PaymentRefunded(
         boolean externalReferencePresent,
         UUID changedByUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public PaymentRefunded(UUID paymentId, String paymentCode, UUID refundId,
+            PaymentStatus previousStatus, PaymentStatus newStatus,
+            BigDecimal amount, String currency, boolean externalReferencePresent,
+            UUID changedByUserId, String actorIdentifier, Instant occurredAt) {
+        this(paymentId, paymentCode, refundId, previousStatus, newStatus, amount,
+                currency, externalReferencePresent, changedByUserId,
+                actorIdentifier, occurredAt, null);
+    }
 
     public PaymentRefunded {
         if (paymentId == null || refundId == null) throw new IllegalArgumentException("Payment and refund ids are required.");

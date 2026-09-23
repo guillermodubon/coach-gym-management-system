@@ -30,7 +30,8 @@ class AccessQueryApiIntegrationTest extends AbstractAccessApiIntegrationTest {
         insertAccessRow("XYZ-2", null, null, null, null, null,
                 "DENIED", "IDENTIFIER_NOT_FOUND", Instant.parse("2026-09-15T11:00:00Z"), actor);
 
-        mockMvc.perform(get("/api/v1/access/records").session(loginAsAdmin()))
+        mockMvc.perform(get("/api/v1/access/records")
+                        .session(loginAsAdminWithActiveBranch()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.page").value(0))
                 .andExpect(jsonPath("$.size").value(25))
@@ -41,7 +42,7 @@ class AccessQueryApiIntegrationTest extends AbstractAccessApiIntegrationTest {
 
     @Test
     void filtersByClientMembershipResultReasonActorAndInclusiveRange() throws Exception {
-        MockHttpSession session = loginAsAdmin();
+        MockHttpSession session = loginAsAdminWithActiveBranch();
         UUID actor = userId(ADMIN_USERNAME);
         ClientFixture client = createClient("ACTIVE");
         java.time.LocalDate today = java.time.LocalDate.now(
@@ -76,7 +77,7 @@ class AccessQueryApiIntegrationTest extends AbstractAccessApiIntegrationTest {
                 "DENIED", "IDENTIFIER_NOT_FOUND", Instant.parse("2026-09-15T10:00:00Z"), actor);
         insertAccessRow("XYZ-LATE", null, null, null, null, null,
                 "DENIED", "IDENTIFIER_NOT_FOUND", Instant.parse("2026-09-15T11:00:00Z"), actor);
-        MockHttpSession session = loginAsAdmin();
+        MockHttpSession session = loginAsAdminWithActiveBranch();
         mockMvc.perform(get("/api/v1/access/records")
                         .session(session).param("sort", "CHECKED_IN_AT").param("direction", "ASC"))
                 .andExpect(status().isOk())

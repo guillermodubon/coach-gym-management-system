@@ -23,12 +23,14 @@ interface EquipmentJpaRepository extends JpaRepository<EquipmentJpaEntity, UUID>
      */
     @Query("""
             select e from EquipmentJpaEntity e
-            where (:categoryId is null or e.categoryId = :categoryId)
+            where (:branchId is null or e.branchId = :branchId)
+              and (:categoryId is null or e.categoryId = :categoryId)
               and (:status is null or e.status = :status)
               and (:search = '' or lower(e.name) like lower(concat('%', :search, '%')))
               and (:location = '' or lower(e.location) like lower(concat('%', :location, '%')))
             """)
     Page<EquipmentJpaEntity> search(
+            @Param("branchId") UUID branchId,
             @Param("categoryId") UUID categoryId,
             @Param("status") EquipmentStatus status,
             @Param("search") String search,
@@ -41,6 +43,20 @@ interface EquipmentJpaRepository extends JpaRepository<EquipmentJpaEntity, UUID>
     boolean existsBySerialNumberIgnoreCase(
             @Param("serialNumber") String serialNumber,
             @Param("excludeId") UUID excludeId);
+
+    @Query("select count(e) > 0 from EquipmentJpaEntity e "
+            + "where e.branchId = :branchId "
+            + "and lower(e.serialNumber) = lower(:serialNumber) "
+            + "and (:excludeId is null or e.id <> :excludeId)")
+    boolean existsBySerialNumberIgnoreCaseInBranch(
+            @Param("serialNumber") String serialNumber,
+            @Param("excludeId") UUID excludeId,
+            @Param("branchId") UUID branchId);
+
+    @Query("select e from EquipmentJpaEntity e where e.id = :id and e.branchId = :branchId")
+    Optional<EquipmentJpaEntity> findByIdAndBranchId(
+            @Param("id") UUID id,
+            @Param("branchId") UUID branchId);
 
     @Override
     Optional<EquipmentJpaEntity> findById(UUID id);

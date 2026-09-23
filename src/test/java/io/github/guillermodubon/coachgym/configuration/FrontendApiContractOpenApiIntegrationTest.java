@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import io.github.guillermodubon.coachgym.maintenance.AbstractIncidentApiIntegrationTest;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -206,6 +207,49 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
         assertThat(assignmentRequest.keySet())
                 .containsExactlyInAnyOrder("targetUserId", "branchId", "reason")
                 .doesNotContain("status", "role", "organizationId", "actorUserId");
+    }
+
+    @Test
+    void branchOwnedSearchesExposeOnlyAnExplicitOptionalBranchFilterAndSafeOwnershipIds()
+            throws Exception {
+        String document = openApiDocument();
+        for (String path : List.of(
+                "/api/v1/clients",
+                "/api/v1/payments",
+                "/api/v1/access/records",
+                "/api/v1/equipment",
+                "/api/v1/incidents",
+                "/api/v1/maintenances",
+                "/api/v1/email-deliveries")) {
+            List<Map<String, Object>> parameters = JsonPath.read(
+                    document, "$.paths['" + path + "'].get.parameters");
+            assertThat(parameters)
+                    .anySatisfy(parameter -> assertThat(parameter)
+                            .containsEntry("name", "branchId")
+                            .containsEntry("in", "query"));
+        }
+
+        Map<String, Object> schemas = JsonPath.read(
+                document, "$.components.schemas");
+        assertThat(schemas).containsKeys(
+                "ClientResponse", "PaymentResponse", "AccessRecordResponse",
+                "EquipmentResponse", "IncidentResponse", "MaintenanceResponse",
+                "PaymentAttemptResponse", "PaymentReceiptResponse", "EmailDeliveryResponse",
+                "PaymentCorrectionResponse", "MembershipResponse",
+                "MembershipPeriodResponse", "NotificationResponse");
+        for (String schemaName : List.of(
+                "ClientResponse", "PaymentResponse", "AccessRecordResponse",
+                "EquipmentResponse", "IncidentResponse", "MaintenanceResponse",
+                "PaymentAttemptResponse", "PaymentReceiptResponse", "EmailDeliveryResponse",
+                "PaymentCorrectionResponse", "MembershipResponse",
+                "MembershipPeriodResponse", "NotificationResponse")) {
+            Map<String, Object> properties = JsonPath.read(
+                    document, "$.components.schemas." + schemaName + ".properties");
+            assertThat(properties.keySet()).anyMatch(name -> name.equals("branchId")
+                    || name.equals("homeBranchId")
+                    || name.equals("registeredAtBranchId")
+                    || name.equals("initiatedAtBranchId"));
+        }
     }
 
     @Test

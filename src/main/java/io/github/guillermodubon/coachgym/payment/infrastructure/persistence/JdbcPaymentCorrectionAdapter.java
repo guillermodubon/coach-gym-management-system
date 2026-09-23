@@ -34,9 +34,10 @@ class JdbcPaymentCorrectionAdapter implements PaymentCorrectionStore {
 
     static final String LOCK_PAYMENT_SQL = """
             select id, payment_code, amount, currency, payment_method,
-                   status, version
+                   status, version, registered_at_branch_id
             from gym.payments
             where id = :paymentId
+              and (CAST(:branchId AS uuid) is null or registered_at_branch_id = :branchId)
             for update
             """;
 
@@ -83,9 +84,19 @@ class JdbcPaymentCorrectionAdapter implements PaymentCorrectionStore {
             VoidPaymentCommand command,
             AuthenticatedActor actor,
             Instant occurredAt) {
+        return voidPayment(command, actor, occurredAt, null);
+    }
+
+    @Override
+    @Transactional
+    public PaymentCorrectionDetails voidPayment(
+            VoidPaymentCommand command,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
         requireActorAndTime(actor, occurredAt);
         try {
-            PaymentSnapshot payment = lockPayment(command.paymentId());
+            PaymentSnapshot payment = lockPayment(command.paymentId(), branchId);
             PaymentCorrectionPolicy.requireExpectedVersion(
                     payment.id(), command.expectedVersion(), payment.version());
             PaymentCorrectionPolicy.requireVoidAllowed(
@@ -98,7 +109,8 @@ class JdbcPaymentCorrectionAdapter implements PaymentCorrectionStore {
 
             return PaymentCorrectionDetails.voided(
                     payment.id(), payment.paymentCode(), command.reason(),
-                    occurredAt, actor.id(), payment.version() + 1);
+                    occurredAt, actor.id(), payment.version() + 1,
+                    payment.branchId());
         } catch (PaymentCorrectionNotFoundException
                 | PaymentCorrectionVersionConflictException
                 | PaymentCorrectionStateConflictException exception) {
@@ -115,9 +127,19 @@ class JdbcPaymentCorrectionAdapter implements PaymentCorrectionStore {
             RefundPaymentCommand command,
             AuthenticatedActor actor,
             Instant occurredAt) {
+        return refundPayment(command, actor, occurredAt, null);
+    }
+
+    @Override
+    @Transactional
+    public PaymentCorrectionDetails refundPayment(
+            RefundPaymentCommand command,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
         requireActorAndTime(actor, occurredAt);
         try {
-            PaymentSnapshot payment = lockPayment(command.paymentId());
+            PaymentSnapshot payment = lockPayment(command.paymentId(), branchId);
             PaymentCorrectionPolicy.requireExpectedVersion(
                     payment.id(), command.expectedVersion(), payment.version());
             PaymentCorrectionPolicy.requireRefundAllowed(
@@ -151,7 +173,8 @@ class JdbcPaymentCorrectionAdapter implements PaymentCorrectionStore {
 
             return PaymentCorrectionDetails.refunded(
                     payment.id(), payment.paymentCode(), command.reason(),
-                    occurredAt, actor.id(), payment.version() + 1, refund);
+                    occurredAt, actor.id(), payment.version() + 1, refund,
+                    payment.branchId());
         } catch (PaymentCorrectionNotFoundException
                 | PaymentCorrectionVersionConflictException
                 | PaymentCorrectionStateConflictException
@@ -163,10 +186,12 @@ class JdbcPaymentCorrectionAdapter implements PaymentCorrectionStore {
         }
     }
 
-    private PaymentSnapshot lockPayment(UUID paymentId) {
+    private PaymentSnapshot lockPayment(UUID paymentId, UUID branchId) {
         List<PaymentSnapshot> rows = jdbcTemplate.query(
                 LOCK_PAYMENT_SQL,
-                new MapSqlParameterSource("paymentId", paymentId),
+                new MapSqlParameterSource()
+                        .addValue("paymentId", paymentId)
+                        .addValue("branchId", branchId),
                 JdbcPaymentCorrectionAdapter::mapPayment);
         return rows.stream().findFirst()
                 .orElseThrow(() ->
@@ -252,7 +277,8 @@ class JdbcPaymentCorrectionAdapter implements PaymentCorrectionStore {
                 rs.getString("currency").strip(),
                 rs.getString("payment_method"),
                 PaymentStatus.valueOf(rs.getString("status")),
-                rs.getLong("version"));
+                rs.getLong("version"),
+                rs.getObject("registered_at_branch_id", UUID.class));
     }
 
     private static void requireActorAndTime(
@@ -279,6 +305,7 @@ class JdbcPaymentCorrectionAdapter implements PaymentCorrectionStore {
             String currency,
             String paymentMethod,
             PaymentStatus status,
-            long version) {
+            long version,
+            UUID branchId) {
     }
 }

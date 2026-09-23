@@ -14,7 +14,15 @@ public record PaymentProviderEventAcknowledged(
         String eventType,
         String processingResult,
         boolean duplicate,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public PaymentProviderEventAcknowledged(UUID paymentAttemptId,
+            PaymentProvider provider, String eventType, String processingResult,
+            boolean duplicate, Instant occurredAt) {
+        this(paymentAttemptId, provider, eventType, processingResult, duplicate,
+                occurredAt, null);
+    }
 
     public PaymentProviderEventAcknowledged {
         if (paymentAttemptId == null || provider == null || occurredAt == null) {

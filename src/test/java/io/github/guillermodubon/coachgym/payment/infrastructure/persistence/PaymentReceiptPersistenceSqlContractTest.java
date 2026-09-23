@@ -20,7 +20,10 @@ class PaymentReceiptPersistenceSqlContractTest {
                 .doesNotContain("' +");
         assertThat(JdbcPaymentReceiptAdapter.SELECT)
                 .contains("from gym.payment_receipts")
-                .contains("payment_id");
+                .contains("payment_id")
+                .contains("join gym.payments source_payment")
+                .contains("source_payment.id = receipt.payment_id")
+                .contains("source_payment.registered_at_branch_id = receipt.branch_id");
     }
 
     @Test

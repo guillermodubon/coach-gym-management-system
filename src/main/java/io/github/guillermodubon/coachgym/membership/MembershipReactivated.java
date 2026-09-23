@@ -21,7 +21,29 @@ public record MembershipReactivated(
         MembershipStatus resultingStatus,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public MembershipReactivated(
+            UUID membershipId,
+            String membershipCode,
+            UUID clientId,
+            UUID membershipPeriodId,
+            UUID membershipFreezeId,
+            LocalDate freezeStartsOn,
+            LocalDate plannedEndsOn,
+            LocalDate reactivatedOn,
+            String reason,
+            MembershipStatus previousStatus,
+            MembershipStatus resultingStatus,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+        this(membershipId, membershipCode, clientId, membershipPeriodId,
+                membershipFreezeId, freezeStartsOn, plannedEndsOn,
+                reactivatedOn, reason, previousStatus, resultingStatus,
+                actorUserId, actorIdentifier, occurredAt, null);
+    }
 
     public MembershipReactivated {
         if (membershipId == null) {
@@ -110,4 +132,6 @@ public record MembershipReactivated(
         reason = reason.trim();
         actorIdentifier = actorIdentifier.trim();
     }
+
+    public UUID registeredAtBranchId() { return branchId; }
 }

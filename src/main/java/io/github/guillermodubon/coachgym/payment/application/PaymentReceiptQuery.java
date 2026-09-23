@@ -9,5 +9,13 @@ public interface PaymentReceiptQuery {
 
     Optional<PaymentReceiptDetails> findById(UUID receiptId);
 
+    default Optional<PaymentReceiptDetails> findById(UUID receiptId, UUID branchId) {
+        return findById(receiptId);
+    }
+
     Optional<PaymentReceiptDetails> findByPaymentId(UUID paymentId);
+
+    default Optional<PaymentReceiptDetails> findByPaymentId(UUID paymentId, UUID branchId) {
+        return findByPaymentId(paymentId);
+    }
 }

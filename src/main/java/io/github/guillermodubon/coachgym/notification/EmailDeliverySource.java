@@ -11,7 +11,8 @@ public record EmailDeliverySource(
         UUID clientId,
         String recipient,
         EmailAttachment attachment,
-        EmailDeliveryTemplateData templateData) {
+        EmailDeliveryTemplateData templateData,
+        UUID branchId) {
 
     public EmailDeliverySource(
             EmailDeliveryType deliveryType,
@@ -21,6 +22,17 @@ public record EmailDeliverySource(
             EmailAttachment attachment) {
         this(deliveryType, sourceResourceId, clientId, recipient, attachment,
                 EmailDeliveryTemplateData.empty());
+    }
+
+    public EmailDeliverySource(
+            EmailDeliveryType deliveryType,
+            UUID sourceResourceId,
+            UUID clientId,
+            String recipient,
+            EmailAttachment attachment,
+            EmailDeliveryTemplateData templateData) {
+        this(deliveryType, sourceResourceId, clientId, recipient, attachment,
+                templateData, null);
     }
 
     public EmailDeliverySource {

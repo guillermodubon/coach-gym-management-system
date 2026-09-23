@@ -59,13 +59,12 @@ public class PaymentProviderEventApplicationService {
                 event.provider(), event.providerEventReference());
 
         if (stored.processingResult() != PaymentProviderEventProcessingResult.PENDING) {
-            publishDuplicateAcknowledgement(event, stored.processingResult());
+            publishDuplicateAcknowledgement(stored);
             return stored.processingResult();
         }
         if (reservation == PaymentProviderEventReservation.ALREADY_RESERVED
                 && !sameIdentity(stored, event)) {
-            publishDuplicateAcknowledgement(
-                    event, PaymentProviderEventProcessingResult.REJECTED);
+            publishDuplicateAcknowledgement(stored);
             return PaymentProviderEventProcessingResult.REJECTED;
         }
         if (!sameIdentity(stored, event)) {
@@ -102,7 +101,8 @@ public class PaymentProviderEventApplicationService {
                             event.currency(),
                             providerDetails.details().createdByUserId(),
                             occurredAt,
-                            occurredAt));
+                            occurredAt,
+                            providerDetails.details().initiatedAtBranchId()));
             PaymentAttemptDetails succeeded = paymentAttemptStore.markProviderSucceeded(
                     new ConfirmProviderPaymentAttemptCommand(
                             providerDetails.details().id(),
@@ -114,10 +114,11 @@ public class PaymentProviderEventApplicationService {
                     event, PaymentProviderEventProcessingResult.PROCESSED));
             publishAfterCommit(new PaymentProviderPaymentConfirmed(
                     succeeded.id(), payment.id(), event.provider(), payment.amount(),
-                    payment.currency(), occurredAt));
+                    payment.currency(), occurredAt, payment.registeredAtBranchId()));
             publishAfterCommit(new PaymentAttemptProviderStatusChanged(
                     succeeded.id(), succeeded.provider(), currentStatus, succeeded.status(),
-                    null, succeeded.confirmedPaymentId(), true, occurredAt));
+                    null, succeeded.confirmedPaymentId(), true, occurredAt,
+                    succeeded.initiatedAtBranchId()));
             return PaymentProviderEventProcessingResult.PROCESSED;
         }
 
@@ -133,7 +134,8 @@ public class PaymentProviderEventApplicationService {
                 event, PaymentProviderEventProcessingResult.PROCESSED));
         publishAfterCommit(new PaymentAttemptProviderStatusChanged(
                 terminal.id(), terminal.provider(), currentStatus, terminal.status(),
-                terminal.failureCode(), null, true, occurredAt));
+                terminal.failureCode(), null, true, occurredAt,
+                terminal.initiatedAtBranchId()));
         return PaymentProviderEventProcessingResult.PROCESSED;
     }
 
@@ -199,15 +201,21 @@ public class PaymentProviderEventApplicationService {
         });
     }
 
-    private void publishDuplicateAcknowledgement(
-            VerifiedPaymentProviderEvent event,
-            PaymentProviderEventProcessingResult result) {
+    private void publishDuplicateAcknowledgement(PaymentProviderEventDetails stored) {
+        UUID paymentAttemptId = stored.paymentAttemptId();
+        if (paymentAttemptId == null) {
+            return;
+        }
+        UUID branchId = paymentAttemptStore.findProviderDetails(paymentAttemptId)
+                .map(details -> details.details().initiatedAtBranchId())
+                .orElse(null);
         // The duplicate branch has no further state change. Publishing inside
         // the current transaction makes its audit record commit atomically
         // with the acknowledgement and disappear on rollback.
         eventPublisher.publishEvent(new PaymentProviderEventAcknowledged(
-                event.paymentAttemptId(), event.provider(),
-                event.eventType().name(), result.name(), true, clock.instant()));
+                paymentAttemptId, stored.provider(),
+                stored.eventType().name(), stored.processingResult().name(), true,
+                clock.instant(), branchId));
     }
 
     private record ProviderOutcome(

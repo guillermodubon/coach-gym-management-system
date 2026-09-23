@@ -15,11 +15,14 @@ import io.github.guillermodubon.coachgym.payment.domain.PaymentAttemptValidation
 import io.github.guillermodubon.coachgym.payment.domain.PaymentMembershipMismatchException;
 import io.github.guillermodubon.coachgym.payment.domain.PaymentMembershipStateConflictException;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -37,6 +40,25 @@ public class PaymentAttemptApplicationService {
     private final ObjectProvider<CheckoutRedirectPolicy> redirectPolicyProvider;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
+
+    @Autowired
+    public PaymentAttemptApplicationService(
+            PaymentAttemptStore paymentAttemptStore,
+            MembershipPaymentQuery membershipPaymentQuery,
+            ObjectProvider<CardCheckoutGateway> checkoutGatewayProvider,
+            ObjectProvider<CheckoutRedirectPolicy> redirectPolicyProvider,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
+        this.paymentAttemptStore = Objects.requireNonNull(paymentAttemptStore);
+        this.membershipPaymentQuery = Objects.requireNonNull(membershipPaymentQuery);
+        this.checkoutGatewayProvider = Objects.requireNonNull(checkoutGatewayProvider);
+        this.redirectPolicyProvider = Objects.requireNonNull(redirectPolicyProvider);
+        this.eventPublisher = Objects.requireNonNull(eventPublisher);
+        this.clock = Objects.requireNonNull(clock);
+        this.branchContextResolver = branchContextResolver;
+    }
 
     public PaymentAttemptApplicationService(
             PaymentAttemptStore paymentAttemptStore,
@@ -45,12 +67,8 @@ public class PaymentAttemptApplicationService {
             ObjectProvider<CheckoutRedirectPolicy> redirectPolicyProvider,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
-        this.paymentAttemptStore = Objects.requireNonNull(paymentAttemptStore);
-        this.membershipPaymentQuery = Objects.requireNonNull(membershipPaymentQuery);
-        this.checkoutGatewayProvider = Objects.requireNonNull(checkoutGatewayProvider);
-        this.redirectPolicyProvider = Objects.requireNonNull(redirectPolicyProvider);
-        this.eventPublisher = Objects.requireNonNull(eventPublisher);
-        this.clock = Objects.requireNonNull(clock);
+        this(paymentAttemptStore, membershipPaymentQuery, checkoutGatewayProvider,
+                redirectPolicyProvider, eventPublisher, clock, null);
     }
 
     /** Creates a provider checkout after persisting an auditable CREATED attempt. */
@@ -59,6 +77,7 @@ public class PaymentAttemptApplicationService {
             CreateCardCheckoutAttemptCommand command,
             AuthenticatedActor actor) {
         validateActor(actor);
+        UUID branchId = branchId(actor);
         if (command == null) {
             throw new PaymentAttemptValidationException(
                     "Create payment attempt command is required.");
@@ -99,11 +118,12 @@ public class PaymentAttemptApplicationService {
                 new PersistPaymentAttemptCommand(
                         UUID.randomUUID(), command.clientId(), command.membershipId(),
                         command.membershipPeriodId(), PROVIDER, period.finalPrice(),
-                        period.currency(), actor.id(), occurredAt));
+                        period.currency(), actor.id(), occurredAt, branchId));
         eventPublisher.publishEvent(new PaymentAttemptCreated(
                 created.id(), created.clientId(), created.membershipId(),
                 created.membershipPeriodId(), created.provider(), created.expectedAmount(),
-                created.currency(), actor.id(), actor.username(), occurredAt));
+                created.currency(), actor.id(), actor.username(), occurredAt,
+                created.initiatedAtBranchId()));
 
         ProviderCheckout checkout;
         try {
@@ -136,7 +156,7 @@ public class PaymentAttemptApplicationService {
         eventPublisher.publishEvent(new PaymentAttemptStatusChanged(
                 processing.id(), processing.provider(), PaymentAttemptStatus.CREATED,
                 processing.status(), processing.failureCode(), processing.confirmedPaymentId(),
-                actor.id(), processing.updatedAt()));
+                actor.id(), processing.updatedAt(), processing.initiatedAtBranchId()));
         return new PaymentAttemptCheckoutDetails(
                 processing, checkout.checkoutUrl(), checkout.expiresAt());
     }
@@ -151,6 +171,19 @@ public class PaymentAttemptApplicationService {
                 .orElseThrow(() -> new PaymentAttemptNotFoundException(paymentAttemptId));
     }
 
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public PaymentAttemptDetails findById(
+            UUID paymentAttemptId,
+            AuthenticatedActor actor) {
+        validateActor(actor);
+        if (paymentAttemptId == null) {
+            throw new PaymentAttemptValidationException("Payment attempt id is required.");
+        }
+        return paymentAttemptStore.findById(paymentAttemptId, branchId(actor))
+                .orElseThrow(() -> new PaymentAttemptNotFoundException(paymentAttemptId));
+    }
+
     /** Cancels a provider checkout only after the provider confirms expiration/cancellation. */
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public PaymentAttemptDetails cancel(
@@ -162,8 +195,10 @@ public class PaymentAttemptApplicationService {
                     "Cancel payment attempt command is required.");
         }
 
-        PaymentAttemptProviderDetails providerDetails = paymentAttemptStore
-                .findProviderDetails(command.paymentAttemptId())
+        PaymentAttemptProviderDetails providerDetails = (branchContextResolver == null
+                ? paymentAttemptStore.findProviderDetails(command.paymentAttemptId())
+                : paymentAttemptStore.findProviderDetails(
+                        command.paymentAttemptId(), branchId(actor)))
                 .orElseThrow(() -> new PaymentAttemptNotFoundException(command.paymentAttemptId()));
         PaymentAttemptDetails current = providerDetails.details();
         if (current.version() != command.expectedVersion()) {
@@ -196,7 +231,7 @@ public class PaymentAttemptApplicationService {
         eventPublisher.publishEvent(new PaymentAttemptStatusChanged(
                 cancelled.id(), cancelled.provider(), PaymentAttemptStatus.PROCESSING,
                 cancelled.status(), cancelled.failureCode(), cancelled.confirmedPaymentId(),
-                actor.id(), cancelled.updatedAt()));
+                actor.id(), cancelled.updatedAt(), cancelled.initiatedAtBranchId()));
         return cancelled;
     }
 
@@ -216,7 +251,7 @@ public class PaymentAttemptApplicationService {
         eventPublisher.publishEvent(new PaymentAttemptStatusChanged(
                 failed.id(), failed.provider(), PaymentAttemptStatus.CREATED,
                 failed.status(), failed.failureCode(), failed.confirmedPaymentId(),
-                actor.id(), failed.updatedAt()));
+                actor.id(), failed.updatedAt(), failed.initiatedAtBranchId()));
     }
 
     private static void validateActor(AuthenticatedActor actor) {
@@ -224,5 +259,13 @@ public class PaymentAttemptApplicationService {
                 || actor.username() == null || actor.username().isBlank()) {
             throw new PaymentAttemptValidationException("Authenticated actor is required.");
         }
+    }
+
+    private UUID branchId(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(
+                branchContextResolver.resolveOperation(actor.id()));
     }
 }

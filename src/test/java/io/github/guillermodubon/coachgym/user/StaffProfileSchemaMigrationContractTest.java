@@ -59,11 +59,11 @@ class StaffProfileSchemaMigrationContractTest {
                     .toList();
 
             assertThat(versions).doesNotHaveDuplicates();
-            assertThat(versions).contains(29, 30, 31, 32);
+            assertThat(versions).contains(29, 30, 31, 32, 33, 34, 35, 36);
             assertThat(versions)
                     .isSortedAccordingTo(Comparator.naturalOrder());
             assertThat(versions.get(versions.size() - 1))
-                    .isEqualTo(32);
+                    .isEqualTo(36);
         }
     }
 

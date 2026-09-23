@@ -47,6 +47,34 @@ public interface AccessRecordStore {
             Instant occurredAt,
             UUID actorId);
 
+    /** Persists an attempt with its authoritative physical branch snapshot. */
+    default AccessRecordDetails persist(
+            String presentedIdentifier,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            UUID membershipPeriodId,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            String reason,
+            Instant occurredAt,
+            UUID actorId,
+            UUID branchId) {
+        return persist(
+                presentedIdentifier,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                membershipPeriodId,
+                result,
+                reasonCode,
+                reason,
+                occurredAt,
+                actorId);
+    }
+
     /**
      * Persists one QR access attempt with its safe source and credential
      * relation. The payload marker is never the opaque QR token.
@@ -65,6 +93,36 @@ public interface AccessRecordStore {
             Instant occurredAt,
             UUID actorId);
 
+    /** Persists a QR attempt with its authoritative physical branch snapshot. */
+    default AccessRecordDetails persistQr(
+            String safeIdentifier,
+            UUID credentialId,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            UUID membershipPeriodId,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            String reason,
+            Instant occurredAt,
+            UUID actorId,
+            UUID branchId) {
+        return persistQr(
+                safeIdentifier,
+                credentialId,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                membershipPeriodId,
+                result,
+                reasonCode,
+                reason,
+                occurredAt,
+                actorId);
+    }
+
     /**
      * Returns the most recent successful QR attempt for one credential from
      * the supplied inclusive server-time boundary.
@@ -73,7 +131,24 @@ public interface AccessRecordStore {
             UUID credentialId,
             Instant occurredAtFromInclusive);
 
+    default Optional<AccessRecordDetails> findMostRecentAllowedQrAttempt(
+            UUID credentialId,
+            Instant occurredAtFromInclusive,
+            UUID branchId) {
+        return findMostRecentAllowedQrAttempt(credentialId, occurredAtFromInclusive);
+    }
+
     Optional<AccessRecordDetails> findById(UUID id);
 
+    default Optional<AccessRecordDetails> findById(UUID id, UUID branchId) {
+        return findById(id);
+    }
+
     AccessRecordPage findAll(AccessRecordSearchQuery query);
+
+    default AccessRecordPage findAll(
+            AccessRecordSearchQuery query,
+            UUID branchId) {
+        return findAll(query);
+    }
 }

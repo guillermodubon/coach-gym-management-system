@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.client;
 
 import java.util.Locale;
+import java.util.UUID;
 
 /** Validated and normalized query for the operational client catalog. */
 public record ClientSearchQuery(
@@ -10,7 +11,19 @@ public record ClientSearchQuery(
         int page,
         int size,
         ClientSortField sort,
-        ClientSortDirection direction) {
+        ClientSortDirection direction,
+        UUID branchId) {
+
+    public ClientSearchQuery(
+            String search,
+            ClientStatus status,
+            String membershipStatus,
+            int page,
+            int size,
+            ClientSortField sort,
+            ClientSortDirection direction) {
+        this(search, status, membershipStatus, page, size, sort, direction, null);
+    }
 
     public static final int DEFAULT_PAGE = 0;
     public static final int DEFAULT_SIZE = 25;
@@ -40,7 +53,8 @@ public record ClientSearchQuery(
                 DEFAULT_PAGE,
                 DEFAULT_SIZE,
                 ClientSortField.LAST_NAME,
-                ClientSortDirection.ASC);
+                ClientSortDirection.ASC,
+                null);
     }
 
     private static String normalize(String value) {

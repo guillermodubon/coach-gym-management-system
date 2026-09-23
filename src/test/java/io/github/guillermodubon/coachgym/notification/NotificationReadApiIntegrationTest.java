@@ -7,6 +7,7 @@ import org.springframework.mock.web.MockHttpSession;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -14,6 +15,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class NotificationReadApiIntegrationTest
         extends AbstractNotificationApiIntegrationTest {
+
+    private static final UUID INITIAL_BRANCH_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002");
 
     @Test
     void marksOneNotificationAsReadIdempotently() throws Exception {
@@ -61,5 +65,54 @@ class NotificationReadApiIntegrationTest
                         .session(loginAsReceptionist()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.count").value(1));
+    }
+
+    @Test
+    void unreadCountAndReadAccessStayWithinActiveBranchAndIncludeGlobalNotices()
+            throws Exception {
+        UUID otherBranchId = UUID.randomUUID();
+        String branchCode = "NOTICE_" + otherBranchId.toString()
+                .replace("-", "").substring(0, 8).toUpperCase();
+        jdbcTemplate.update("""
+                insert into gym.gym_branches
+                    (id, organization_id, code, name, timezone, status, version)
+                values (?, '7b0bf7d5-5184-43d2-8f9a-200000000001', ?,
+                        'Notification Branch', 'America/El_Salvador', 'ACTIVE', 0)
+                """, otherBranchId, branchCode);
+
+        UUID globalNotificationId = insertNotification(
+                adminId, "SYSTEM", "INFO", null);
+        UUID activeBranchNotificationId = insertNotification(
+                adminId, "SYSTEM", "INFO", null, INITIAL_BRANCH_ID);
+        UUID otherBranchNotificationId = insertNotification(
+                adminId, "SYSTEM", "WARNING", null, otherBranchId);
+
+        try {
+            var activeBranchSession = loginAsAdmin();
+            mockMvc.perform(get("/api/v1/notifications/unread-count")
+                            .session(activeBranchSession))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.count").value(2));
+
+            mockMvc.perform(post(
+                            "/api/v1/notifications/{id}/read",
+                            otherBranchNotificationId)
+                            .session(activeBranchSession).with(csrf()))
+                    .andExpect(status().isNotFound());
+
+            assertThat(readAt(otherBranchNotificationId)).isNull();
+            assertThat(readAt(globalNotificationId)).isNull();
+            assertThat(readAt(activeBranchNotificationId)).isNull();
+        } finally {
+            jdbcTemplate.update("delete from gym.notifications where id in (?, ?, ?)",
+                    globalNotificationId,
+                    activeBranchNotificationId,
+                    otherBranchNotificationId);
+            jdbcTemplate.update("""
+                    update gym.gym_branches
+                    set status = 'INACTIVE', version = version + 1
+                    where id = ?
+                    """, otherBranchId);
+        }
     }
 }

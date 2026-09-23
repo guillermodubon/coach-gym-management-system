@@ -32,14 +32,16 @@ class JdbcClientMutationAdapter implements ClientMutationStore {
             UUID clientId,
             UpdateClientCommand command,
             AuthenticatedActor actor,
-            Instant occurredAt) {
+            Instant occurredAt,
+            UUID branchId) {
         MapSqlParameterSource parameters = common(clientId, actor, occurredAt)
                 .addValue("firstName", command.firstName())
                 .addValue("lastName", command.lastName())
                 .addValue("email", command.email())
                 .addValue("phone", command.phone())
                 .addValue("dateOfBirth", command.dateOfBirth())
-                .addValue("expectedVersion", command.expectedVersion());
+                .addValue("expectedVersion", command.expectedVersion())
+                .addValue("branchId", branchId);
         try {
             int updated = jdbc.update("""
                     update gym.clients
@@ -53,6 +55,8 @@ class JdbcClientMutationAdapter implements ClientMutationStore {
                         version = version + 1
                     where id = :clientId
                       and version = :expectedVersion
+                      and (cast(:branchId as uuid) is null
+                           or home_branch_id = cast(:branchId as uuid))
                     """, parameters);
             requireUpdated(clientId, updated);
             replaceEmergencyContact(clientId, command.emergencyContact(), occurredAt);
@@ -70,13 +74,15 @@ class JdbcClientMutationAdapter implements ClientMutationStore {
             String reason,
             long expectedVersion,
             AuthenticatedActor actor,
-            Instant occurredAt) {
+            Instant occurredAt,
+            UUID branchId) {
         MapSqlParameterSource parameters = common(clientId, actor, occurredAt)
                 .addValue("expectedStatus", expectedCurrentStatus.name())
                 .addValue("newStatus", requestedStatus.name())
                 .addValue("reason", reason)
                 .addValue("expectedVersion", expectedVersion)
-                .addValue("historyId", UUID.randomUUID());
+                .addValue("historyId", UUID.randomUUID())
+                .addValue("branchId", branchId);
 
         int updated = jdbc.update("""
                 update gym.clients
@@ -93,6 +99,8 @@ class JdbcClientMutationAdapter implements ClientMutationStore {
                 where id = :clientId
                   and status = :expectedStatus
                   and version = :expectedVersion
+                  and (cast(:branchId as uuid) is null
+                       or home_branch_id = cast(:branchId as uuid))
                 """, parameters);
         requireUpdated(clientId, updated);
 

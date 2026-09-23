@@ -16,7 +16,15 @@ public record AccessCredentialIssued(
         String tokenSchemeVersion,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public AccessCredentialIssued(UUID credentialId, UUID clientId,
+            String credentialCode, String payloadVersion, String tokenSchemeVersion,
+            UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        this(credentialId, clientId, credentialCode, payloadVersion,
+                tokenSchemeVersion, actorUserId, actorIdentifier, occurredAt, null);
+    }
 
     public AccessCredentialIssued {
         credentialId = requiredId(credentialId, "Credential event id");

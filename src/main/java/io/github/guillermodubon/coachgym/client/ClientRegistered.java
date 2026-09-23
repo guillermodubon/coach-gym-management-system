@@ -9,5 +9,20 @@ public record ClientRegistered(
         String clientCode,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public ClientRegistered(
+            UUID clientId,
+            String clientCode,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+        this(clientId, clientCode, actorUserId, actorIdentifier, occurredAt, null);
+    }
+
+    /** Stable common accessor for branch-aware cross-module consumers. */
+    public UUID homeBranchId() {
+        return branchId;
+    }
 }
