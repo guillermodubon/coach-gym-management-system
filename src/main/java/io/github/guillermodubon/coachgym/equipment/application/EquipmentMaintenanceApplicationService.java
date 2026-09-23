@@ -129,7 +129,7 @@ public class EquipmentMaintenanceApplicationService
         eventPublisher.publishEvent(new EquipmentStatusChangedEvent(
                 updated.id(), updated.equipmentCode(),
                 current.status(), updated.status(), reason,
-                actor.id(), actor.username(), occurredAt));
+                actor.id(), actor.username(), occurredAt, updated.branchId()));
         return updated;
     }
 

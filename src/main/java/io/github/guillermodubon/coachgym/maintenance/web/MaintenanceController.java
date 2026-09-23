@@ -11,6 +11,8 @@ import io.github.guillermodubon.coachgym.maintenance.domain.MaintenanceValidatio
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -59,11 +61,18 @@ public class MaintenanceController {
     }
 
     @GetMapping("/{id}")
-    MaintenanceResponse findById(@PathVariable UUID id) {
-        return MaintenanceResponse.from(service.findById(id));
+    MaintenanceResponse findById(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        return MaintenanceResponse.from(
+                service.findById(id, actor(authentication)));
     }
 
     @GetMapping
+    @Operation(summary = "List maintenance work orders",
+            description = "Returns bounded operational work-order history. An explicit branchId is available only to organization administrators for an active authorized branch; otherwise the active branch is required.")
+    @ApiResponse(responseCode = "404", description = "Requested branch is not available")
+    @ApiResponse(responseCode = "409", description = "No valid active branch is selected")
     MaintenancePageResponse findAll(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) UUID incidentId,
@@ -75,10 +84,13 @@ public class MaintenanceController {
             @RequestParam(required = false) UUID assignedToUserId,
             @RequestParam(required = false) String providerName,
             @RequestParam(required = false) String search,
+            @Parameter(description = "Optional active branch UUID for organization administrators; other staff are restricted to their active branch")
+            @RequestParam(required = false) UUID branchId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
             @RequestParam(defaultValue = "SCHEDULED_ON") String sort,
-            @RequestParam(defaultValue = "ASC") String direction) {
+            @RequestParam(defaultValue = "ASC") String direction,
+            Authentication authentication) {
         MaintenanceSearchQuery query = new MaintenanceSearchQuery(
                 equipmentId, incidentId,
                 parseEnum(maintenanceType, MaintenanceType.class, "maintenance type"),
@@ -86,12 +98,15 @@ public class MaintenanceController {
                 scheduledFrom, scheduledUntil, createdByUserId, assignedToUserId,
                 providerName, search, page, size,
                 MaintenanceSortField.from(sort), MaintenanceSortDirection.from(direction));
-        return MaintenancePageResponse.from(service.findAll(query));
+        return MaintenancePageResponse.from(
+                service.findAll(query, actor(authentication), branchId));
     }
 
     @GetMapping("/{id}/history")
-    List<MaintenanceStatusHistoryResponse> history(@PathVariable UUID id) {
-        return service.findStatusHistory(id).stream()
+    List<MaintenanceStatusHistoryResponse> history(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        return service.findStatusHistory(id, actor(authentication)).stream()
                 .map(MaintenanceStatusHistoryResponse::from).toList();
     }
 

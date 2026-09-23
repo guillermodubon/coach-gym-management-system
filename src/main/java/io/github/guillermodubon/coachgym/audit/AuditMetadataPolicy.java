@@ -79,7 +79,7 @@ public final class AuditMetadataPolicy {
         Map<String, Set<String>> policy = new LinkedHashMap<>();
         policy.put("ACCESS_CREDENTIAL_", immutableSet(
                 "accessCredentialId", "clientId", "replacementCredentialId",
-                "tokenSchemeVersion", "previousStatus", "newStatus",
+                "tokenSchemeVersion", "previousStatus", "newStatus", "branchId",
                 "reasonPresent"));
         policy.put("PAYMENT_ATTEMPT_", immutableSet(
                 "amount", "attemptNumber", "attemptResult", "clientId",
@@ -87,39 +87,41 @@ public final class AuditMetadataPolicy {
                 "failureCode", "membershipId", "membershipPeriodId", "newStatus",
                 "previousStatus", "processingResult", "provider",
                 "providerEventReferencePresent", "status", "testMode",
-                "paymentAttemptId"));
+                "paymentAttemptId", "branchId"));
         policy.put("EMAIL_DELIVERY_", immutableSet(
                 "attemptNumber", "attemptResult", "clientId", "deliveryType",
                 "failureCode", "maskedRecipient", "previousStatus", "sourceResourceId",
-                "status"));
+                "status", "branchId"));
         policy.put("MEMBERSHIP_", immutableSet(
                 "cancelledOn", "clientId", "closedOpenFreeze", "currency",
                 "discountAmount", "effectiveEndsOn", "finalPrice", "freezeStartsOn",
                 "listPrice", "membershipFreezeId", "membershipPeriodId",
                 "membershipPlanId", "periodNumber", "plannedEndsOn", "promotionId",
                 "previousStatus", "reactivatedOn", "resultingStatus", "startsOn",
-                "statusChanged"));
+                "statusChanged", "branchId"));
         policy.put("PAYMENT_", immutableSet(
                 "amount", "clientId", "currency", "hasExternalReference",
                 "membershipId", "membershipPeriodId", "newStatus", "paidAt",
                 "paymentMethod", "previousStatus", "provider", "providerEventReferencePresent",
                 "resultingStatus", "status", "testMode", "paymentId",
-                "paymentAttemptId", "paymentCode"));
+                "paymentAttemptId", "paymentCode", "branchId"));
         policy.put("ACCESS_PAYMENT_", immutableSet("newValue", "previousValue"));
         policy.put("ACCESS_", immutableSet(
                 "accessCredentialId", "checkedInAt", "duplicate", "identificationSource",
                 "presentedIdentifierType", "reasonCode", "reasonPresent", "result",
-                "clientId", "membershipId"));
+                "clientId", "membershipId", "branchId"));
         policy.put("EQUIPMENT_", immutableSet(
                 "categoryId", "equipmentCode", "equipmentId", "equipmentOutcome", "newStatus",
-                "previousStatus", "priority", "statusChanged", "takenOutOfService"));
+                "previousStatus", "priority", "statusChanged", "takenOutOfService",
+                "branchId"));
         policy.put("INCIDENT_", immutableSet(
                 "equipmentCode", "equipmentId", "newPriority", "newStatus", "previousPriority",
-                "previousStatus", "priority", "statusChanged"));
+                "previousStatus", "priority", "statusChanged", "branchId"));
         policy.put("MAINTENANCE_", immutableSet(
                 "actualCost", "currency", "equipmentCode", "equipmentId",
                 "equipmentOutcome", "estimatedCost", "incidentId", "maintenanceType",
-                "newStatus", "previousStatus", "scheduledOn", "statusChanged"));
+                "newStatus", "previousStatus", "scheduledOn", "statusChanged",
+                "branchId"));
         policy.put("PROMOTION_", immutableSet(
                 "eligiblePlanCount", "eligiblePlanIds", "promotionId"));
         policy.put("STAFF_PROFILE_", immutableSet(
@@ -136,7 +138,7 @@ public final class AuditMetadataPolicy {
         policy.put("GYM_BRANCH_", immutableSet(
                 "organizationId", "changedFields", "previousStatus", "newStatus"));
         policy.put("PLAN_", Set.of());
-        policy.put("CLIENT_", Set.of());
+        policy.put("CLIENT_", immutableSet("branchId"));
         return Collections.unmodifiableMap(policy);
     }
 

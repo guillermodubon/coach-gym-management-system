@@ -97,7 +97,7 @@ class AuditEntryJpaEntity {
         entry.resourceId = event.clientId();
         entry.resourceCodeSnapshot = event.clientCode();
         entry.summary = "Client registered.";
-        entry.metadata = Map.of();
+        entry.metadata = withBranchId(Map.of(), event.branchId());
         entry.occurredAt = event.occurredAt();
         return entry;
     }
@@ -357,6 +357,8 @@ class AuditEntryJpaEntity {
                 event.effectiveEndsOn()
                         .toString());
 
+        putBranchId(metadata, event.branchId());
+
         return Map.copyOf(metadata);
     }
 
@@ -436,6 +438,8 @@ class AuditEntryJpaEntity {
                 "statusChanged",
                 event.previousStatus()
                         != event.resultingStatus());
+
+        putBranchId(metadata, event.branchId());
 
         return Map.copyOf(metadata);
     }
@@ -535,6 +539,8 @@ class AuditEntryJpaEntity {
                 "statusChanged",
                 true);
 
+        putBranchId(metadata, event.branchId());
+
         return metadata;
     }
 
@@ -584,6 +590,8 @@ class AuditEntryJpaEntity {
         metadata.put(
                 "statusChanged",
                 true);
+
+        putBranchId(metadata, event.branchId());
 
         return metadata;
     }
@@ -674,6 +682,8 @@ class AuditEntryJpaEntity {
                 "closedOpenFreeze",
                 event.closedOpenFreeze());
 
+        putBranchId(metadata, event.branchId());
+
         return metadata;
     }
 
@@ -697,6 +707,7 @@ class AuditEntryJpaEntity {
                 "categoryId",
                 event.categoryId().toString()
         );
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
 
         entry.occurredAt = event.occurredAt();
 
@@ -722,6 +733,7 @@ class AuditEntryJpaEntity {
         meta.put("newStatus", event.newStatus().name());
         meta.put("reason", event.reason());
         entry.metadata = Map.copyOf(meta);
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
         entry.occurredAt = event.occurredAt();
         return entry;
     }
@@ -737,6 +749,7 @@ class AuditEntryJpaEntity {
         entry.resourceCodeSnapshot = event.equipmentCode();
         entry.summary = "Equipment updated.";
         entry.metadata = Map.of();
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
         entry.occurredAt = event.occurredAt();
         return entry;
     }
@@ -1005,6 +1018,7 @@ class AuditEntryJpaEntity {
         metadata.put("provider", event.provider().name());
         metadata.put("expectedAmount", event.expectedAmount().toPlainString());
         metadata.put("currency", event.currency());
+        putBranchId(metadata, event.branchId());
         entry.metadata = Map.copyOf(metadata);
         return entry;
     }
@@ -1024,6 +1038,7 @@ class AuditEntryJpaEntity {
             metadata.put("failureCode", event.failureCode().name());
         }
         metadata.put("confirmedPaymentPresent", event.confirmedPaymentId() != null);
+        putBranchId(metadata, event.branchId());
         entry.metadata = Map.copyOf(metadata);
         return entry;
     }
@@ -1048,6 +1063,7 @@ class AuditEntryJpaEntity {
         }
         metadata.put("providerEventReferencePresent", event.providerEventReferencePresent());
         metadata.put("confirmedPaymentPresent", event.confirmedPaymentId() != null);
+        putBranchId(metadata, event.branchId());
         entry.metadata = Map.copyOf(metadata);
         return entry;
     }
@@ -1063,6 +1079,7 @@ class AuditEntryJpaEntity {
                 "eventType", event.eventType(),
                 "processingResult", event.processingResult(),
                 "duplicate", true);
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
         return entry;
     }
 
@@ -1081,6 +1098,7 @@ class AuditEntryJpaEntity {
                 "provider", event.provider().name(),
                 "amount", event.amount().toPlainString(),
                 "currency", event.currency());
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
         entry.occurredAt = event.occurredAt();
         return entry;
     }
@@ -1106,6 +1124,7 @@ class AuditEntryJpaEntity {
                 "amount", event.amount().toPlainString(),
                 "currency", event.currency(),
                 "testMode", event.testMode());
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
         entry.occurredAt = event.occurredAt();
         return entry;
     }
@@ -1150,6 +1169,7 @@ class AuditEntryJpaEntity {
         if (event.failureCode() != null) {
             metadata.put("failureCode", event.failureCode().name());
         }
+        putBranchId(metadata, event.branchId());
         entry.metadata = Map.copyOf(metadata);
         entry.occurredAt = event.occurredAt();
         return entry;
@@ -1504,6 +1524,7 @@ class AuditEntryJpaEntity {
         metadata.put(
                 "hasExternalReference",
                 event.hasExternalReference());
+        putBranchId(metadata, event.branchId());
 
         return Map.copyOf(metadata);
     }
@@ -1573,6 +1594,7 @@ class AuditEntryJpaEntity {
                 "newStatus", "ACTIVE",
                 "payloadVersion", event.payloadVersion(),
                 "tokenSchemeVersion", event.tokenSchemeVersion());
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
         return entry;
     }
 
@@ -1592,6 +1614,7 @@ class AuditEntryJpaEntity {
                 "previousStatus", event.previousStatus().name(),
                 "newStatus", event.newStatus().name(),
                 "reasonPresent", event.reasonPresent());
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
         return entry;
     }
 
@@ -1612,6 +1635,7 @@ class AuditEntryJpaEntity {
                 "newStatus", event.replacementStatus().name(),
                 "replacementCredentialId", event.replacementCredentialId().toString(),
                 "reasonPresent", event.reasonPresent());
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
         return entry;
     }
 
@@ -1663,6 +1687,12 @@ class AuditEntryJpaEntity {
                 "checkedInAt",
                 event.checkedInAt().toString());
 
+        if (event.branchId() != null) {
+            metadata.put(
+                    "branchId",
+                    event.branchId().toString());
+        }
+
         if (event.clientId() != null) {
             metadata.put(
                     "clientId",
@@ -1700,6 +1730,7 @@ class AuditEntryJpaEntity {
         }
         metadata.put("priority", event.priority().name());
         metadata.put("takenOutOfService", event.takenOutOfService());
+        putBranchId(metadata, event.branchId());
         entry.metadata = Map.copyOf(metadata);
         return entry;
     }
@@ -1713,7 +1744,8 @@ class AuditEntryJpaEntity {
                 event.actorIdentifier(), event.occurredAt());
         entry.actionCode = "INCIDENT_INVESTIGATION_STARTED";
         entry.summary = "Incident investigation started.";
-        entry.metadata = Map.of("equipmentId", event.equipmentId().toString());
+        entry.metadata = withBranchId(
+                Map.of("equipmentId", event.equipmentId().toString()), event.branchId());
         return entry;
     }
 
@@ -1729,6 +1761,7 @@ class AuditEntryJpaEntity {
         entry.metadata = Map.of(
                 "previousPriority", event.previousPriority().name(),
                 "newPriority", event.newPriority().name());
+        entry.metadata = withBranchId(entry.metadata, event.branchId());
         return entry;
     }
 
@@ -1741,7 +1774,8 @@ class AuditEntryJpaEntity {
                 event.actorIdentifier(), event.occurredAt());
         entry.actionCode = "INCIDENT_RESOLVED";
         entry.summary = "Equipment incident resolved.";
-        entry.metadata = Map.of("equipmentId", event.equipmentId().toString());
+        entry.metadata = withBranchId(
+                Map.of("equipmentId", event.equipmentId().toString()), event.branchId());
         return entry;
     }
 
@@ -1804,6 +1838,8 @@ class AuditEntryJpaEntity {
                 "currency",
                 event.currency());
 
+        putBranchId(metadata, event.branchId());
+
         entry.metadata =
                 Map.copyOf(metadata);
 
@@ -1858,6 +1894,8 @@ class AuditEntryJpaEntity {
         metadata.put(
                 "currency",
                 event.currency());
+
+        putBranchId(metadata, event.branchId());
 
         entry.metadata =
                 Map.copyOf(metadata);
@@ -1953,6 +1991,8 @@ class AuditEntryJpaEntity {
                 "currency",
                 event.currency());
 
+        putBranchId(metadata, event.branchId());
+
         entry.metadata =
                 Map.copyOf(metadata);
 
@@ -2001,6 +2041,8 @@ class AuditEntryJpaEntity {
                     "equipmentOutcome",
                     event.equipmentOutcome().name());
         }
+
+        putBranchId(metadata, event.branchId());
 
         entry.metadata =
                 Map.copyOf(metadata);
@@ -2054,8 +2096,26 @@ class AuditEntryJpaEntity {
                 "newStatus",
                 event.newStatus().name());
 
+        putBranchId(metadata, event.branchId());
+
         entry.metadata = Map.copyOf(metadata);
 
         return entry;
+    }
+
+    private static void putBranchId(Map<String, Object> metadata, UUID branchId) {
+        if (branchId != null) {
+            metadata.put("branchId", branchId.toString());
+        }
+    }
+
+    private static Map<String, Object> withBranchId(
+            Map<String, Object> metadata, UUID branchId) {
+        if (branchId == null) {
+            return metadata;
+        }
+        Map<String, Object> branchMetadata = new LinkedHashMap<>(metadata);
+        branchMetadata.put("branchId", branchId.toString());
+        return Map.copyOf(branchMetadata);
     }
 }

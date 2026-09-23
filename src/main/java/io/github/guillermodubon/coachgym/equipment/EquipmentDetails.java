@@ -32,5 +32,36 @@ public record EquipmentDetails(
         UUID updatedByUserId,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID branchId) {
+
+    /** Compatibility constructor for callers created before branch ownership. */
+    public EquipmentDetails(
+            UUID id,
+            long equipmentNumber,
+            String equipmentCode,
+            UUID categoryId,
+            String categoryName,
+            String name,
+            String manufacturer,
+            String model,
+            String serialNumber,
+            String location,
+            EquipmentStatus status,
+            LocalDate purchasedOn,
+            String notes,
+            Instant retiredAt,
+            UUID retiredByUserId,
+            String retirementReason,
+            UUID createdByUserId,
+            UUID updatedByUserId,
+            Instant createdAt,
+            Instant updatedAt,
+            long version) {
+        this(id, equipmentNumber, equipmentCode, categoryId, categoryName, name,
+                manufacturer, model, serialNumber, location, status, purchasedOn,
+                notes, retiredAt, retiredByUserId, retirementReason,
+                createdByUserId, updatedByUserId, createdAt, updatedAt, version,
+                null);
+    }
 }

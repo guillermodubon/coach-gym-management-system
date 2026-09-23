@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.guillermodubon.coachgym.notification.EmailAttemptResult;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryFailureCode;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryStatus;
@@ -22,6 +23,8 @@ class EmailDeliveryAuditEntryJpaEntityTest {
             "30000000-0000-0000-0000-000000000001");
     private static final UUID ACTOR_ID = UUID.fromString(
             "40000000-0000-0000-0000-000000000001");
+    private static final UUID BRANCH_ID = UUID.fromString(
+            "50000000-0000-0000-0000-000000000001");
     private static final Instant OCCURRED_AT = Instant.parse("2026-09-15T12:00:00Z");
 
     @Test
@@ -29,15 +32,18 @@ class EmailDeliveryAuditEntryJpaEntityTest {
         EmailDeliveryLifecycleEvent event = new EmailDeliveryLifecycleEvent(
                 DELIVERY_ID,
                 EmailDeliveryType.PAYMENT_RECEIPT,
-                SOURCE_ID,
-                CLIENT_ID,
-                "a***@example.com",
+                EmailDeliveryStatus.PENDING,
                 EmailDeliveryStatus.SENT,
+                EmailAttemptResult.SENT,
                 1,
                 null,
                 ACTOR_ID,
+                OCCURRED_AT,
+                SOURCE_ID,
+                CLIENT_ID,
+                "a***@example.com",
                 "coach-admin",
-                OCCURRED_AT);
+                BRANCH_ID);
 
         AuditEntryJpaEntity entry = AuditEntryJpaEntity.from(event);
 
@@ -54,7 +60,8 @@ class EmailDeliveryAuditEntryJpaEntityTest {
                 "previousStatus", "PENDING",
                 "sourceResourceId", SOURCE_ID.toString(),
                 "clientId", CLIENT_ID.toString(),
-                "maskedRecipient", "a***@example.com"));
+                "maskedRecipient", "a***@example.com",
+                "branchId", BRANCH_ID.toString()));
         assertThat(metadata(entry).toString()).doesNotContain(
                 "client@example.com", "smtp secret", "attachmentBytes",
                 "password", "cardNumber", "rawToken");
@@ -65,15 +72,18 @@ class EmailDeliveryAuditEntryJpaEntityTest {
         EmailDeliveryLifecycleEvent event = new EmailDeliveryLifecycleEvent(
                 DELIVERY_ID,
                 EmailDeliveryType.PAYMENT_RECEIPT,
-                SOURCE_ID,
-                CLIENT_ID,
-                "a***@example.com",
                 EmailDeliveryStatus.FAILED,
+                EmailDeliveryStatus.FAILED,
+                EmailAttemptResult.FAILED,
                 2,
                 EmailDeliveryFailureCode.TRANSPORT_TIMEOUT,
                 ACTOR_ID,
+                OCCURRED_AT,
+                SOURCE_ID,
+                CLIENT_ID,
+                "a***@example.com",
                 "coach-admin",
-                OCCURRED_AT);
+                BRANCH_ID);
 
         AuditEntryJpaEntity entry = AuditEntryJpaEntity.from(event);
 

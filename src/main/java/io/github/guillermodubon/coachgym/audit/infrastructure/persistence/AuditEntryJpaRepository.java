@@ -191,11 +191,13 @@ class AuditEntryPersistenceAdapter
     @Override
     @Transactional
     public void recordPaymentVoided(PaymentVoided event) {
+        String metadata = "{\"previousStatus\":\"PAID\",\"newStatus\":\"VOIDED\""
+                + branchMetadata(event.branchId()) + "}";
         insertPaymentAudit(
                 event.changedByUserId(), event.actorIdentifier(),
                 "PAYMENT_VOIDED", event.paymentId(), event.paymentCode(),
                 "Payment voided.",
-                "{\"previousStatus\":\"PAID\",\"newStatus\":\"VOIDED\"}",
+                metadata,
                 event.occurredAt());
     }
 
@@ -208,7 +210,8 @@ class AuditEntryPersistenceAdapter
                 + "\"refundAmount\":\"" + event.amount().toPlainString() + "\","
                 + "\"currency\":\"" + event.currency() + "\","
                 + "\"externalReferencePresent\":"
-                + event.externalReferencePresent() + "}";
+                + event.externalReferencePresent()
+                + branchMetadata(event.branchId()) + "}";
         insertPaymentAudit(
                 event.changedByUserId(), event.actorIdentifier(),
                 "PAYMENT_REFUNDED", event.paymentId(), event.paymentCode(),
@@ -342,6 +345,10 @@ class AuditEntryPersistenceAdapter
                         .addValue("metadata", metadata)
                         .addValue("occurredAt", java.time.OffsetDateTime.ofInstant(
                                 occurredAt, java.time.ZoneOffset.UTC)));
+    }
+
+    private static String branchMetadata(UUID branchId) {
+        return branchId == null ? "" : ",\"branchId\":\"" + branchId + "\"";
     }
 
     @Override

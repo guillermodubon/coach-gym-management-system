@@ -18,6 +18,7 @@ import io.github.guillermodubon.coachgym.maintenance.domain.IncidentValidationEx
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -77,12 +78,17 @@ class IncidentController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get an incident", description = "ADMIN and RECEPTIONIST may query incidents.")
-    IncidentResponse findById(@PathVariable UUID id) {
-        return IncidentResponse.from(incidentService.findById(id));
+    IncidentResponse findById(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        return IncidentResponse.from(
+                incidentService.findByIdForActor(id, actor(authentication)));
     }
 
     @GetMapping
-    @Operation(summary = "List incidents", description = "Returns a filtered and paginated incident list for ADMIN and RECEPTIONIST.")
+    @Operation(summary = "List incidents", description = "Returns a filtered and paginated incident list for ADMIN and RECEPTIONIST. An explicit branchId is available only to organization administrators for an active authorized branch; otherwise the active branch is required.")
+    @ApiResponse(responseCode = "404", description = "Requested branch is not available")
+    @ApiResponse(responseCode = "409", description = "No valid active branch is selected")
     IncidentPageResponse findAll(
             @RequestParam(required = false) UUID equipmentId,
             @RequestParam(required = false) String status,
@@ -92,10 +98,13 @@ class IncidentController {
             @RequestParam(required = false) UUID reportedByUserId,
             @RequestParam(required = false) UUID resolvedByUserId,
             @RequestParam(required = false) String search,
+            @Parameter(description = "Optional active branch UUID for organization administrators; other staff are restricted to their active branch")
+            @RequestParam(required = false) UUID branchId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
             @RequestParam(defaultValue = "REPORTED_AT") String sort,
-            @RequestParam(defaultValue = "DESC") String direction) {
+            @RequestParam(defaultValue = "DESC") String direction,
+            Authentication authentication) {
         IncidentSearchQuery query = new IncidentSearchQuery(
                 equipmentId,
                 parseStatus(status),
@@ -109,14 +118,16 @@ class IncidentController {
                 size,
                 IncidentSortField.from(sort),
                 IncidentSortDirection.from(direction));
-        return IncidentPageResponse.from(incidentService.findAll(query));
+        return IncidentPageResponse.from(
+                incidentService.findAllForActor(query, actor(authentication), branchId));
     }
 
     @GetMapping("/{id}/history")
     @Operation(summary = "Get incident status history", description = "Returns append-only lifecycle history for ADMIN and RECEPTIONIST.")
     List<IncidentStatusHistoryResponse> findStatusHistory(
-            @PathVariable UUID id) {
-        return incidentService.findStatusHistory(id).stream()
+            @PathVariable UUID id,
+            Authentication authentication) {
+        return incidentService.findStatusHistoryForActor(id, actor(authentication)).stream()
                 .map(IncidentStatusHistoryResponse::from)
                 .toList();
     }

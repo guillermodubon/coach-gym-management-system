@@ -18,7 +18,7 @@ public record MaintenanceResponse(
         BigDecimal estimatedCost, BigDecimal actualCost, String currency,
         String actionsTaken, String notes,
         UUID createdByUserId, UUID assignedToUserId, UUID completedByUserId,
-        Instant createdAt, Instant updatedAt, long version) {
+        Instant createdAt, Instant updatedAt, long version, UUID branchId) {
 
     static MaintenanceResponse from(MaintenanceDetails details) {
         return new MaintenanceResponse(
@@ -31,6 +31,6 @@ public record MaintenanceResponse(
                 details.currency(), details.actionsTaken(), details.notes(),
                 details.createdByUserId(), details.assignedToUserId(),
                 details.completedByUserId(), details.createdAt(), details.updatedAt(),
-                details.version());
+                details.version(), details.branchId());
     }
 }

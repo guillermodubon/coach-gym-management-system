@@ -20,9 +20,15 @@ import io.github.guillermodubon.coachgym.equipment.domain.EquipmentStatusPolicy;
 import io.github.guillermodubon.coachgym.equipment.domain.EquipmentStatusTransition;
 import io.github.guillermodubon.coachgym.equipment.domain.EquipmentValidationException;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.ActiveBranchContextUnavailableException;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -41,16 +47,28 @@ public class EquipmentApplicationService {
     private final EquipmentCategoryStore categoryStore;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
 
     public EquipmentApplicationService(
             EquipmentStore equipmentStore,
             EquipmentCategoryStore categoryStore,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
+        this(equipmentStore, categoryStore, eventPublisher, clock, null);
+    }
+
+    @Autowired
+    public EquipmentApplicationService(
+            EquipmentStore equipmentStore,
+            EquipmentCategoryStore categoryStore,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
         this.equipmentStore = equipmentStore;
         this.categoryStore = categoryStore;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
+        this.branchContextResolver = branchContextResolver;
     }
 
     // ── register ──────────────────────────────────────────────────────────────
@@ -69,14 +87,16 @@ public class EquipmentApplicationService {
         }
 
         // Serial number must be globally unique (case-insensitive) if provided.
+        UUID branchId = branchId(actor);
         if (definition.serialNumber() != null &&
-                equipmentStore.existsBySerialNumberIgnoreCase(definition.serialNumber(), null)) {
+                serialExistsInBranch(definition.serialNumber(), null, branchId)) {
             throw new DuplicateSerialNumberException(definition.serialNumber());
         }
 
         UUID id = UUID.randomUUID();
         Instant occurredAt = clock.instant();
-        EquipmentDetails registered = equipmentStore.register(id, definition, actor, occurredAt);
+        EquipmentDetails registered = registerInBranch(
+                id, definition, actor, occurredAt, branchId);
 
         eventPublisher.publishEvent(new EquipmentRegisteredEvent(
                 registered.id(),
@@ -84,7 +104,8 @@ public class EquipmentApplicationService {
                 registered.categoryId(),
                 actor.id(),
                 actor.username(),
-                occurredAt));
+                occurredAt,
+                registered.branchId()));
 
         return registered;
     }
@@ -98,7 +119,8 @@ public class EquipmentApplicationService {
         EquipmentDefinition definition = command.definition();
 
         // Equipment must exist (provides early 404 before version check).
-        equipmentStore.findById(equipmentId)
+        UUID branchId = branchId(actor);
+        findEquipmentInBranch(equipmentId, branchId)
                 .orElseThrow(() -> new EquipmentNotFoundException(equipmentId));
 
         // New category must exist and be active.
@@ -111,8 +133,7 @@ public class EquipmentApplicationService {
 
         // Serial number must be unique excluding the equipment being updated.
         if (definition.serialNumber() != null &&
-                equipmentStore.existsBySerialNumberIgnoreCase(
-                        definition.serialNumber(), equipmentId)) {
+                serialExistsInBranch(definition.serialNumber(), equipmentId, branchId)) {
             throw new DuplicateSerialNumberException(definition.serialNumber());
         }
 
@@ -125,7 +146,8 @@ public class EquipmentApplicationService {
                 updated.equipmentCode(),
                 actor.id(),
                 actor.username(),
-                occurredAt));
+                occurredAt,
+                updated.branchId()));
 
         return updated;
     }
@@ -178,7 +200,7 @@ public class EquipmentApplicationService {
             long version,
             AuthenticatedActor actor) {
 
-        EquipmentDetails current = equipmentStore.findById(equipmentId)
+        EquipmentDetails current = findEquipmentInBranch(equipmentId, branchId(actor))
                 .orElseThrow(() -> new EquipmentNotFoundException(equipmentId));
 
         // Map public status → domain status for policy validation.
@@ -208,7 +230,8 @@ public class EquipmentApplicationService {
                 transition.reason(),
                 actor.id(),
                 actor.username(),
-                occurredAt));
+                occurredAt,
+                updated.branchId()));
 
         return updated;
     }
@@ -222,10 +245,80 @@ public class EquipmentApplicationService {
                 .orElseThrow(() -> new EquipmentNotFoundException(equipmentId));
     }
 
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public EquipmentDetails findByIdForActor(
+            UUID equipmentId,
+            AuthenticatedActor actor) {
+        return findEquipmentInBranch(equipmentId, branchId(actor))
+                .orElseThrow(() -> new EquipmentNotFoundException(equipmentId));
+    }
+
     // ── findAll ───────────────────────────────────────────────────────────────
 
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public EquipmentPage findAll(EquipmentSearchQuery query) {
         return equipmentStore.findAll(query);
+    }
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public EquipmentPage findAllForActor(
+            EquipmentSearchQuery query,
+            AuthenticatedActor actor) {
+        return findAllForActor(query, actor, null);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public EquipmentPage findAllForActor(
+            EquipmentSearchQuery query,
+            AuthenticatedActor actor,
+            UUID requestedBranchId) {
+        Objects.requireNonNull(query, "Equipment search query is required.");
+        Objects.requireNonNull(actor, "Authenticated actor is required.");
+        if (branchContextResolver == null) {
+            throw new ActiveBranchContextUnavailableException();
+        }
+        UUID branchId = BranchResourceAuthorizationPolicy.requireListBranch(
+                branchContextResolver.resolveOperation(actor.id()), requestedBranchId);
+        return equipmentStore.findAll(query, branchId);
+    }
+
+    private Optional<EquipmentDetails> findEquipmentInBranch(
+            UUID equipmentId,
+            UUID branchId) {
+        return branchContextResolver == null
+                ? equipmentStore.findById(equipmentId)
+                : equipmentStore.findById(equipmentId, branchId);
+    }
+
+    private EquipmentDetails registerInBranch(
+            UUID id,
+            EquipmentDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
+        return branchContextResolver == null
+                ? equipmentStore.register(id, definition, actor, occurredAt)
+                : equipmentStore.register(id, definition, actor, occurredAt, branchId);
+    }
+
+    private boolean serialExistsInBranch(
+            String serialNumber,
+            UUID excludeEquipmentId,
+            UUID branchId) {
+        return branchContextResolver == null
+                ? equipmentStore.existsBySerialNumberIgnoreCase(
+                        serialNumber, excludeEquipmentId)
+                : equipmentStore.existsBySerialNumberIgnoreCase(
+                        serialNumber, excludeEquipmentId, branchId);
+    }
+
+    private UUID branchId(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(
+                branchContextResolver.resolveOperation(actor.id()));
     }
 }

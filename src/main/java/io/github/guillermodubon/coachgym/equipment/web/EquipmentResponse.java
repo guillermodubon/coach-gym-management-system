@@ -28,7 +28,8 @@ public record EquipmentResponse(
         UUID updatedByUserId,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID branchId) {
 
     static EquipmentResponse from(EquipmentDetails details) {
         return new EquipmentResponse(
@@ -52,6 +53,7 @@ public record EquipmentResponse(
                 details.updatedByUserId(),
                 details.createdAt(),
                 details.updatedAt(),
-                details.version());
+                details.version(),
+                details.branchId());
     }
 }

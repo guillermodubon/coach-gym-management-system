@@ -6,7 +6,13 @@ import java.util.UUID;
 
 /** Published when an administrator starts investigating an open incident. */
 public record IncidentInvestigationStartedEvent(UUID incidentId, String incidentCode,
-        UUID equipmentId, UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        UUID equipmentId, UUID actorUserId, String actorIdentifier, Instant occurredAt,
+        UUID branchId) {
+    public IncidentInvestigationStartedEvent(UUID incidentId, String incidentCode,
+            UUID equipmentId, UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        this(incidentId, incidentCode, equipmentId, actorUserId, actorIdentifier,
+                occurredAt, null);
+    }
     public IncidentInvestigationStartedEvent {
         Objects.requireNonNull(incidentId, "Incident id is required.");
         Objects.requireNonNull(equipmentId, "Equipment id is required.");

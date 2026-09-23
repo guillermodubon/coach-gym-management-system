@@ -22,7 +22,7 @@ class AuditMetadataSanitizerTest {
     @Test
     void coversEveryCurrentAuditActionFamilyWithExplicitPolicy() {
         Map<String, String> expectedKeys = Map.ofEntries(
-                Map.entry("CLIENT_REGISTERED", "missing"),
+                Map.entry("CLIENT_REGISTERED", "branchId"),
                 Map.entry("PLAN_CREATED", "missing"),
                 Map.entry("PROMOTION_ELIGIBLE_PLANS_CHANGED", "eligiblePlanIds"),
                 Map.entry("MEMBERSHIP_CREATED", "listPrice"),
@@ -78,6 +78,25 @@ class AuditMetadataSanitizerTest {
         assertThat(projection.values())
                 .doesNotContainKeys("unknownOperationalValue", "providerSecret");
         assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void preservesOnlyTheSafeBranchReferenceAcrossBranchOwnedActionFamilies() {
+        String branchId = UUID.randomUUID().toString();
+        List<String> actions = List.of(
+                "CLIENT_REGISTERED", "MEMBERSHIP_CREATED", "PAYMENT_REGISTERED",
+                "PAYMENT_ATTEMPT_CREATED", "PAYMENT_RECEIPT_GENERATED",
+                "ACCESS_DENIED", "ACCESS_CREDENTIAL_ISSUED", "EMAIL_DELIVERY_SENT",
+                "EQUIPMENT_REGISTERED", "INCIDENT_REPORTED", "MAINTENANCE_SCHEDULED");
+
+        for (String action : actions) {
+            AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                    action, Map.of("branchId", branchId, "branchAddress", "private"));
+            assertThat(projection.values())
+                    .as("safe branch snapshot for %s", action)
+                    .containsEntry("branchId", branchId)
+                    .doesNotContainKey("branchAddress");
+        }
     }
 
     @Test

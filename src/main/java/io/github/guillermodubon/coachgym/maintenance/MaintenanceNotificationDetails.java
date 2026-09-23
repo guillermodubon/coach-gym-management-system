@@ -9,7 +9,19 @@ public record MaintenanceNotificationDetails(
         UUID equipmentId,
         String equipmentCode,
         UUID createdByUserId,
-        UUID assignedToUserId) {
+        UUID assignedToUserId,
+        UUID branchId) {
+
+    public MaintenanceNotificationDetails(
+            UUID maintenanceId,
+            String maintenanceCode,
+            UUID equipmentId,
+            String equipmentCode,
+            UUID createdByUserId,
+            UUID assignedToUserId) {
+        this(maintenanceId, maintenanceCode, equipmentId, equipmentCode,
+                createdByUserId, assignedToUserId, null);
+    }
 
     public MaintenanceNotificationDetails {
         if (maintenanceId == null) {

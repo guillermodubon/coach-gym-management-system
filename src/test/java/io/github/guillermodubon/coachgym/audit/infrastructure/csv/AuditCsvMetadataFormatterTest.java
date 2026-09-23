@@ -78,4 +78,14 @@ class AuditCsvMetadataFormatterTest {
                                 + "\"{\"\"status\"\":\"\"ACTIVE\"\"}\"\r\n")
                 .doesNotContain("metadata_json", "password", "token", "secret");
     }
+
+    @Test
+    void exportsTheSameSanitizedBranchSnapshotWithoutAddingNewColumns() {
+        String branchId = UUID.randomUUID().toString();
+        AuditMetadataProjection projection = new AuditMetadataProjection(
+                Map.of("branchId", branchId), false);
+
+        assertThat(formatter.format(projection)).isEqualTo(
+                "{\"branchId\":\"" + branchId + "\"}");
+    }
 }

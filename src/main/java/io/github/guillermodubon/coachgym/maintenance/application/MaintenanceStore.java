@@ -22,6 +22,14 @@ public interface MaintenanceStore {
             AuthenticatedActor actor,
             Instant occurredAt);
 
+    default MaintenanceDetails schedule(
+            MaintenanceDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
+        return schedule(definition, actor, occurredAt);
+    }
+
     MaintenanceDetails updateScheduled(
             UUID maintenanceId,
             long expectedVersion,
@@ -31,7 +39,15 @@ public interface MaintenanceStore {
 
     Optional<MaintenanceDetails> findById(UUID maintenanceId);
 
+    default Optional<MaintenanceDetails> findById(UUID maintenanceId, UUID branchId) {
+        return findById(maintenanceId);
+    }
+
     MaintenancePage findAll(MaintenanceSearchQuery query);
+
+    default MaintenancePage findAll(MaintenanceSearchQuery query, UUID branchId) {
+        return findAll(query);
+    }
 
     MaintenanceDetails transitionStatus(
             UUID maintenanceId,
@@ -60,7 +76,19 @@ public interface MaintenanceStore {
 
     List<MaintenanceStatusHistoryDetails> findStatusHistory(UUID maintenanceId);
 
+    default List<MaintenanceStatusHistoryDetails> findStatusHistory(
+            UUID maintenanceId, UUID branchId) {
+        return findStatusHistory(maintenanceId);
+    }
+
     boolean existsByEquipmentIdAndStatus(
             UUID equipmentId,
             MaintenanceStatus status);
+
+    default boolean existsByEquipmentIdAndStatus(
+            UUID equipmentId,
+            MaintenanceStatus status,
+            UUID branchId) {
+        return existsByEquipmentIdAndStatus(equipmentId, status);
+    }
 }

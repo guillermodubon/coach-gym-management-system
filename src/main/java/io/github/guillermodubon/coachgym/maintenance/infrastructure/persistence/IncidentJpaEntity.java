@@ -34,6 +34,9 @@ class IncidentJpaEntity {
     @Column(name = "equipment_id", nullable = false, updatable = false)
     private UUID equipmentId;
 
+    @Column(name = "branch_id", nullable = false, updatable = false)
+    private UUID branchId;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private IncidentStatus status;
@@ -97,11 +100,23 @@ class IncidentJpaEntity {
             IncidentDefinition definition,
             AuthenticatedActor actor,
             Instant occurredAt) {
+        return report(id, definition, actor, occurredAt,
+                UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002"));
+    }
+
+    static IncidentJpaEntity report(
+            UUID id,
+            IncidentDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
         Objects.requireNonNull(definition, "Incident definition is required.");
         Objects.requireNonNull(actor, "Authenticated actor is required.");
         Objects.requireNonNull(actor.id(), "Authenticated actor id is required.");
         Objects.requireNonNull(occurredAt, "Occurrence timestamp is required.");
-        return new IncidentJpaEntity(id, definition, actor, occurredAt);
+        IncidentJpaEntity entity = new IncidentJpaEntity(id, definition, actor, occurredAt);
+        entity.branchId = Objects.requireNonNull(branchId, "Incident branch is required.");
+        return entity;
     }
 
     void applyTransition(
@@ -144,6 +159,7 @@ class IncidentJpaEntity {
     Long incidentNumber() { return incidentNumber; }
     String incidentCode() { return incidentCode; }
     UUID equipmentId() { return equipmentId; }
+    UUID branchId() { return branchId; }
     IncidentStatus status() { return status; }
     IncidentPriority priority() { return priority; }
     String description() { return description; }

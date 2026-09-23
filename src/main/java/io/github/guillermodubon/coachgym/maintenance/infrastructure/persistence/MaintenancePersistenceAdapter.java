@@ -67,8 +67,19 @@ class MaintenancePersistenceAdapter implements MaintenanceStore {
             MaintenanceDefinition definition,
             AuthenticatedActor actor,
             Instant occurredAt) {
+        return schedule(definition, actor, occurredAt,
+                UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002"));
+    }
+
+    @Override
+    @Transactional
+    public MaintenanceDetails schedule(
+            MaintenanceDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
         MaintenanceJpaEntity entity = MaintenanceJpaEntity.schedule(
-                definition, actor, occurredAt);
+                definition, actor, occurredAt, branchId);
         MaintenanceJpaEntity saved = maintenanceRepository.saveAndFlush(entity);
         entityManager.refresh(saved);
         historyRepository.saveAndFlush(
@@ -99,11 +110,24 @@ class MaintenancePersistenceAdapter implements MaintenanceStore {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<MaintenanceDetails> findById(UUID maintenanceId, UUID branchId) {
+        return maintenanceRepository.findByIdAndBranchId(maintenanceId, branchId)
+                .map(this::toDetails);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public MaintenancePage findAll(MaintenanceSearchQuery query) {
+        return findAll(query, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MaintenancePage findAll(MaintenanceSearchQuery query, UUID branchId) {
         Pageable pageable = PageRequest.of(
                 query.page(), query.size(), sort(query));
         Page<MaintenanceJpaEntity> result = maintenanceRepository.findAll(
-                specification(query), pageable);
+                specification(query, branchId), pageable);
         return new MaintenancePage(
                 result.getContent().stream().map(this::toDetails).toList(),
                 result.getNumber(),
@@ -177,11 +201,35 @@ class MaintenancePersistenceAdapter implements MaintenanceStore {
 
     @Override
     @Transactional(readOnly = true)
+    public List<MaintenanceStatusHistoryDetails> findStatusHistory(
+            UUID maintenanceId, UUID branchId) {
+        if (maintenanceRepository.findByIdAndBranchId(maintenanceId, branchId).isEmpty()) {
+            throw new MaintenanceNotFoundException(maintenanceId);
+        }
+        return historyRepository
+                .findByMaintenanceIdOrderByOccurredAtAscIdAsc(maintenanceId)
+                .stream()
+                .map(MaintenanceStatusHistoryJpaEntity::toDetails)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public boolean existsByEquipmentIdAndStatus(
             UUID equipmentId,
             MaintenanceStatus status) {
         return maintenanceRepository.existsByEquipmentIdAndStatus(
                 equipmentId, status);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsByEquipmentIdAndStatus(
+            UUID equipmentId,
+            MaintenanceStatus status,
+            UUID branchId) {
+        return maintenanceRepository.existsByEquipmentIdAndStatusAndBranchId(
+                equipmentId, status, branchId);
     }
 
     private MaintenanceJpaEntity findEntity(UUID maintenanceId) {
@@ -228,13 +276,18 @@ class MaintenancePersistenceAdapter implements MaintenanceStore {
         return entity.toDetails(
                 equipment.equipmentCode(),
                 equipment.name(),
-                incidentCode);
+                incidentCode,
+                entity.branchId());
     }
 
     private static Specification<MaintenanceJpaEntity> specification(
-            MaintenanceSearchQuery query) {
+            MaintenanceSearchQuery query,
+            UUID branchId) {
         return (root, criteriaQuery, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
+            if (branchId != null) {
+                predicates.add(builder.equal(root.get("branchId"), branchId));
+            }
             if (query.equipmentId() != null) {
                 predicates.add(builder.equal(
                         root.get("equipmentId"), query.equipmentId()));
