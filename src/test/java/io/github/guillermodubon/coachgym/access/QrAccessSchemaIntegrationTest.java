@@ -27,12 +27,12 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
                 from information_schema.columns
                 where table_schema = 'gym'
                   and table_name = 'access_records'
-                  and column_name in ('identification_source', 'access_credential_id')
+                  and column_name in ('identification_source', 'access_credential_id', 'branch_id')
                 order by column_name
                 """, String.class);
 
         assertThat(columns)
-                .containsExactly("access_credential_id", "identification_source");
+                .containsExactly("access_credential_id", "branch_id", "identification_source");
 
         Map<String, Object> sourceColumn = jdbcTemplate.queryForMap("""
                 select is_nullable, column_default
@@ -55,7 +55,19 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
                 .contains(
                         "ck_access_records_identification_source",
                         "ck_access_records_qr_credential_metadata",
-                        "fk_access_records_access_credential");
+                        "fk_access_records_access_credential",
+                        "fk_access_records_branch");
+
+        Map<String, Object> branchColumn = jdbcTemplate.queryForMap("""
+                select is_nullable, column_default
+                from information_schema.columns
+                where table_schema = 'gym'
+                  and table_name = 'access_records'
+                  and column_name = 'branch_id'
+                """);
+        assertThat(branchColumn.get("is_nullable")).isEqualTo("NO");
+        assertThat(branchColumn.get("column_default").toString())
+                .contains("7b0bf7d5-5184-43d2-8f9a-200000000002");
 
         String deleteRule = jdbcTemplate.queryForObject("""
                 select delete_rule
@@ -74,7 +86,8 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
         assertThat(triggers)
                 .contains(
                         "trg_access_records_validate_qr_metadata",
-                        "trg_access_records_append_only");
+                        "trg_access_records_append_only",
+                        "trg_access_records_reject_branch_mutation");
 
         String indexDefinition = jdbcTemplate.queryForObject("""
                 select indexdef
@@ -94,6 +107,16 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
                   and indexdef = ?
                 """, Integer.class, indexDefinition);
         assertThat(duplicateDefinitionCount).isEqualTo(1);
+
+        String branchIndex = jdbcTemplate.queryForObject("""
+                select indexdef
+                from pg_indexes
+                where schemaname = 'gym'
+                  and tablename = 'access_records'
+                  and indexname = 'idx_access_records_branch_source_result_occurred_at'
+                """, String.class);
+        assertThat(branchIndex.toLowerCase(Locale.ROOT))
+                .contains("branch_id", "access_credential_id", "decision", "occurred_at", "id");
     }
 
     @Test
@@ -112,7 +135,9 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
 
         assertThat(accessRow(id))
                 .containsEntry("identification_source", "UNKNOWN")
-                .containsEntry("access_credential_id", null);
+                .containsEntry("access_credential_id", null)
+                .containsEntry("branch_id", UUID.fromString(
+                        "7b0bf7d5-5184-43d2-8f9a-200000000002"));
     }
 
     @Test
@@ -202,6 +227,12 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
         assertThatThrownBy(() -> jdbcTemplate.update(
                 "delete from gym.access_records where id = ?", accessRecordId))
                 .isInstanceOf(DataAccessException.class);
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "update gym.access_records set branch_id = ? where id = ?",
+                UUID.randomUUID(),
+                accessRecordId))
+                .isInstanceOf(DataAccessException.class);
     }
 
     @Test
@@ -220,7 +251,7 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
     }
 
     @Test
-    void cleanMigrationChainIncludesV25AndCurrentV32() {
+    void cleanMigrationChainIncludesV25AndCurrentV36() {
         Integer installed = jdbcTemplate.queryForObject("""
                 select count(*)
                 from flyway_schema_history
@@ -238,7 +269,7 @@ class QrAccessSchemaIntegrationTest extends AbstractAccessApiIntegrationTest {
                 limit 1
                 """, String.class);
 
-        assertThat(latestVersion).isEqualTo("32");
+            assertThat(latestVersion).isEqualTo("36");
     }
 
     private UUID insertCredential(ClientFixture client) {
