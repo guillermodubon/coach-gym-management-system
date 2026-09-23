@@ -11,5 +11,14 @@ import java.util.UUID;
 public record ClientAccessDetails(
         UUID id,
         String clientCode,
-        ClientStatus status) {
+        ClientStatus status,
+        UUID homeBranchId) {
+
+    /** Compatibility constructor for non-scoped callers and focused tests. */
+    public ClientAccessDetails(
+            UUID id,
+            String clientCode,
+            ClientStatus status) {
+        this(id, clientCode, status, null);
+    }
 }

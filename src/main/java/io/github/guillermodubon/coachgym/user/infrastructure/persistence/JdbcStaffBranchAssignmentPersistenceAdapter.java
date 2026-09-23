@@ -496,6 +496,72 @@ class JdbcStaffBranchAssignmentPersistenceAdapter
 
     @Override
     @Transactional
+    public boolean lockAuthorizedActiveBranchForOperation(
+            UUID userId, UUID branchId, StaffScopeType scopeType) {
+        requireId(userId, "userId");
+        requireId(branchId, "branchId");
+        Objects.requireNonNull(scopeType, "scopeType is required");
+        String sql = scopeType == StaffScopeType.ORGANIZATION
+                ? """
+                    select b.id
+                      from gym.gym_branches b
+                      join gym.organizations o on o.id = b.organization_id
+                     where b.id = :branchId
+                       and b.status = 'ACTIVE'
+                       and o.is_canonical = true
+                       and o.status = 'ACTIVE'
+                       and exists (
+                           select 1
+                             from gym.users u
+                             join gym.staff_scopes s on s.user_id = u.id
+                             join gym.user_roles ur on ur.user_id = u.id
+                             join gym.roles r on r.id = ur.role_id
+                            where u.id = :userId
+                              and u.status = 'ACTIVE'
+                              and s.scope_type = 'ORGANIZATION'
+                              and r.role_code = 'ADMIN')
+                     for share of b
+                    """
+                : """
+                    select b.id
+                      from gym.gym_branches b
+                      join gym.organizations o on o.id = b.organization_id
+                      join gym.staff_branch_assignments a
+                        on a.branch_id = b.id
+                       and a.user_id = :userId
+                       and a.status = 'ACTIVE'
+                     where b.id = :branchId
+                       and b.status = 'ACTIVE'
+                       and o.is_canonical = true
+                       and o.status = 'ACTIVE'
+                       and exists (
+                           select 1
+                             from gym.users u
+                             join gym.staff_scopes s on s.user_id = u.id
+                             join gym.user_roles ur on ur.user_id = u.id
+                             join gym.roles r on r.id = ur.role_id
+                            where u.id = :userId
+                              and u.status = 'ACTIVE'
+                              and s.scope_type = 'BRANCH'
+                              and r.role_code in ('ADMIN', 'RECEPTIONIST'))
+                     for share of b, a
+                    """;
+        try {
+            List<UUID> locked = jdbcTemplate.query(
+                    sql,
+                    new MapSqlParameterSource()
+                            .addValue("userId", userId)
+                            .addValue("branchId", branchId),
+                    (rs, row) -> rs.getObject("id", UUID.class));
+            return !locked.isEmpty();
+        } catch (DataAccessException exception) {
+            throw new StaffBranchAssignmentDataAccessException(
+                    "The active branch operation could not be secured.", exception);
+        }
+    }
+
+    @Override
+    @Transactional
     public void lockOrganizationAdministratorLifecycle() {
         try {
             jdbcTemplate.query("""

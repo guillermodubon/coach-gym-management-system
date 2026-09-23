@@ -43,6 +43,9 @@ class MembershipJpaEntity {
             nullable = false)
     private UUID clientId;
 
+    @Column(name = "registered_at_branch_id", nullable = false)
+    private UUID registeredAtBranchId;
+
     @Enumerated(EnumType.STRING)
     @Column(
             nullable = false,
@@ -88,7 +91,8 @@ class MembershipJpaEntity {
     static MembershipJpaEntity create(
             UUID clientId,
             AuthenticatedActor actor,
-            Instant occurredAt) {
+            Instant occurredAt,
+            UUID registeredAtBranchId) {
 
         MembershipJpaEntity membership =
                 new MembershipJpaEntity();
@@ -98,6 +102,8 @@ class MembershipJpaEntity {
 
         membership.clientId =
                 clientId;
+
+        membership.registeredAtBranchId = registeredAtBranchId;
 
         membership.status =
                 MembershipStatus.ACTIVE;
@@ -115,6 +121,13 @@ class MembershipJpaEntity {
                 occurredAt;
 
         return membership;
+    }
+
+    static MembershipJpaEntity create(
+            UUID clientId,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        return create(clientId, actor, occurredAt, null);
     }
 
     void renew(
@@ -253,6 +266,10 @@ class MembershipJpaEntity {
 
     UUID clientId() {
         return clientId;
+    }
+
+    UUID registeredAtBranchId() {
+        return registeredAtBranchId;
     }
 
     MembershipStatus status() {

@@ -16,7 +16,15 @@ public interface MembershipStore {
     MembershipDetails create(
             MembershipCreation creation,
             AuthenticatedActor actor,
-            Instant occurredAt);
+            Instant occurredAt,
+            UUID registeredAtBranchId);
+
+    default MembershipDetails create(
+            MembershipCreation creation,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        return create(creation, actor, occurredAt, null);
+    }
 
     MembershipDetails renew(
             UUID membershipId,
@@ -47,5 +55,11 @@ public interface MembershipStore {
             Instant occurredAt);
 
     Optional<MembershipDetails> findById(UUID membershipId);
+
+    default Optional<MembershipDetails> findById(
+            UUID membershipId,
+            UUID registeredAtBranchId) {
+        return findById(membershipId);
+    }
 }
 

@@ -66,6 +66,8 @@ class JdbcClientSearchAdapter implements ClientSearchStore {
                                     and fm.status =
                                         cast(:membershipStatus as varchar)
                               ))
+                         and (cast(:branchId as uuid) is null
+                              or c.home_branch_id = cast(:branchId as uuid))
             """;
 
     static final String SELECT = """
@@ -75,7 +77,7 @@ class JdbcClientSearchAdapter implements ClientSearchStore {
                    current_membership.effective_ends_on as membership_expires_on,
                    exists(select 1 from gym.client_photos cp where cp.client_id = c.id)
                        as photo_available,
-                   c.updated_at, c.version
+                   c.updated_at, c.version, c.home_branch_id
             """;
 
     static final String COUNT = "select count(*) " + FROM_AND_FILTERS;
@@ -95,8 +97,13 @@ class JdbcClientSearchAdapter implements ClientSearchStore {
 
     @Override
     public ClientPage findAll(ClientSearchQuery query) {
+        return findAll(query, query.branchId());
+    }
+
+    @Override
+    public ClientPage findAll(ClientSearchQuery query, java.util.UUID branchId) {
         Objects.requireNonNull(query, "Client search query is required.");
-        MapSqlParameterSource parameters = parameters(query);
+        MapSqlParameterSource parameters = parameters(query, branchId);
         String dataSql = SELECT + FROM_AND_FILTERS + orderBy(query)
                 + " limit :limit offset :offset";
         try {
@@ -129,7 +136,9 @@ class JdbcClientSearchAdapter implements ClientSearchStore {
         return " order by " + column + " " + direction + ", c.id asc";
     }
 
-    private static MapSqlParameterSource parameters(ClientSearchQuery query) {
+    private static MapSqlParameterSource parameters(
+            ClientSearchQuery query,
+            java.util.UUID branchId) {
         String searchPattern = query.search() == null
                 ? null
                 : "%" + query.search().toLowerCase(Locale.ROOT) + "%";
@@ -138,6 +147,7 @@ class JdbcClientSearchAdapter implements ClientSearchStore {
                 .addValue("searchPattern", searchPattern)
                 .addValue("status", query.status() == null ? null : query.status().name())
                 .addValue("membershipStatus", query.membershipStatus())
+                .addValue("branchId", branchId)
                 .addValue("limit", query.size())
                 .addValue("offset", (long) query.page() * query.size());
     }
@@ -156,6 +166,7 @@ class JdbcClientSearchAdapter implements ClientSearchStore {
                 rs.getObject("membership_expires_on", java.time.LocalDate.class),
                 rs.getBoolean("photo_available"),
                 updatedAt.toInstant(),
-                rs.getLong("version"));
+                rs.getLong("version"),
+                rs.getObject("home_branch_id", java.util.UUID.class));
     }
 }

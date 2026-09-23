@@ -49,6 +49,9 @@ class ClientJpaEntity {
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
+    @Column(name = "home_branch_id", nullable = false)
+    private UUID homeBranchId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private ClientStatus status;
@@ -78,7 +81,8 @@ class ClientJpaEntity {
     static ClientJpaEntity register(
             ClientRegistration registration,
             AuthenticatedActor actor,
-            Instant occurredAt) {
+            Instant occurredAt,
+            UUID homeBranchId) {
         ClientJpaEntity client = new ClientJpaEntity();
         client.id = UUID.randomUUID();
         client.firstName = registration.firstName();
@@ -86,6 +90,7 @@ class ClientJpaEntity {
         client.email = registration.email();
         client.phone = registration.phone();
         client.dateOfBirth = registration.dateOfBirth();
+        client.homeBranchId = homeBranchId;
         client.status = ClientStatus.ACTIVE;
         client.createdByUserId = actor.id();
         client.updatedByUserId = actor.id();
@@ -100,6 +105,13 @@ class ClientJpaEntity {
                     occurredAt));
         }
         return client;
+    }
+
+    static ClientJpaEntity register(
+            ClientRegistration registration,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        return register(registration, actor, occurredAt, null);
     }
 
     ClientDetails toDetails() {
@@ -118,7 +130,8 @@ class ClientJpaEntity {
                 status,
                 createdAt,
                 updatedAt,
-                emergencyContact);
+                emergencyContact,
+                homeBranchId);
     }
 
     UUID id() {
@@ -131,5 +144,9 @@ class ClientJpaEntity {
 
     ClientStatus status() {
         return status;
+    }
+
+    UUID homeBranchId() {
+        return homeBranchId;
     }
 }

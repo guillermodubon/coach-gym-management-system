@@ -11,5 +11,19 @@ public record MembershipDetails(
         MembershipPeriodDetails currentPeriod,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID registeredAtBranchId) {
+
+    public MembershipDetails(
+            UUID id,
+            String membershipCode,
+            UUID clientId,
+            MembershipStatus status,
+            MembershipPeriodDetails currentPeriod,
+            Instant createdAt,
+            Instant updatedAt,
+            long version) {
+        this(id, membershipCode, clientId, status, currentPeriod, createdAt,
+                updatedAt, version, null);
+    }
 }

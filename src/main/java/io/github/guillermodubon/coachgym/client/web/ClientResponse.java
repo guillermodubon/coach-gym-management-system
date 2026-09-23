@@ -17,7 +17,8 @@ public record ClientResponse(
         ClientStatus status,
         Instant createdAt,
         Instant updatedAt,
-        EmergencyContactResponse emergencyContact) {
+        EmergencyContactResponse emergencyContact,
+        UUID homeBranchId) {
 
     static ClientResponse from(ClientDetails client) {
         EmergencyContactResponse emergencyContact = client.emergencyContact() == null
@@ -34,6 +35,7 @@ public record ClientResponse(
                 client.status(),
                 client.createdAt(),
                 client.updatedAt(),
-                emergencyContact);
+                emergencyContact,
+                client.homeBranchId());
     }
 }
