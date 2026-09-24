@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.access.web;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.application.AccessApplicationService;
 import io.github.guillermodubon.coachgym.access.application.AccessDuplicateScanPolicyUnavailableException;
+import io.github.guillermodubon.coachgym.access.application.AccessMembershipCoverageEvaluationException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordDataAccessException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordNotFoundException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordSearchQuery;
@@ -334,7 +335,7 @@ public class AccessController {
         return problem(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "ACCESS_DUPLICATE_SCAN_POLICY_UNAVAILABLE",
-                "QR access processing is not configured.");
+                "Access duplicate protection is not configured.");
     }
 
     @ExceptionHandler(AccessRecordDataAccessException.class)
@@ -354,6 +355,16 @@ public class AccessController {
         return problem(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "ACCESS_PAYMENT_POLICY_EVALUATION_FAILED",
+                "The access check-in could not be evaluated.");
+    }
+
+    @ExceptionHandler(AccessMembershipCoverageEvaluationException.class)
+    ResponseEntity<ProblemDetail> handleMembershipCoverageEvaluationFailure(
+            AccessMembershipCoverageEvaluationException exception) {
+
+        return problem(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "ACCESS_MEMBERSHIP_COVERAGE_EVALUATION_FAILED",
                 "The access check-in could not be evaluated.");
     }
 

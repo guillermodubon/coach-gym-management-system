@@ -9,22 +9,34 @@ import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanBranchCoverageScope;
+import io.github.guillermodubon.coachgym.user.ActiveBranchContextManager;
+import io.github.guillermodubon.coachgym.user.SelectActiveBranchCommand;
+import java.util.concurrent.Callable;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.testcontainers.containers.PostgreSQLContainer;
 
-@SpringBootTest(properties = "spring.docker.compose.enabled=false")
+@SpringBootTest(properties = {
+        "spring.docker.compose.enabled=false",
+        "gym.access.duplicate-scan-window=PT30S"
+})
 @AutoConfigureMockMvc
 abstract class AbstractAccessApiIntegrationTest {
 
@@ -42,6 +54,8 @@ abstract class AbstractAccessApiIntegrationTest {
 
     @Autowired protected MockMvc mockMvc;
     @Autowired protected JdbcTemplate jdbcTemplate;
+    @Autowired private TransactionTemplate transactionTemplate;
+    @Autowired private ActiveBranchContextManager activeBranchContextManager;
     @Autowired private PasswordEncoder passwordEncoder;
 
     @DynamicPropertySource
@@ -70,6 +84,12 @@ abstract class AbstractAccessApiIntegrationTest {
 
     protected MockHttpSession loginAsReceptionist() throws Exception {
         return login(RECEPTIONIST_USERNAME, RECEPTIONIST_PASSWORD);
+    }
+
+    protected MockHttpSession loginAsReceptionistWithActiveBranch() throws Exception {
+        MockHttpSession session = loginAsReceptionist();
+        selectInitialBranch(session);
+        return session;
     }
 
     protected MockHttpSession loginAsAdminWithActiveBranch() throws Exception {
@@ -106,6 +126,20 @@ abstract class AbstractAccessApiIntegrationTest {
 
     protected MembershipFixture createMembership(
             ClientFixture client, String status, LocalDate startsOn, LocalDate endsOn) {
+        return createMembership(
+                client,
+                status,
+                startsOn,
+                endsOn,
+                Set.of(initialBranchId()));
+    }
+
+    protected MembershipFixture createMembership(
+            ClientFixture client,
+            String status,
+            LocalDate startsOn,
+            LocalDate endsOn,
+            Set<UUID> coveredBranchIds) {
         UUID actorId = userId(ADMIN_USERNAME);
         UUID planId = UUID.randomUUID();
         UUID membershipId = UUID.randomUUID();
@@ -141,6 +175,34 @@ abstract class AbstractAccessApiIntegrationTest {
                 values (?,?,1,'INITIAL',?,?,?,1,'MONTH',25.00,'USD',0,25.00,?,?,?,?)
                 """, periodId, membershipId, planId, planCode, "Access plan " + suffix,
                 startsOn, endsOn, endsOn, actorId);
+        MembershipPlanBranchCoverageScope coverageScope = coveredBranchIds.size() == 1
+                ? MembershipPlanBranchCoverageScope.SINGLE_BRANCH
+                : MembershipPlanBranchCoverageScope.SELECTED_BRANCHES;
+        long planVersion = jdbcTemplate.queryForObject(
+                "select version from gym.membership_plans where id = ?",
+                Long.class,
+                planId);
+        transactionTemplate.executeWithoutResult(transactionStatus -> {
+            jdbcTemplate.update("""
+                    INSERT INTO gym.membership_period_coverage_snapshots (
+                        membership_period_id,
+                        coverage_scope_snapshot,
+                        captured_at,
+                        source_plan_version
+                    )
+                    VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+                    """, periodId, coverageScope.name(), planVersion);
+            java.util.List<Object[]> coverageRows = coveredBranchIds.stream()
+                    .map(branchId -> new Object[] {periodId, branchId})
+                    .toList();
+            jdbcTemplate.batchUpdate("""
+                    INSERT INTO gym.membership_period_branch_coverage (
+                        membership_period_id,
+                        branch_id
+                    )
+                    VALUES (?, ?)
+                    """, coverageRows);
+        });
         String membershipCode = jdbcTemplate.queryForObject(
                 "select membership_code from gym.memberships where id=?",
                 String.class, membershipId);
@@ -214,7 +276,9 @@ abstract class AbstractAccessApiIntegrationTest {
 
     protected Map<String, Object> accessAudit(UUID accessRecordId) {
         return jdbcTemplate.queryForMap("""
-                select * from gym.audit_entries
+                select audit_entries.*,
+                       metadata ->> 'branchId' as branch_id
+                from gym.audit_entries
                 where action_code='ACCESS_DENIED' and resource_id=?
                 """, accessRecordId);
     }
@@ -326,15 +390,72 @@ abstract class AbstractAccessApiIntegrationTest {
         return (MockHttpSession) result.getRequest().getSession(false);
     }
 
-    private void selectInitialBranch(MockHttpSession session) throws Exception {
-        UUID initialBranchId = UUID.fromString(
-                "7b0bf7d5-5184-43d2-8f9a-200000000002");
+    protected UUID createBranch(MockHttpSession session) throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/v1/branches")
+                        .with(csrf())
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "code": "%s",
+                                  "name": "Access Integration Branch",
+                                  "countryCode": "SV",
+                                  "timezone": "America/El_Salvador"
+                                }
+                                """.formatted("AC-" + UUID.randomUUID()
+                                        .toString().substring(0, 8))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return UUID.fromString(JsonPath.read(
+                result.getResponse().getContentAsString(), "$.id"));
+    }
+
+    protected void selectBranch(MockHttpSession session, UUID branchId) throws Exception {
         mockMvc.perform(put("/api/v1/me/branch-context")
                         .session(session)
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"branchId\":\"%s\"}".formatted(initialBranchId)))
+                        .content("{\"branchId\":\"%s\"}".formatted(branchId)))
                 .andExpect(status().isOk());
+    }
+
+    protected MockHttpSession sessionWithActiveBranch(UUID userId, UUID branchId) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        MockHttpSession session = new MockHttpSession();
+        request.setSession(session);
+        ServletRequestAttributes attributes = new ServletRequestAttributes(request);
+        RequestContextHolder.setRequestAttributes(attributes);
+        try {
+            activeBranchContextManager.select(
+                    userId, new SelectActiveBranchCommand(branchId));
+            return session;
+        } finally {
+            attributes.requestCompleted();
+            RequestContextHolder.resetRequestAttributes();
+        }
+    }
+
+    protected <T> T withBranchSession(
+            MockHttpSession session,
+            Callable<T> operation) throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setSession(session);
+        ServletRequestAttributes attributes = new ServletRequestAttributes(request);
+        RequestContextHolder.setRequestAttributes(attributes);
+        try {
+            return operation.call();
+        } finally {
+            attributes.requestCompleted();
+            RequestContextHolder.resetRequestAttributes();
+        }
+    }
+
+    private void selectInitialBranch(MockHttpSession session) throws Exception {
+        selectBranch(session, initialBranchId());
+    }
+
+    protected UUID initialBranchId() {
+        return UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002");
     }
 
     private void provisionUser(String username, String email,
