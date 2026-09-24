@@ -86,6 +86,26 @@ class MembershipAuditEventListenerTest {
     }
 
     @Test
+    void forwardsMembershipPeriodCoverageCapturedEvent() {
+        MembershipPeriodCoverageCaptured event = new MembershipPeriodCoverageCaptured(
+                MEMBERSHIP_ID,
+                PERIOD_ID,
+                PLAN_ID,
+                UUID.randomUUID(),
+                io.github.guillermodubon.coachgym.plan.MembershipPlanBranchCoverageScope
+                        .SELECTED_BRANCHES,
+                2,
+                3,
+                ACTOR_ID,
+                "coach-admin",
+                NOW);
+
+        listener.record(event);
+
+        verify(auditEntryStore).recordMembershipPeriodCoverageCaptured(event);
+    }
+
+    @Test
     void shouldForwardMembershipFrozenEvent() {
         MembershipFrozen event =
                 new MembershipFrozen(

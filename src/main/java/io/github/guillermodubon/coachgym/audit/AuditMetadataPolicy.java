@@ -95,10 +95,11 @@ public final class AuditMetadataPolicy {
         policy.put("MEMBERSHIP_", immutableSet(
                 "cancelledOn", "clientId", "closedOpenFreeze", "currency",
                 "discountAmount", "effectiveEndsOn", "finalPrice", "freezeStartsOn",
-                "listPrice", "membershipFreezeId", "membershipPeriodId",
+                "listPrice", "membershipFreezeId", "membershipId", "membershipPeriodId",
                 "membershipPlanId", "periodNumber", "plannedEndsOn", "promotionId",
                 "previousStatus", "reactivatedOn", "resultingStatus", "startsOn",
-                "statusChanged", "branchId"));
+                "statusChanged", "branchId", "coverageScope", "coveredBranchCount",
+                "sourcePlanVersion"));
         policy.put("PAYMENT_", immutableSet(
                 "amount", "clientId", "currency", "hasExternalReference",
                 "membershipId", "membershipPeriodId", "newStatus", "paidAt",
@@ -106,6 +107,8 @@ public final class AuditMetadataPolicy {
                 "resultingStatus", "status", "testMode", "paymentId",
                 "paymentAttemptId", "paymentCode", "branchId"));
         policy.put("ACCESS_PAYMENT_", immutableSet("newValue", "previousValue"));
+        policy.put("BRANCH_ACCESS_PAYMENT_", immutableSet(
+                "newMode", "previousMode", "version"));
         policy.put("ACCESS_", immutableSet(
                 "accessCredentialId", "checkedInAt", "duplicate", "identificationSource",
                 "presentedIdentifierType", "reasonCode", "reasonPresent", "result",

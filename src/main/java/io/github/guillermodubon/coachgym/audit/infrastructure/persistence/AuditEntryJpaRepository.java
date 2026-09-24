@@ -8,6 +8,7 @@ import io.github.guillermodubon.coachgym.audit.application.AuditEntryStore;
 import io.github.guillermodubon.coachgym.audit.AuditExportCompleted;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyChanged;
+import io.github.guillermodubon.coachgym.configuration.BranchAccessPolicyOverrideChanged;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryDeactivatedEvent;
@@ -21,6 +22,7 @@ import io.github.guillermodubon.coachgym.membership.MembershipCreated;
 import io.github.guillermodubon.coachgym.membership.MembershipFrozen;
 import io.github.guillermodubon.coachgym.membership.MembershipReactivated;
 import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodCoverageCaptured;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
 import io.github.guillermodubon.coachgym.organization.GymBranchCreated;
 import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
@@ -42,6 +44,7 @@ import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledge
 import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
 import io.github.guillermodubon.coachgym.payment.PaymentReceiptGenerated;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanCoverageChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
 import java.util.UUID;
@@ -146,6 +149,20 @@ class AuditEntryPersistenceAdapter
         repository.save(
                 AuditEntryJpaEntity.from(
                         event));
+    }
+
+    @Override
+    @Transactional
+    public void recordMembershipPlanCoverageChanged(
+            MembershipPlanCoverageChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordMembershipPeriodCoverageCaptured(
+            MembershipPeriodCoverageCaptured event) {
+        repository.save(AuditEntryJpaEntity.from(event));
     }
 
     @Override
@@ -364,6 +381,13 @@ class AuditEntryPersistenceAdapter
     @Transactional
     public void recordAccessPaymentPolicyChanged(
             AccessPaymentPolicyChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordBranchAccessPolicyOverrideChanged(
+            BranchAccessPolicyOverrideChanged event) {
         repository.save(AuditEntryJpaEntity.from(event));
     }
 
