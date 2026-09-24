@@ -55,8 +55,8 @@ class AccessPaymentPolicyController {
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "Only administrators may read the policy")
     @ApiResponse(responseCode = "500", description = "Policy data is temporarily unavailable")
-    AccessPaymentPolicyResponse findCurrent() {
-        return response(service.findCurrent());
+    AccessPaymentPolicyResponse findCurrent(Authentication authentication) {
+        return response(service.findCurrent(actor(authentication)));
     }
 
     @PutMapping

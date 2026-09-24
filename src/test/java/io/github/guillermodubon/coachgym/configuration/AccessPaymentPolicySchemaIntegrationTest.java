@@ -45,13 +45,14 @@ class AccessPaymentPolicySchemaIntegrationTest
     }
 
     @Test
-    void accessReasonConstraintAcceptsPaymentRequired() {
+    void accessReasonConstraintAcceptsPaymentAndBranchCoverageDenials() {
         String definition = jdbcTemplate.queryForObject("""
                 select pg_get_constraintdef(oid)
                 from pg_constraint
                 where conname = 'ck_access_records_reason_code'
                 """, String.class);
 
-        assertThat(definition).contains("PAYMENT_REQUIRED");
+        assertThat(definition)
+                .contains("PAYMENT_REQUIRED", "MEMBERSHIP_NOT_VALID_AT_BRANCH");
     }
 }

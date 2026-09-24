@@ -5,14 +5,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicy;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyActor;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyAuthorization;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyChanged;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyDetails;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyQuery;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyAuthorizationException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -44,12 +47,15 @@ class AccessPaymentPolicyApplicationServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private AccessPaymentPolicyAuthorization authorization;
+
     private AccessPaymentPolicyApplicationService service;
 
     @BeforeEach
     void setUp() {
         service = new AccessPaymentPolicyApplicationService(
-                policyQuery, policyStore, eventPublisher, CLOCK);
+                policyQuery, policyStore, authorization, eventPublisher, CLOCK);
     }
 
     @Test
@@ -57,7 +63,7 @@ class AccessPaymentPolicyApplicationServiceTest {
         AccessPaymentPolicyDetails current = details(false, 3);
         when(policyQuery.findCurrent()).thenReturn(current);
 
-        assertThat(service.findCurrent()).isEqualTo(current);
+        assertThat(service.findCurrent(ACTOR)).isEqualTo(current);
 
         verify(policyQuery).findCurrent();
     }
@@ -127,10 +133,12 @@ class AccessPaymentPolicyApplicationServiceTest {
 
     @Test
     void requiresAnAuthenticatedActor() {
+        doThrow(new AccessPaymentPolicyAuthorizationException())
+                .when(authorization).requireOrganizationAdministrator(null);
+
         assertThatThrownBy(() -> service.update(
                 new UpdateAccessPaymentPolicyCommand(true, 3), null))
-                .isInstanceOf(io.github.guillermodubon.coachgym.configuration
-                        .AccessPaymentPolicyValidationException.class);
+                .isInstanceOf(AccessPaymentPolicyAuthorizationException.class);
 
         verify(policyStore, never()).update(any(), anyLong(), any(), any());
         verify(eventPublisher, never()).publishEvent(any());

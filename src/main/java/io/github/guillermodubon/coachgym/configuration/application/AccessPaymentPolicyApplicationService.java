@@ -2,10 +2,10 @@ package io.github.guillermodubon.coachgym.configuration.application;
 
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicy;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyActor;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyAuthorization;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyChanged;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyDetails;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyQuery;
-import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyValidationException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
@@ -26,16 +26,19 @@ public class AccessPaymentPolicyApplicationService {
 
     private final AccessPaymentPolicyQuery policyQuery;
     private final AccessPaymentPolicyStore policyStore;
+    private final AccessPaymentPolicyAuthorization authorization;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public AccessPaymentPolicyApplicationService(
             AccessPaymentPolicyQuery policyQuery,
             AccessPaymentPolicyStore policyStore,
+            AccessPaymentPolicyAuthorization authorization,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this.policyQuery = Objects.requireNonNull(policyQuery);
         this.policyStore = Objects.requireNonNull(policyStore);
+        this.authorization = Objects.requireNonNull(authorization);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.clock = Objects.requireNonNull(clock);
     }
@@ -43,7 +46,8 @@ public class AccessPaymentPolicyApplicationService {
     /** Returns the current persisted policy for an authorized administrator. */
     @Transactional(readOnly = true)
     @PreAuthorize("hasRole('ADMIN')")
-    public AccessPaymentPolicyDetails findCurrent() {
+    public AccessPaymentPolicyDetails findCurrent(AccessPaymentPolicyActor actor) {
+        authorization.requireOrganizationAdministrator(actor);
         return requireCurrent();
     }
 
@@ -61,7 +65,7 @@ public class AccessPaymentPolicyApplicationService {
             UpdateAccessPaymentPolicyCommand command,
             AccessPaymentPolicyActor actor) {
         Objects.requireNonNull(command, "Access payment policy command is required.");
-        requireActor(actor);
+        authorization.requireOrganizationAdministrator(actor);
 
         AccessPaymentPolicyDetails current = requireCurrent();
         if (current.version() != command.expectedVersion()) {
@@ -104,11 +108,4 @@ public class AccessPaymentPolicyApplicationService {
         return current;
     }
 
-    private static void requireActor(AccessPaymentPolicyActor actor) {
-        if (actor == null || actor.userId() == null
-                || actor.identifier() == null || actor.identifier().isBlank()) {
-            throw new AccessPaymentPolicyValidationException(
-                    "Authenticated actor is required.");
-        }
-    }
 }

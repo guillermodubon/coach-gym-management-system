@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.configuration.web;
 
 import io.github.guillermodubon.coachgym.configuration.application.AccessPaymentPolicyDataAccessException;
 import io.github.guillermodubon.coachgym.configuration.application.AccessPaymentPolicyVersionConflictException;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyAuthorizationException;
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -38,6 +39,15 @@ class AccessPaymentPolicyProblemHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "ACCESS_PAYMENT_POLICY_DATA_ACCESS_FAILED",
                 "The access-payment policy operation could not be completed.");
+    }
+
+    @ExceptionHandler(AccessPaymentPolicyAuthorizationException.class)
+    ResponseEntity<ProblemDetail> handleAuthorizationFailure(
+            AccessPaymentPolicyAuthorizationException exception) {
+        return problem(
+                HttpStatus.FORBIDDEN,
+                "ACCESS_PAYMENT_POLICY_FORBIDDEN",
+                "An organization administrator is required for this policy operation.");
     }
 
     private static ResponseEntity<ProblemDetail> problem(
