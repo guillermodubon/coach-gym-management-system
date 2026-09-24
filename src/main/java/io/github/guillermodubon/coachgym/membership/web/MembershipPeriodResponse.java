@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.membership.web;
 
 import io.github.guillermodubon.coachgym.membership.MembershipPeriodDetails;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodCoverageSummary;
 import io.github.guillermodubon.coachgym.membership.MembershipPeriodSource;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,10 +17,17 @@ public record MembershipPeriodResponse(
         LocalDate effectiveEndsOn,
         Instant createdAt,
         long version,
-        UUID registeredAtBranchId) {
+        UUID registeredAtBranchId,
+        MembershipPeriodCoverageResponse coverage) {
 
     static MembershipPeriodResponse from(
             MembershipPeriodDetails period) {
+        return from(period, null);
+    }
+
+    static MembershipPeriodResponse from(
+            MembershipPeriodDetails period,
+            MembershipPeriodCoverageSummary coverage) {
 
         return new MembershipPeriodResponse(
                 period.id(),
@@ -32,6 +40,7 @@ public record MembershipPeriodResponse(
                 period.effectiveEndsOn(),
                 period.createdAt(),
                 period.version(),
-                period.registeredAtBranchId());
+                period.registeredAtBranchId(),
+                MembershipPeriodCoverageResponse.from(coverage));
     }
 }

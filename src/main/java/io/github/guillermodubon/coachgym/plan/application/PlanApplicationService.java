@@ -3,6 +3,10 @@ package io.github.guillermodubon.coachgym.plan.application;
 import io.github.guillermodubon.coachgym.plan.*;
 import io.github.guillermodubon.coachgym.plan.domain.PlanDefinition;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.StaffAuthorizationContext;
+import io.github.guillermodubon.coachgym.user.StaffBranchAuthorizationException;
+import io.github.guillermodubon.coachgym.user.StaffScopeAuthorizationPolicy;
+import io.github.guillermodubon.coachgym.user.StaffScopeQuery;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -18,14 +22,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class PlanApplicationService implements PlanQuery, PlanCatalogQuery {
 
     private final PlanStore planStore;
+    private final StaffScopeQuery staffScopeQuery;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public PlanApplicationService(
             PlanStore planStore,
+            StaffScopeQuery staffScopeQuery,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this.planStore = planStore;
+        this.staffScopeQuery = staffScopeQuery;
         this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
@@ -33,6 +40,7 @@ public class PlanApplicationService implements PlanQuery, PlanCatalogQuery {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public PlanDetails create(CreatePlanCommand command, AuthenticatedActor actor) {
+        requireOrganizationAdministrator(actor);
         PlanDefinition definition = toDefinition(command);
         Instant occurredAt = clock.instant();
         PlanDetails plan = planStore.create(definition, actor, occurredAt);
@@ -61,6 +69,7 @@ public class PlanApplicationService implements PlanQuery, PlanCatalogQuery {
     @Transactional
     @PreAuthorize("hasRole('ADMIN')")
     public PlanDetails update(UUID id, UpdatePlanCommand command, AuthenticatedActor actor) {
+        requireOrganizationAdministrator(actor);
         PlanDefinition definition = toDefinition(command);
         Instant occurredAt = clock.instant();
         PlanDetails plan = planStore.update(
@@ -91,6 +100,7 @@ public class PlanApplicationService implements PlanQuery, PlanCatalogQuery {
             long expectedVersion,
             AuthenticatedActor actor,
             PlanChangeType changeType) {
+        requireOrganizationAdministrator(actor);
         Instant occurredAt = clock.instant();
         PlanDetails current = planStore.findById(id).orElseThrow(() -> new PlanNotFoundException(id));
         if (current.version() != expectedVersion) {
@@ -127,6 +137,21 @@ public class PlanApplicationService implements PlanQuery, PlanCatalogQuery {
                 command.durationUnit(),
                 command.listPrice(),
                 command.currency());
+    }
+
+    private void requireOrganizationAdministrator(AuthenticatedActor actor) {
+        if (actor == null || actor.id() == null) {
+            throw new StaffBranchAuthorizationException(
+                    "An active organization administrator is required to create a plan.");
+        }
+        StaffAuthorizationContext staff = staffScopeQuery.findAuthorizationContext(actor.id())
+                .orElseThrow(() -> new StaffBranchAuthorizationException(
+                        "An active organization administrator is required to create a plan."));
+        if (!staff.userId().equals(actor.id())) {
+            throw new StaffBranchAuthorizationException(
+                    "An active organization administrator is required to create a plan.");
+        }
+        StaffScopeAuthorizationPolicy.requireOrganizationAdministrator(staff);
     }
 
     private static PlanDefinition toDefinition(UpdatePlanCommand command) {
