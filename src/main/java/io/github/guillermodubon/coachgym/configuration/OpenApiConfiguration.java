@@ -54,9 +54,15 @@ class OpenApiConfiguration {
                                         /api/v1/staff; authenticated staff can read and
                                         select their validated context through
                                         /api/v1/me/branch-context. Branch selection never
-                                        grants authorization, and no client, payment, or
-                                        access resource is branch-filtered yet. The frontend
-                                        selector itself is outside this backend contract.
+                                        grants authorization. Operational client, payment,
+                                        access, equipment, incident, and maintenance views
+                                        are scoped to the active or separately authorized
+                                        branch. The plan catalog contains only plans valid
+                                        at that branch. Plan coverage and branch access
+                                        policy administration are organization-admin
+                                        operations; purchased membership-period coverage is
+                                        an immutable snapshot. Reporting filters and the
+                                        frontend selector remain outside this API contract.
 
                                         Equipment and equipment categories are
                                         never physically deleted through the
