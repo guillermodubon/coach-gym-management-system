@@ -5,10 +5,14 @@ import io.github.guillermodubon.coachgym.client.ClientQuery;
 import io.github.guillermodubon.coachgym.client.ClientStatus;
 import io.github.guillermodubon.coachgym.membership.MembershipCreated;
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodBranchCoverageDetails;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodCoverageCaptured;
 import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
 import io.github.guillermodubon.coachgym.membership.domain.*;
 import io.github.guillermodubon.coachgym.plan.PlanDetails;
 import io.github.guillermodubon.coachgym.plan.PlanQuery;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanSaleCoverage;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanSaleCoverageQuery;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationRequest;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationResult;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluator;
@@ -31,8 +35,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class MembershipApplicationService {
 
     private final MembershipStore membershipStore;
+    private final MembershipPeriodBranchCoverageStore periodCoverageStore;
     private final ClientQuery clientQuery;
     private final PlanQuery planQuery;
+    private final MembershipPlanSaleCoverageQuery planSaleCoverageQuery;
     private final PromotionEvaluator promotionEvaluator;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
@@ -41,31 +47,24 @@ public class MembershipApplicationService {
     @Autowired
     public MembershipApplicationService(
             MembershipStore membershipStore,
+            MembershipPeriodBranchCoverageStore periodCoverageStore,
             ClientQuery clientQuery,
             PlanQuery planQuery,
+            MembershipPlanSaleCoverageQuery planSaleCoverageQuery,
             PromotionEvaluator promotionEvaluator,
             ApplicationEventPublisher eventPublisher,
             Clock clock,
             BranchOperationContextResolver branchContextResolver) {
 
-        this.membershipStore = membershipStore;
-        this.clientQuery = clientQuery;
-        this.planQuery = planQuery;
-        this.promotionEvaluator = promotionEvaluator;
-        this.eventPublisher = eventPublisher;
-        this.clock = clock;
-        this.branchContextResolver = branchContextResolver;
-    }
-
-    public MembershipApplicationService(
-            MembershipStore membershipStore,
-            ClientQuery clientQuery,
-            PlanQuery planQuery,
-            PromotionEvaluator promotionEvaluator,
-            ApplicationEventPublisher eventPublisher,
-            Clock clock) {
-        this(membershipStore, clientQuery, planQuery, promotionEvaluator,
-                eventPublisher, clock, null);
+        this.membershipStore = java.util.Objects.requireNonNull(membershipStore);
+        this.periodCoverageStore = java.util.Objects.requireNonNull(periodCoverageStore);
+        this.clientQuery = java.util.Objects.requireNonNull(clientQuery);
+        this.planQuery = java.util.Objects.requireNonNull(planQuery);
+        this.planSaleCoverageQuery = java.util.Objects.requireNonNull(planSaleCoverageQuery);
+        this.promotionEvaluator = java.util.Objects.requireNonNull(promotionEvaluator);
+        this.eventPublisher = java.util.Objects.requireNonNull(eventPublisher);
+        this.clock = java.util.Objects.requireNonNull(clock);
+        this.branchContextResolver = java.util.Objects.requireNonNull(branchContextResolver);
     }
 
     @Transactional
@@ -85,9 +84,10 @@ public class MembershipApplicationService {
                         command.clientId(),
                         branchId);
 
-        PlanDetails plan =
-                requireActivePlan(
-                        command.membershipPlanId());
+        MembershipPlanSaleCoverage saleCoverage =
+                requireSaleCoverage(command.membershipPlanId(), branchId);
+
+        PlanDetails plan = requireActivePlan(command.membershipPlanId());
 
         ensureNoCurrentMembership(
                 client.id());
@@ -112,9 +112,10 @@ public class MembershipApplicationService {
         Instant occurredAt =
                 clock.instant();
 
-        MembershipDetails membership = branchContextResolver == null
-                ? membershipStore.create(creation, actor, occurredAt)
-                : membershipStore.create(creation, actor, occurredAt, branchId);
+        MembershipDetails membership = membershipStore.create(
+                creation, actor, occurredAt, branchId);
+
+        captureCoverage(membership, saleCoverage, branchId, actor, occurredAt);
 
         publishCreated(
                 membership,
@@ -151,9 +152,11 @@ public class MembershipApplicationService {
                         currentMembership.clientId(),
                         currentMembership.registeredAtBranchId());
 
-        PlanDetails plan =
-                requireActivePlan(
-                        command.membershipPlanId());
+        UUID registrationBranchId = requireRegistrationBranch(currentMembership);
+        MembershipPlanSaleCoverage saleCoverage =
+                requireSaleCoverage(command.membershipPlanId(), registrationBranchId);
+
+        PlanDetails plan = requireActivePlan(command.membershipPlanId());
 
         LocalDate today =
                 LocalDate.now(clock);
@@ -192,6 +195,13 @@ public class MembershipApplicationService {
                         command.version(),
                         actor,
                         occurredAt);
+
+        captureCoverage(
+                renewedMembership,
+                saleCoverage,
+                registrationBranchId,
+                actor,
+                occurredAt);
 
         publishRenewed(
                 renewedMembership,
@@ -253,8 +263,9 @@ public class MembershipApplicationService {
     private ClientDetails requireActiveClient(
             UUID clientId,
             UUID homeBranchId) {
-        if (branchContextResolver == null || homeBranchId == null) {
-            return requireActiveClient(clientId);
+        if (homeBranchId == null) {
+            throw new IllegalStateException(
+                    "Membership registration branch is required.");
         }
 
         ClientDetails client =
@@ -446,25 +457,73 @@ public class MembershipApplicationService {
         MembershipDetails membership = requireMembership(membershipId);
         authorizeMembershipBranch(membership, actor);
         UUID branchId = membership.registeredAtBranchId();
-        return branchId == null || branchContextResolver == null
-                ? membership
-                : membershipStore.findById(membershipId, branchId)
-                        .orElseThrow(() -> new MembershipNotFoundException(membershipId));
+        return membershipStore.findById(membershipId, branchId)
+                .orElseThrow(() -> new MembershipNotFoundException(membershipId));
     }
 
     private UUID branchForCreation(AuthenticatedActor actor) {
-        if (branchContextResolver == null) {
-            return null;
-        }
         BranchOperationContext context = branchContextResolver.resolveOperation(actor.id());
         return BranchResourceAuthorizationPolicy.requireCreationBranch(context, null);
+    }
+
+    private MembershipPlanSaleCoverage requireSaleCoverage(
+            UUID planId,
+            UUID registrationBranchId) {
+        return planSaleCoverageQuery.findForSale(planId, registrationBranchId)
+                .filter(coverage -> coverage.includes(registrationBranchId))
+                .orElseThrow(() -> new MembershipPlanNotAvailableException(planId));
+    }
+
+    private static UUID requireRegistrationBranch(MembershipDetails membership) {
+        UUID branchId = membership.registeredAtBranchId();
+        if (branchId == null) {
+            throw new IllegalStateException(
+                    "Membership registration branch is required for renewal.");
+        }
+        return branchId;
+    }
+
+    private void captureCoverage(
+            MembershipDetails membership,
+            MembershipPlanSaleCoverage source,
+            UUID registrationBranchId,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        var period = membership.currentPeriod();
+        if (period == null || period.id() == null) {
+            throw new IllegalStateException(
+                    "A persisted membership period is required before capturing branch coverage.");
+        }
+        MembershipPeriodBranchCoverageDetails snapshot =
+                new MembershipPeriodBranchCoverageDetails(
+                        period.id(),
+                        source.scope(),
+                        source.coveredBranchIds(),
+                        occurredAt,
+                        source.sourcePlanVersion());
+        if (!snapshot.coveredBranchIds().contains(registrationBranchId)) {
+            throw new MembershipPlanNotAvailableException(source.planId());
+        }
+        periodCoverageStore.capture(snapshot);
+        eventPublisher.publishEvent(new MembershipPeriodCoverageCaptured(
+                membership.id(),
+                period.id(),
+                source.planId(),
+                registrationBranchId,
+                snapshot.scopeSnapshot(),
+                snapshot.coveredBranchIds().size(),
+                snapshot.sourcePlanVersion(),
+                actor.id(),
+                actor.username(),
+                occurredAt));
     }
 
     private void authorizeMembershipBranch(
             MembershipDetails membership,
             AuthenticatedActor actor) {
-        if (branchContextResolver == null || membership.registeredAtBranchId() == null) {
-            return;
+        if (membership.registeredAtBranchId() == null) {
+            throw new IllegalStateException(
+                    "Membership registration branch is required.");
         }
         BranchOperationContext context = branchContextResolver.resolveOperation(actor.id());
         BranchResourceAuthorizationPolicy.requireActiveResourceAccess(

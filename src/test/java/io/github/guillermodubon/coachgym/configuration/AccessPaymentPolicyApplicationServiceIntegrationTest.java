@@ -81,7 +81,8 @@ class AccessPaymentPolicyApplicationServiceIntegrationTest
     @Test
     @WithMockUser(roles = "RECEPTIONIST")
     void receptionistCannotReadTheAdministrativePolicy() {
-        assertThatThrownBy(policyService::findCurrent)
+        assertThatThrownBy(() -> policyService.findCurrent(
+                new AccessPaymentPolicyActor(receptionistId, RECEPTIONIST_USERNAME)))
                 .isInstanceOf(AccessDeniedException.class);
 
         assertThat(jdbcTemplate.queryForObject("""

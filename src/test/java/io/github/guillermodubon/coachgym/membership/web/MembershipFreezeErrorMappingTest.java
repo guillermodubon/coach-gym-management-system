@@ -43,7 +43,8 @@ class MembershipFreezeErrorMappingTest {
                     new MembershipController(
                             membershipApplicationService,
                             membershipFreezeApplicationService,
-                            membershipCancellationApplicationService);
+                            membershipCancellationApplicationService,
+                            mock(MembershipPeriodCoverageSummaryService.class));
         }
 
 

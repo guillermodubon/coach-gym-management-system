@@ -11,6 +11,12 @@ import io.github.guillermodubon.coachgym.plan.PlanChangeType;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
 import io.github.guillermodubon.coachgym.plan.PlanDetails;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.RoleCode;
+import io.github.guillermodubon.coachgym.user.StaffAccountStatus;
+import io.github.guillermodubon.coachgym.user.StaffAuthorizationContext;
+import io.github.guillermodubon.coachgym.user.StaffBranchAuthorizationException;
+import io.github.guillermodubon.coachgym.user.StaffScopeQuery;
+import io.github.guillermodubon.coachgym.user.StaffScopeType;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -46,15 +52,85 @@ class PlanApplicationServiceTest {
     @Mock
     private ApplicationEventPublisher eventPublisher;
 
+    @Mock
+    private StaffScopeQuery staffScopeQuery;
+
     private PlanApplicationService service;
 
     @BeforeEach
     void setUp() {
-        service = new PlanApplicationService(planStore, eventPublisher, CLOCK);
+        service = new PlanApplicationService(planStore, staffScopeQuery, eventPublisher, CLOCK);
+    }
+
+    @Test
+    void createsNewPlanOnlyForAnOrganizationAdministrator() {
+        CreatePlanCommand command = new CreatePlanCommand(
+                "Monthly Access",
+                "Unlimited gym access.",
+                1,
+                DurationUnit.MONTH,
+                new BigDecimal("25.00"),
+                "USD");
+        PlanDetails created = plan(true, 0);
+        when(staffScopeQuery.findAuthorizationContext(ACTOR_ID))
+                .thenReturn(Optional.of(staffContext(StaffScopeType.ORGANIZATION)));
+        when(planStore.create(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(ACTOR),
+                org.mockito.ArgumentMatchers.eq(NOW)))
+                .thenReturn(created);
+
+        assertThat(service.create(command, ACTOR)).isEqualTo(created);
+
+        verify(planStore).create(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(ACTOR),
+                org.mockito.ArgumentMatchers.eq(NOW));
+        verify(eventPublisher).publishEvent(org.mockito.ArgumentMatchers.any(PlanChanged.class));
+    }
+
+    @Test
+    void rejectsBranchAdministratorPlanCreationBecauseDefaultCoverageIsOrganizationOwned() {
+        CreatePlanCommand command = new CreatePlanCommand(
+                "Monthly Access",
+                "Unlimited gym access.",
+                1,
+                DurationUnit.MONTH,
+                new BigDecimal("25.00"),
+                "USD");
+        when(staffScopeQuery.findAuthorizationContext(ACTOR_ID))
+                .thenReturn(Optional.of(staffContext(StaffScopeType.BRANCH)));
+
+        assertThatThrownBy(() -> service.create(command, ACTOR))
+                .isInstanceOf(StaffBranchAuthorizationException.class);
+
+        verify(planStore, never()).create(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
+    }
+
+    private static StaffAuthorizationContext staffContext(StaffScopeType scopeType) {
+        return new StaffAuthorizationContext(
+                ACTOR_ID,
+                java.util.Set.of(RoleCode.ADMIN),
+                StaffAccountStatus.ACTIVE,
+                scopeType,
+                scopeType == StaffScopeType.BRANCH
+                        ? java.util.Set.of(UUID.fromString(
+                                "46cc797b-4487-4a8d-8022-5f7c7b94196a"))
+                        : java.util.Set.of());
+    }
+
+    private void stubOrganizationAdministrator() {
+        when(staffScopeQuery.findAuthorizationContext(ACTOR_ID))
+                .thenReturn(Optional.of(staffContext(StaffScopeType.ORGANIZATION)));
     }
 
     @Test
     void deactivatesAnActivePlanAndPublishesAnEvent() {
+        stubOrganizationAdministrator();
         PlanDetails activePlan = plan(true, 3);
         PlanDetails inactivePlan = plan(false, 4);
 
@@ -87,6 +163,7 @@ class PlanApplicationServiceTest {
 
     @Test
     void reactivatesAnInactivePlanAndPublishesAnEvent() {
+        stubOrganizationAdministrator();
         PlanDetails inactivePlan = plan(false, 4);
         PlanDetails activePlan = plan(true, 5);
 
@@ -112,6 +189,7 @@ class PlanApplicationServiceTest {
 
     @Test
     void rejectsDeactivatingAnAlreadyInactivePlan() {
+        stubOrganizationAdministrator();
         when(planStore.findById(PLAN_ID)).thenReturn(Optional.of(plan(false, 2)));
 
         assertThatThrownBy(() -> service.deactivate(PLAN_ID, 2, ACTOR))
@@ -126,6 +204,7 @@ class PlanApplicationServiceTest {
 
     @Test
     void rejectsActivatingAnAlreadyActivePlan() {
+        stubOrganizationAdministrator();
         when(planStore.findById(PLAN_ID)).thenReturn(Optional.of(plan(true, 2)));
 
         assertThatThrownBy(() -> service.activate(PLAN_ID, 2, ACTOR))
@@ -140,6 +219,7 @@ class PlanApplicationServiceTest {
 
     @Test
     void rejectsChangingStateWithAStaleVersion() {
+        stubOrganizationAdministrator();
         when(planStore.findById(PLAN_ID)).thenReturn(Optional.of(plan(true, 5)));
 
         assertThatThrownBy(() -> service.deactivate(PLAN_ID, 4, ACTOR))

@@ -47,9 +47,16 @@ class AuditQueryPublicContractTest {
                         "GYM_BRANCH_CREATED",
                         "GYM_BRANCH_UPDATED",
                         "GYM_BRANCH_ACTIVATED",
-                        "GYM_BRANCH_DEACTIVATED");
+                        "GYM_BRANCH_DEACTIVATED",
+                        "MEMBERSHIP_PLAN_BRANCH_COVERAGE_CHANGED");
+        assertThat(AuditQueryPolicy.allowedActionCodes())
+                .contains("BRANCH_ACCESS_PAYMENT_POLICY_CHANGED");
         assertThat(AuditQueryPolicy.allowedResourceTypes())
                 .contains("STAFF_PROFILE");
+        assertThat(AuditQueryPolicy.allowedResourceTypes())
+                .contains("MEMBERSHIP_PERIOD");
+        assertThat(AuditQueryPolicy.allowedActionCodes())
+                .contains("MEMBERSHIP_PERIOD_COVERAGE_CAPTURED");
     }
 
     @Test
@@ -181,6 +188,11 @@ class AuditQueryPublicContractTest {
         assertThat(AuditMetadataPolicy.allowedKeysForAction("PAYMENT_REGISTERED"))
                 .contains("amount", "currency", "paymentMethod")
                 .doesNotContain("reason", "payload", "providerSecret");
+        assertThat(AuditMetadataPolicy.allowedKeysForAction(
+                "MEMBERSHIP_PERIOD_COVERAGE_CAPTURED"))
+                .contains("membershipPeriodId", "membershipPlanId", "coverageScope",
+                        "coveredBranchCount", "sourcePlanVersion", "branchId")
+                .doesNotContain("coveredBranchIds", "clientEmail", "price");
         assertThat(AuditMetadataPolicy.allowedKeysForAction("UNSUPPORTED_ACTION"))
                 .isEmpty();
     }

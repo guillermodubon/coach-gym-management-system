@@ -8,6 +8,7 @@ import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplac
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialRevoked;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyChanged;
+import io.github.guillermodubon.coachgym.configuration.BranchAccessPolicyOverrideChanged;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryDeactivatedEvent;
@@ -37,6 +38,7 @@ import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed
 import io.github.guillermodubon.coachgym.payment.PaymentRegistered;
 import io.github.guillermodubon.coachgym.payment.PaymentReceiptGenerated;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanCoverageChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
 import jakarta.persistence.Column;
@@ -297,6 +299,66 @@ class AuditEntryJpaEntity {
         entry.occurredAt =
                 event.occurredAt();
 
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(MembershipPlanCoverageChanged event) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "MEMBERSHIP_PLAN_BRANCH_COVERAGE_CHANGED";
+        entry.resourceType = "MEMBERSHIP_PLAN";
+        entry.resourceId = event.planId();
+        entry.summary = "Membership plan branch coverage changed.";
+        entry.metadata = Map.of(
+                "coverageScope", event.scope().name(),
+                "coveredBranchCount", event.explicitBranchCount(),
+                "sourcePlanVersion", event.planVersion());
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(BranchAccessPolicyOverrideChanged event) {
+        if (event == null) {
+            throw new IllegalArgumentException(
+                    "Branch access policy event must be provided.");
+        }
+
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "BRANCH_ACCESS_PAYMENT_POLICY_CHANGED";
+        entry.resourceType = "GYM_BRANCH";
+        entry.resourceId = event.branchId();
+        entry.summary = "Branch access-payment policy changed.";
+        entry.metadata = Map.of(
+                "previousMode", event.previousMode().name(),
+                "newMode", event.newMode().name(),
+                "version", event.version());
+        entry.occurredAt = event.occurredAt();
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(MembershipPeriodCoverageCaptured event) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = event.actorUserId();
+        entry.actorIdentifierSnapshot = event.actorIdentifier();
+        entry.actionCode = "MEMBERSHIP_PERIOD_COVERAGE_CAPTURED";
+        entry.resourceType = "MEMBERSHIP_PERIOD";
+        entry.resourceId = event.membershipPeriodId();
+        entry.summary = "Membership period branch coverage captured.";
+        entry.metadata = Map.of(
+                "membershipId", event.membershipId().toString(),
+                "membershipPeriodId", event.membershipPeriodId().toString(),
+                "membershipPlanId", event.membershipPlanId().toString(),
+                "coverageScope", event.coverageScope().name(),
+                "coveredBranchCount", event.coveredBranchCount(),
+                "sourcePlanVersion", event.sourcePlanVersion(),
+                "branchId", event.registeredAtBranchId().toString());
+        entry.occurredAt = event.occurredAt();
         return entry;
     }
 

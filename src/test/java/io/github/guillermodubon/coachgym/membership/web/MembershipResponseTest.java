@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipPeriodDetails;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodCoverageSummary;
 import io.github.guillermodubon.coachgym.membership.MembershipPeriodSource;
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipPricingSnapshot;
 import io.github.guillermodubon.coachgym.plan.DurationUnit;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanBranchCoverageScope;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -112,5 +114,50 @@ class MembershipResponseTest {
                         .pricing()
                         .finalPrice())
                 .isEqualByComparingTo("25.00");
+    }
+
+    @Test
+    void exposesOnlyTheImmutableCoverageScopeAndCardinality() {
+        MembershipPricingSnapshot pricing =
+                MembershipPricingSnapshot.withoutPromotion(
+                        PLAN_ID,
+                        "PLAN-000001",
+                        "Monthly Access",
+                        1,
+                        DurationUnit.MONTH,
+                        new BigDecimal("25.00"),
+                        "USD");
+        MembershipPeriodDetails period = new MembershipPeriodDetails(
+                PERIOD_ID,
+                (short) 1,
+                MembershipPeriodSource.INITIAL,
+                pricing,
+                LocalDate.of(2026, 9, 1),
+                LocalDate.of(2026, 10, 1),
+                LocalDate.of(2026, 10, 1),
+                NOW,
+                0);
+        MembershipDetails membership = new MembershipDetails(
+                MEMBERSHIP_ID,
+                "MEM-000001",
+                CLIENT_ID,
+                MembershipStatus.ACTIVE,
+                period,
+                NOW,
+                NOW,
+                0);
+
+        MembershipResponse response = MembershipResponse.from(
+                membership,
+                new MembershipPeriodCoverageSummary(
+                        MembershipPlanBranchCoverageScope.SELECTED_BRANCHES,
+                        2));
+
+        assertThat(response.currentPeriod().coverage().scopeSnapshot())
+                .isEqualTo(MembershipPlanBranchCoverageScope.SELECTED_BRANCHES);
+        assertThat(response.currentPeriod().coverage().coveredBranchCount())
+                .isEqualTo(2);
+        assertThat(response.currentPeriod().coverage().toString())
+                .doesNotContain("branchId", "branchIds");
     }
 }

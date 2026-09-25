@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,23 +17,32 @@ import io.github.guillermodubon.coachgym.membership.MembershipCreated;
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipPeriodDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipPeriodSource;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodBranchCoverageDetails;
+import io.github.guillermodubon.coachgym.membership.application.MembershipPeriodBranchCoverageStore;
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipCreation;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipPricingSnapshot;
 import io.github.guillermodubon.coachgym.plan.DurationUnit;
 import io.github.guillermodubon.coachgym.plan.PlanDetails;
 import io.github.guillermodubon.coachgym.plan.PlanQuery;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanBranchCoverageScope;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanSaleCoverage;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanSaleCoverageQuery;
 import io.github.guillermodubon.coachgym.promotion.DiscountType;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationRequest;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationResult;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluator;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.StaffScopeType;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +51,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class MembershipApplicationServiceTest {
@@ -68,6 +80,12 @@ class MembershipApplicationServiceTest {
             UUID.fromString(
                     "8dee33da-f10b-4986-a68f-7d19306244cc");
 
+    private static final UUID ORGANIZATION_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000001");
+
+    private static final UUID BRANCH_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002");
+
     private static final LocalDate STARTS_ON =
             LocalDate.of(2026, 9, 1);
 
@@ -88,16 +106,25 @@ class MembershipApplicationServiceTest {
     private MembershipStore membershipStore;
 
     @Mock
+    private MembershipPeriodBranchCoverageStore periodCoverageStore;
+
+    @Mock
     private ClientQuery clientQuery;
 
     @Mock
     private PlanQuery planQuery;
 
     @Mock
+    private MembershipPlanSaleCoverageQuery planSaleCoverageQuery;
+
+    @Mock
     private PromotionEvaluator promotionEvaluator;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private BranchOperationContextResolver branchContextResolver;
 
     private MembershipApplicationService service;
 
@@ -106,11 +133,24 @@ class MembershipApplicationServiceTest {
         service =
                 new MembershipApplicationService(
                         membershipStore,
+                        periodCoverageStore,
                         clientQuery,
                         planQuery,
+                        planSaleCoverageQuery,
                         promotionEvaluator,
                         eventPublisher,
-                        CLOCK);
+                        CLOCK,
+                        branchContextResolver);
+        lenient().when(branchContextResolver.resolveOperation(ACTOR_ID))
+                .thenReturn(new BranchOperationContext(
+                        ACTOR_ID, ORGANIZATION_ID, StaffScopeType.ORGANIZATION,
+                        BRANCH_ID, Set.of(BRANCH_ID)));
+        lenient().when(planSaleCoverageQuery.findForSale(any(), eq(BRANCH_ID)))
+                .thenAnswer(invocation -> Optional.of(new MembershipPlanSaleCoverage(
+                        invocation.getArgument(0),
+                        MembershipPlanBranchCoverageScope.SINGLE_BRANCH,
+                        Set.of(BRANCH_ID),
+                        0)));
     }
 
     @Test
@@ -124,7 +164,8 @@ class MembershipApplicationServiceTest {
         when(membershipStore.create(
                 any(MembershipCreation.class),
                 eq(ACTOR),
-                eq(NOW)))
+                eq(NOW),
+                eq(BRANCH_ID)))
                 .thenAnswer(
                         invocation ->
                                 membershipFrom(
@@ -185,7 +226,8 @@ class MembershipApplicationServiceTest {
         when(membershipStore.create(
                 any(MembershipCreation.class),
                 eq(ACTOR),
-                eq(NOW)))
+                eq(NOW),
+                eq(BRANCH_ID)))
                 .thenAnswer(
                         invocation ->
                                 membershipFrom(
@@ -246,8 +288,44 @@ class MembershipApplicationServiceTest {
     }
 
     @Test
+    void snapshotWriteFailurePreventsMembershipEventsFromBeingPublished() {
+        prepareActiveClientAndPlan();
+        when(membershipStore.existsCurrentByClientId(CLIENT_ID)).thenReturn(false);
+        when(membershipStore.create(
+                any(MembershipCreation.class), eq(ACTOR), eq(NOW), eq(BRANCH_ID)))
+                .thenAnswer(invocation -> membershipFrom(invocation.getArgument(0)));
+        DataAccessResourceFailureException failure =
+                new DataAccessResourceFailureException("snapshot store unavailable");
+        org.mockito.Mockito.doThrow(failure)
+                .when(periodCoverageStore)
+                .capture(any(MembershipPeriodBranchCoverageDetails.class));
+
+        assertThatThrownBy(() -> service.create(command(null), ACTOR))
+                .isSameAs(failure);
+
+        verify(membershipStore).create(
+                any(MembershipCreation.class), eq(ACTOR), eq(NOW), eq(BRANCH_ID));
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void rejectsPlanThatDoesNotCoverTheServerSelectedRegistrationBranch() {
+        when(clientQuery.findClientById(CLIENT_ID, BRANCH_ID))
+                .thenReturn(Optional.of(client(ClientStatus.ACTIVE)));
+        when(planSaleCoverageQuery.findForSale(PLAN_ID, BRANCH_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(command(null), ACTOR))
+                .isInstanceOf(MembershipPlanNotAvailableException.class);
+
+        verify(planQuery, never()).findActiveById(any());
+        verify(membershipStore, never()).create(any(), any(), any(), any());
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
     void rejectsUnknownClient() {
-        when(clientQuery.findClientById(CLIENT_ID))
+        when(clientQuery.findClientById(CLIENT_ID, BRANCH_ID))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(
@@ -274,7 +352,7 @@ class MembershipApplicationServiceTest {
 
     @Test
     void rejectsInactiveClient() {
-        when(clientQuery.findClientById(CLIENT_ID))
+        when(clientQuery.findClientById(CLIENT_ID, BRANCH_ID))
                 .thenReturn(
                         Optional.of(
                                 client(ClientStatus.INACTIVE)));
@@ -304,7 +382,7 @@ class MembershipApplicationServiceTest {
 
     @Test
     void rejectsUnavailablePlan() {
-        when(clientQuery.findClientById(CLIENT_ID))
+        when(clientQuery.findClientById(CLIENT_ID, BRANCH_ID))
                 .thenReturn(
                         Optional.of(
                                 client(ClientStatus.ACTIVE)));
@@ -387,7 +465,7 @@ class MembershipApplicationServiceTest {
     }
 
     private void prepareActiveClientAndPlan() {
-        when(clientQuery.findClientById(CLIENT_ID))
+        when(clientQuery.findClientById(CLIENT_ID, BRANCH_ID))
                 .thenReturn(
                         Optional.of(
                                 client(ClientStatus.ACTIVE)));
@@ -402,16 +480,13 @@ class MembershipApplicationServiceTest {
             String expectedDiscount,
             String expectedFinalPrice) {
 
-        ArgumentCaptor<MembershipCreated> eventCaptor =
-                ArgumentCaptor.forClass(
-                        MembershipCreated.class);
-
-        verify(eventPublisher)
-                .publishEvent(
-                        eventCaptor.capture());
-
-        MembershipCreated event =
-                eventCaptor.getValue();
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, times(2)).publishEvent(eventCaptor.capture());
+        MembershipCreated event = eventCaptor.getAllValues().stream()
+                .filter(MembershipCreated.class::isInstance)
+                .map(MembershipCreated.class::cast)
+                .findFirst()
+                .orElseThrow();
 
         assertThat(event.membershipId())
                 .isEqualTo(MEMBERSHIP_ID);
@@ -444,6 +519,13 @@ class MembershipApplicationServiceTest {
 
         assertThat(event.occurredAt())
                 .isEqualTo(NOW);
+
+        ArgumentCaptor<MembershipPeriodBranchCoverageDetails> snapshotCaptor =
+                ArgumentCaptor.forClass(MembershipPeriodBranchCoverageDetails.class);
+        verify(periodCoverageStore).capture(snapshotCaptor.capture());
+        assertThat(snapshotCaptor.getValue().membershipPeriodId()).isEqualTo(PERIOD_ID);
+        assertThat(snapshotCaptor.getValue().coveredBranchIds()).containsExactly(BRANCH_ID);
+        assertThat(snapshotCaptor.getValue().sourcePlanVersion()).isZero();
     }
 
     private static CreateMembershipCommand command(
@@ -518,7 +600,8 @@ class MembershipApplicationServiceTest {
                         creation.dates().baseEndsOn(),
                         creation.dates().effectiveEndsOn(),
                         NOW,
-                        0);
+                        0,
+                        BRANCH_ID);
 
         return new MembershipDetails(
                 MEMBERSHIP_ID,
@@ -528,6 +611,7 @@ class MembershipApplicationServiceTest {
                 period,
                 NOW,
                 NOW,
-                0);
+                0,
+                BRANCH_ID);
     }
 }

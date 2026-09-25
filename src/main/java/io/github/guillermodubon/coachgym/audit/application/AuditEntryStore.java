@@ -7,6 +7,7 @@ import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialReplac
 import io.github.guillermodubon.coachgym.accesscredential.AccessCredentialRevoked;
 import io.github.guillermodubon.coachgym.client.ClientRegistered;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyChanged;
+import io.github.guillermodubon.coachgym.configuration.BranchAccessPolicyOverrideChanged;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryActivatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryCreatedEvent;
 import io.github.guillermodubon.coachgym.equipment.EquipmentCategoryDeactivatedEvent;
@@ -26,6 +27,7 @@ import io.github.guillermodubon.coachgym.payment.PaymentProviderEventAcknowledge
 import io.github.guillermodubon.coachgym.payment.PaymentProviderPaymentConfirmed;
 import io.github.guillermodubon.coachgym.payment.PaymentReceiptGenerated;
 import io.github.guillermodubon.coachgym.plan.PlanChanged;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanCoverageChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionChanged;
 import io.github.guillermodubon.coachgym.promotion.PromotionPlanEligibilityChanged;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
@@ -48,6 +50,8 @@ public interface AuditEntryStore {
 
     void recordPlanChanged(PlanChanged event);
 
+    void recordMembershipPlanCoverageChanged(MembershipPlanCoverageChanged event);
+
     void recordPromotionChanged(PromotionChanged event);
 
     void recordPromotionPlanEligibilityChanged(PromotionPlanEligibilityChanged event);
@@ -55,6 +59,8 @@ public interface AuditEntryStore {
     void recordMembershipCreated(MembershipCreated event);
 
     void recordMembershipRenewed(MembershipRenewed event);
+
+    void recordMembershipPeriodCoverageCaptured(MembershipPeriodCoverageCaptured event);
 
     void recordMembershipFrozen(MembershipFrozen event);
 
@@ -108,6 +114,8 @@ public interface AuditEntryStore {
     void recordDeniedAccessAttempt(AccessAttemptRecorded event);
 
     void recordAccessPaymentPolicyChanged(AccessPaymentPolicyChanged event);
+
+    void recordBranchAccessPolicyOverrideChanged(BranchAccessPolicyOverrideChanged event);
 
     void recordAccessCredentialIssued(AccessCredentialIssued event);
 

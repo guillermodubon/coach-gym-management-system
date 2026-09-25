@@ -84,6 +84,18 @@ class MembershipCreationApiIntegrationTest
                                         .value("INITIAL"))
                         .andExpect(
                                 jsonPath(
+                                        "$.currentPeriod.coverage.scopeSnapshot")
+                                        .value("SINGLE_BRANCH"))
+                        .andExpect(
+                                jsonPath(
+                                        "$.currentPeriod.coverage.coveredBranchCount")
+                                        .value(1))
+                        .andExpect(
+                                jsonPath(
+                                        "$.currentPeriod.coverage.branchIds")
+                                        .doesNotExist())
+                        .andExpect(
+                                jsonPath(
                                         "$.currentPeriod.pricing.membershipPlanId")
                                         .value(
                                                 planId.toString()))
