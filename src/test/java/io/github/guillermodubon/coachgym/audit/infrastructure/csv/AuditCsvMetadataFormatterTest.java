@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.guillermodubon.coachgym.audit.AuditExportRow;
 import io.github.guillermodubon.coachgym.audit.AuditMetadataProjection;
+import io.github.guillermodubon.coachgym.audit.AuditMetadataSanitizer;
 import java.io.StringWriter;
 import java.time.Instant;
 import java.util.List;
@@ -86,6 +87,21 @@ class AuditCsvMetadataFormatterTest {
                 Map.of("branchId", branchId), false);
 
         assertThat(formatter.format(projection)).isEqualTo(
-                "{\"branchId\":\"" + branchId + "\"}");
+                        "{\"branchId\":\"" + branchId + "\"}");
+    }
+
+    @Test
+    void exportsPlanCoverageSummaryButNeverBranchMembershipLists() {
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "MEMBERSHIP_PLAN_BRANCH_COVERAGE_CHANGED",
+                Map.of(
+                        "coverageScope", "SELECTED_BRANCHES",
+                        "coveredBranchCount", 3,
+                        "sourcePlanVersion", 5L,
+                        "branchIds", List.of(UUID.randomUUID().toString())));
+
+        assertThat(formatter.format(projection)).isEqualTo(
+                "{\"_redacted\":true,\"coverageScope\":\"SELECTED_BRANCHES\","
+                        + "\"coveredBranchCount\":3,\"sourcePlanVersion\":5}");
     }
 }

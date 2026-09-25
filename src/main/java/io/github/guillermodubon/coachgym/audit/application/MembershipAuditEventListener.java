@@ -33,6 +33,11 @@ class MembershipAuditEventListener {
     }
 
     @EventListener
+    void record(MembershipPeriodCoverageCaptured event) {
+        auditEntryStore.recordMembershipPeriodCoverageCaptured(event);
+    }
+
+    @EventListener
     void record(
             MembershipFrozen event) {
 

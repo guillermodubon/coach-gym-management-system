@@ -26,12 +26,14 @@ class AuditMetadataSanitizerTest {
                 Map.entry("PLAN_CREATED", "missing"),
                 Map.entry("PROMOTION_ELIGIBLE_PLANS_CHANGED", "eligiblePlanIds"),
                 Map.entry("MEMBERSHIP_CREATED", "listPrice"),
+                Map.entry("MEMBERSHIP_PLAN_BRANCH_COVERAGE_CHANGED", "coverageScope"),
                 Map.entry("PAYMENT_REGISTERED", "paymentMethod"),
                 Map.entry("PAYMENT_ATTEMPT_FAILED", "failureCode"),
                 Map.entry("PAYMENT_RECEIPT_GENERATED", "paymentCode"),
                 Map.entry("ACCESS_CREDENTIAL_ISSUED", "tokenSchemeVersion"),
                 Map.entry("ACCESS_DENIED", "reasonCode"),
                 Map.entry("ACCESS_PAYMENT_POLICY_CHANGED", "previousValue"),
+                Map.entry("BRANCH_ACCESS_PAYMENT_POLICY_CHANGED", "newMode"),
                 Map.entry("EMAIL_DELIVERY_SENT", "deliveryType"),
                 Map.entry("EQUIPMENT_REGISTERED", "categoryId"),
                 Map.entry("INCIDENT_REPORTED", "equipmentId"),
@@ -77,6 +79,43 @@ class AuditMetadataSanitizerTest {
         assertThat(projection.values()).containsKeys("amount", "currency", "paymentId");
         assertThat(projection.values())
                 .doesNotContainKeys("unknownOperationalValue", "providerSecret");
+        assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void sanitizesBranchPolicyMetadataWithoutExposingUnapprovedValues() {
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "BRANCH_ACCESS_PAYMENT_POLICY_CHANGED",
+                Map.of(
+                        "previousMode", "INHERIT",
+                        "newMode", "REQUIRED",
+                        "version", 4L,
+                        "paymentReference", "must disappear"));
+
+        assertThat(projection.values())
+                .containsEntry("previousMode", "INHERIT")
+                .containsEntry("newMode", "REQUIRED")
+                .containsEntry("version", 4L)
+                .doesNotContainKey("paymentReference");
+        assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void sanitizesPlanCoverageMetadataWithoutExposingBranchIds() {
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "MEMBERSHIP_PLAN_BRANCH_COVERAGE_CHANGED",
+                Map.of(
+                        "coverageScope", "SELECTED_BRANCHES",
+                        "coveredBranchCount", 3,
+                        "sourcePlanVersion", 5L,
+                        "branchIds", List.of(UUID.randomUUID().toString()),
+                        "internalPolicy", "must disappear"));
+
+        assertThat(projection.values())
+                .containsEntry("coverageScope", "SELECTED_BRANCHES")
+                .containsEntry("coveredBranchCount", 3)
+                .containsEntry("sourcePlanVersion", 5L)
+                .doesNotContainKeys("branchIds", "internalPolicy");
         assertThat(projection.metadataRedacted()).isTrue();
     }
 
