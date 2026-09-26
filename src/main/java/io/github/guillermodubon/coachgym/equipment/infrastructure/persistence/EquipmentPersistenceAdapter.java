@@ -56,7 +56,20 @@ class EquipmentPersistenceAdapter implements EquipmentStore, EquipmentLookup {
             EquipmentDefinition definition,
             AuthenticatedActor actor,
             Instant occurredAt) {
-        EquipmentJpaEntity entity = EquipmentJpaEntity.register(id, definition, actor, occurredAt);
+        return register(id, definition, actor, occurredAt,
+                UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002"));
+    }
+
+    @Override
+    @Transactional
+    public EquipmentDetails register(
+            UUID id,
+            EquipmentDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
+        EquipmentJpaEntity entity = EquipmentJpaEntity.register(
+                id, definition, actor, occurredAt, branchId);
         EquipmentJpaEntity saved = equipmentRepository.saveAndFlush(entity);
         entityManager.refresh(saved);
         String categoryName = resolveCategoryName(saved.categoryId());
@@ -127,8 +140,22 @@ class EquipmentPersistenceAdapter implements EquipmentStore, EquipmentLookup {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<EquipmentDetails> findById(UUID equipmentId, UUID branchId) {
+        return equipmentRepository.findByIdAndBranchId(equipmentId, branchId)
+                .map(entity -> entity.toDetails(resolveCategoryName(entity.categoryId())));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public EquipmentPage findAll(EquipmentSearchQuery query) {
+        return findAll(query, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EquipmentPage findAll(EquipmentSearchQuery query, UUID branchId) {
         Page<EquipmentJpaEntity> page = equipmentRepository.search(
+                branchId,
                 query.categoryId(),
                 query.status() != null
                         ? io.github.guillermodubon.coachgym.equipment.EquipmentStatus.valueOf(
@@ -149,6 +176,14 @@ class EquipmentPersistenceAdapter implements EquipmentStore, EquipmentLookup {
     @Transactional(readOnly = true)
     public boolean existsBySerialNumberIgnoreCase(String serialNumber, UUID excludeId) {
         return equipmentRepository.existsBySerialNumberIgnoreCase(serialNumber, excludeId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean existsBySerialNumberIgnoreCase(
+            String serialNumber, UUID excludeId, UUID branchId) {
+        return equipmentRepository.existsBySerialNumberIgnoreCaseInBranch(
+                serialNumber, excludeId, branchId);
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

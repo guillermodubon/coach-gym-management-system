@@ -11,7 +11,17 @@ public interface PaymentAttemptStore {
 
     Optional<PaymentAttemptDetails> findById(UUID paymentAttemptId);
 
+    default Optional<PaymentAttemptDetails> findById(
+            UUID paymentAttemptId, UUID branchId) {
+        return findById(paymentAttemptId);
+    }
+
     Optional<PaymentAttemptProviderDetails> findProviderDetails(UUID paymentAttemptId);
+
+    default Optional<PaymentAttemptProviderDetails> findProviderDetails(
+            UUID paymentAttemptId, UUID branchId) {
+        return findProviderDetails(paymentAttemptId);
+    }
 
     PaymentAttemptDetails markProcessing(ProcessPaymentAttemptCommand command);
 

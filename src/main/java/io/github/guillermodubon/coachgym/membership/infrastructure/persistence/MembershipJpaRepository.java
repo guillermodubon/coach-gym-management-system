@@ -23,6 +23,10 @@ interface MembershipJpaRepository
     Optional<MembershipJpaEntity> findByMembershipCodeIgnoreCase(
             String membershipCode);
 
+    Optional<MembershipJpaEntity> findByIdAndRegisteredAtBranchId(
+            UUID id,
+            UUID registeredAtBranchId);
+
     Optional<MembershipJpaEntity> findFirstByClientIdAndStatusIn(
             UUID clientId,
             Collection<MembershipStatus> statuses);

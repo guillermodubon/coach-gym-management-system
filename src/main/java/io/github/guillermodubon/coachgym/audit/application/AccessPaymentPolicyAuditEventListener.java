@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.audit.application;
 
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyChanged;
+import io.github.guillermodubon.coachgym.configuration.BranchAccessPolicyOverrideChanged;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
@@ -17,5 +18,10 @@ class AccessPaymentPolicyAuditEventListener {
     @EventListener
     void record(AccessPaymentPolicyChanged event) {
         auditEntryStore.recordAccessPaymentPolicyChanged(event);
+    }
+
+    @EventListener
+    void record(BranchAccessPolicyOverrideChanged event) {
+        auditEntryStore.recordBranchAccessPolicyOverrideChanged(event);
     }
 }

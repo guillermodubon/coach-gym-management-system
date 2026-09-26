@@ -23,6 +23,11 @@ import io.github.guillermodubon.coachgym.membership.MembershipAccessDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipAccessQuery;
 import io.github.guillermodubon.coachgym.payment.ConfirmedPaymentForAccessQuery;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.ActiveBranchContextUnavailableException;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -75,6 +80,7 @@ public class AccessApplicationService {
     private final Optional<DuplicateScanPolicy> duplicateScanPolicy;
     private final AccessPaymentPolicyQuery accessPaymentPolicyQuery;
     private final ConfirmedPaymentForAccessQuery confirmedPaymentForAccessQuery;
+    private final BranchOperationContextResolver branchContextResolver;
 
     /** Constructor retained for focused unit tests and non-QR callers. */
     public AccessApplicationService(
@@ -94,7 +100,8 @@ public class AccessApplicationService {
                 clock,
                 Optional.empty(),
                 DISABLED_POLICY_QUERY,
-                NO_PAYMENT_QUERY);
+                NO_PAYMENT_QUERY,
+                null);
     }
 
     public AccessApplicationService(
@@ -115,7 +122,32 @@ public class AccessApplicationService {
                 clock,
                 duplicateScanPolicy,
                 DISABLED_POLICY_QUERY,
-                NO_PAYMENT_QUERY);
+                NO_PAYMENT_QUERY,
+                null);
+    }
+
+    public AccessApplicationService(
+            AccessRecordStore accessRecordStore,
+            ClientAccessQuery clientAccessQuery,
+            MembershipAccessQuery membershipAccessQuery,
+            AccessCredentialResolver accessCredentialResolver,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            Optional<DuplicateScanPolicy> duplicateScanPolicy,
+            AccessPaymentPolicyQuery accessPaymentPolicyQuery,
+            ConfirmedPaymentForAccessQuery confirmedPaymentForAccessQuery) {
+
+        this(
+                accessRecordStore,
+                clientAccessQuery,
+                membershipAccessQuery,
+                accessCredentialResolver,
+                eventPublisher,
+                clock,
+                duplicateScanPolicy,
+                accessPaymentPolicyQuery,
+                confirmedPaymentForAccessQuery,
+                null);
     }
 
     @Autowired
@@ -128,7 +160,8 @@ public class AccessApplicationService {
             Clock clock,
             Optional<DuplicateScanPolicy> duplicateScanPolicy,
             AccessPaymentPolicyQuery accessPaymentPolicyQuery,
-            ConfirmedPaymentForAccessQuery confirmedPaymentForAccessQuery) {
+            ConfirmedPaymentForAccessQuery confirmedPaymentForAccessQuery,
+            BranchOperationContextResolver branchContextResolver) {
 
         this.accessRecordStore = accessRecordStore;
         this.clientAccessQuery = clientAccessQuery;
@@ -143,6 +176,7 @@ public class AccessApplicationService {
                 accessPaymentPolicyQuery);
         this.confirmedPaymentForAccessQuery = Objects.requireNonNull(
                 confirmedPaymentForAccessQuery);
+        this.branchContextResolver = branchContextResolver;
     }
 
     // ── Check-in ──────────────────────────────────────────────────────────────
@@ -155,6 +189,7 @@ public class AccessApplicationService {
 
         validateCommand(command);
         validateActor(actor);
+        UUID branchId = branchId(actor);
 
         // Step 1 & 2: single instant capture; operational date from gym zone.
         Instant occurredAt = clock.instant();
@@ -165,24 +200,39 @@ public class AccessApplicationService {
 
         // Steps 4 & 5: resolve and cross-check.
         AccessCheckInContext context = resolve(identifier, operationalDate);
+        authorizeClientBranch(context.clientId(), branchId, actor);
 
         // Step 6: evaluate existing rules, then the optional payment policy.
         AccessEvaluation evaluation = evaluateWithPaymentPolicy(
                 AccessPolicy.evaluate(context), context);
 
         // Step 7: persist.
-        AccessRecordDetails record = accessRecordStore.persist(
-                identifier.value(),
-                context.clientId(),
-                context.clientCode(),
-                context.membershipId(),
-                context.membershipCode(),
-                context.membershipPeriodId(),
-                evaluation.result(),
-                evaluation.reasonCode(),
-                evaluation.reason(),
-                occurredAt,
-                actor.id());
+        AccessRecordDetails record = branchContextResolver == null
+                ? accessRecordStore.persist(
+                        identifier.value(),
+                        context.clientId(),
+                        context.clientCode(),
+                        context.membershipId(),
+                        context.membershipCode(),
+                        context.membershipPeriodId(),
+                        evaluation.result(),
+                        evaluation.reasonCode(),
+                        evaluation.reason(),
+                        occurredAt,
+                        actor.id())
+                : accessRecordStore.persist(
+                        identifier.value(),
+                        context.clientId(),
+                        context.clientCode(),
+                        context.membershipId(),
+                        context.membershipCode(),
+                        context.membershipPeriodId(),
+                        evaluation.result(),
+                        evaluation.reasonCode(),
+                        evaluation.reason(),
+                        occurredAt,
+                        actor.id(),
+                        branchId);
 
         eventPublisher.publishEvent(
                 new AccessAttemptRecorded(
@@ -198,7 +248,8 @@ public class AccessApplicationService {
                         record.checkedInAt(),
                         actor.id(),
                         actor.username(),
-                        occurredAt));
+                        occurredAt,
+                        branchId));
         return record;
     }
 
@@ -221,6 +272,7 @@ public class AccessApplicationService {
 
         validateQrCommand(command);
         validateActor(actor);
+        UUID branchId = branchId(actor);
 
         Instant evaluatedAt = clock.instant();
         LocalDate operationalDate = LocalDate.now(clock);
@@ -232,6 +284,7 @@ public class AccessApplicationService {
         AccessIdentifier identifier = AccessIdentifier.qrCredential();
         AccessCheckInContext context = resolveQrClient(
                 credential.clientId(), identifier, operationalDate);
+        authorizeClientBranch(context.clientId(), branchId, actor);
         AccessEvaluation evaluation = evaluateWithPaymentPolicy(
                 AccessPolicy.evaluate(context), context);
 
@@ -265,6 +318,7 @@ public class AccessApplicationService {
 
         validateQrCommand(command);
         validateActor(actor);
+        UUID branchId = branchId(actor);
 
         DuplicateScanPolicy policy = duplicateScanPolicy.orElseThrow(
                 AccessDuplicateScanPolicyUnavailableException::new);
@@ -278,12 +332,17 @@ public class AccessApplicationService {
         AccessIdentifier identifier = AccessIdentifier.qrCredential();
         AccessCheckInContext context = resolveQrClient(
                 credential.clientId(), identifier, operationalDate);
+        authorizeClientBranch(context.clientId(), branchId, actor);
         AccessEvaluation evaluation = AccessPolicy.evaluate(context);
 
-        Optional<AccessRecordDetails> previous = accessRecordStore
-                .findMostRecentAllowedQrAttempt(
+        Optional<AccessRecordDetails> previous = branchContextResolver == null
+                ? accessRecordStore.findMostRecentAllowedQrAttempt(
                         credential.credentialId(),
-                        occurredAt.minus(policy.window()));
+                        occurredAt.minus(policy.window()))
+                : accessRecordStore.findMostRecentAllowedQrAttempt(
+                        credential.credentialId(),
+                        occurredAt.minus(policy.window()),
+                        branchId);
 
         if (policy.evaluate(
                 occurredAt,
@@ -298,19 +357,34 @@ public class AccessApplicationService {
             evaluation = evaluateWithPaymentPolicy(evaluation, context);
         }
 
-        AccessRecordDetails record = accessRecordStore.persistQr(
-                identifier.value(),
-                credential.credentialId(),
-                context.clientId(),
-                context.clientCode(),
-                context.membershipId(),
-                context.membershipCode(),
-                context.membershipPeriodId(),
-                evaluation.result(),
-                evaluation.reasonCode(),
-                evaluation.reason(),
-                occurredAt,
-                actor.id());
+        AccessRecordDetails record = branchContextResolver == null
+                ? accessRecordStore.persistQr(
+                        identifier.value(),
+                        credential.credentialId(),
+                        context.clientId(),
+                        context.clientCode(),
+                        context.membershipId(),
+                        context.membershipCode(),
+                        context.membershipPeriodId(),
+                        evaluation.result(),
+                        evaluation.reasonCode(),
+                        evaluation.reason(),
+                        occurredAt,
+                        actor.id())
+                : accessRecordStore.persistQr(
+                        identifier.value(),
+                        credential.credentialId(),
+                        context.clientId(),
+                        context.clientCode(),
+                        context.membershipId(),
+                        context.membershipCode(),
+                        context.membershipPeriodId(),
+                        evaluation.result(),
+                        evaluation.reasonCode(),
+                        evaluation.reason(),
+                        occurredAt,
+                        actor.id(),
+                        branchId);
 
         eventPublisher.publishEvent(
                 new AccessAttemptRecorded(
@@ -327,7 +401,8 @@ public class AccessApplicationService {
                         record.checkedInAt(),
                         actor.id(),
                         actor.username(),
-                        occurredAt));
+                        occurredAt,
+                        branchId));
         return record;
     }
 
@@ -399,12 +474,56 @@ public class AccessApplicationService {
 
     @Transactional(readOnly = true)
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public AccessRecordDetails findById(
+            UUID id,
+            AuthenticatedActor actor) {
+        if (id == null) {
+            throw new AccessValidationException(
+                    "Access record identifier must be provided.");
+        }
+        validateActor(actor);
+        UUID branchId = branchId(actor);
+        return (branchId == null
+                ? accessRecordStore.findById(id)
+                : accessRecordStore.findById(id, branchId))
+                .orElseThrow(() -> new AccessRecordNotFoundException(id));
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public AccessRecordPage findAll(AccessRecordSearchQuery query) {
         if (query == null) {
             throw new AccessValidationException(
                     "Access record search query must be provided.");
         }
         return accessRecordStore.findAll(query);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public AccessRecordPage findAll(
+            AccessRecordSearchQuery query,
+            AuthenticatedActor actor) {
+        return findAll(query, actor, null);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public AccessRecordPage findAll(
+            AccessRecordSearchQuery query,
+            AuthenticatedActor actor,
+            UUID requestedBranchId) {
+        if (query == null) {
+            throw new AccessValidationException(
+                    "Access record search query must be provided.");
+        }
+        validateActor(actor);
+        if (branchContextResolver == null) {
+            throw new ActiveBranchContextUnavailableException();
+        }
+        UUID branchId = BranchResourceAuthorizationPolicy.requireListBranch(
+                branchContextResolver.resolveOperation(actor.id()), requestedBranchId);
+        return accessRecordStore.findAll(query, branchId);
     }
 
     // ── Resolution ────────────────────────────────────────────────────────────
@@ -462,6 +581,29 @@ public class AccessApplicationService {
 
             // Derive client from membership; load for status check.
             resolveClientById(mem, ctx);
+        });
+    }
+
+    private UUID branchId(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        BranchOperationContext context = branchContextResolver.resolveOperation(actor.id());
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(context);
+    }
+
+    private void authorizeClientBranch(
+            UUID clientId,
+            UUID activeBranchId,
+            AuthenticatedActor actor) {
+        if (branchContextResolver == null || clientId == null || activeBranchId == null) {
+            return;
+        }
+        clientAccessQuery.findById(clientId).ifPresent(client -> {
+            if (client.homeBranchId() != null
+                    && !activeBranchId.equals(client.homeBranchId())) {
+                throw new BranchResourceAuthorizationException();
+            }
         });
     }
 

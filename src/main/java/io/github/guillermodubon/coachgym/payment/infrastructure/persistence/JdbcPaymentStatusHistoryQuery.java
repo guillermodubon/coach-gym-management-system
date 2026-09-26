@@ -21,20 +21,24 @@ import org.springframework.transaction.annotation.Transactional;
 class JdbcPaymentStatusHistoryQuery implements PaymentStatusHistoryQuery {
 
     static final String SELECT_SQL = """
-            select id, payment_id, previous_status, new_status,
-                   reason, occurred_at, changed_by_user_id
-            from gym.payment_status_history
-            where payment_id = :paymentId
-              and previous_status is not null
-            order by occurred_at desc, id desc
+            select h.id, h.payment_id, h.previous_status, h.new_status,
+                   h.reason, h.occurred_at, h.changed_by_user_id
+            from gym.payment_status_history h
+            join gym.payments p on p.id = h.payment_id
+            where h.payment_id = :paymentId
+              and (CAST(:branchId AS uuid) is null or p.registered_at_branch_id = :branchId)
+              and h.previous_status is not null
+            order by h.occurred_at desc, h.id desc
             limit :limit offset :offset
             """;
 
     static final String COUNT_SQL = """
             select count(*)
-            from gym.payment_status_history
-            where payment_id = :paymentId
-              and previous_status is not null
+            from gym.payment_status_history h
+            join gym.payments p on p.id = h.payment_id
+            where h.payment_id = :paymentId
+              and (CAST(:branchId AS uuid) is null or p.registered_at_branch_id = :branchId)
+              and h.previous_status is not null
             """;
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
@@ -49,6 +53,16 @@ class JdbcPaymentStatusHistoryQuery implements PaymentStatusHistoryQuery {
             UUID paymentId,
             int page,
             int size) {
+        return findByPaymentId(paymentId, page, size, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PaymentStatusHistoryPage findByPaymentId(
+            UUID paymentId,
+            int page,
+            int size,
+            UUID branchId) {
         Objects.requireNonNull(paymentId, "Payment id is required.");
         if (page < 0 || size < 1 || size > 100) {
             throw new IllegalArgumentException(
@@ -56,7 +70,8 @@ class JdbcPaymentStatusHistoryQuery implements PaymentStatusHistoryQuery {
         }
         try {
             MapSqlParameterSource base = new MapSqlParameterSource()
-                    .addValue("paymentId", paymentId);
+                    .addValue("paymentId", paymentId)
+                    .addValue("branchId", branchId);
             Long total = jdbcTemplate.queryForObject(
                     COUNT_SQL, base, Long.class);
             long totalElements = total == null ? 0 : total;
@@ -64,6 +79,7 @@ class JdbcPaymentStatusHistoryQuery implements PaymentStatusHistoryQuery {
                     SELECT_SQL,
                     new MapSqlParameterSource()
                             .addValue("paymentId", paymentId)
+                            .addValue("branchId", branchId)
                             .addValue("limit", size)
                             .addValue("offset", (long) page * size),
                     JdbcPaymentStatusHistoryQuery::mapHistory);

@@ -13,7 +13,8 @@ public record MembershipResponse(
         MembershipPeriodResponse currentPeriod,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID registeredAtBranchId) {
 
     static MembershipResponse from(
             MembershipDetails membership) {
@@ -27,6 +28,7 @@ public record MembershipResponse(
                         membership.currentPeriod()),
                 membership.createdAt(),
                 membership.updatedAt(),
-                membership.version());
+                membership.version(),
+                membership.registeredAtBranchId());
     }
 }

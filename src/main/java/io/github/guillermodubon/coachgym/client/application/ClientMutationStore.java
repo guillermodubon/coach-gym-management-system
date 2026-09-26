@@ -12,7 +12,16 @@ public interface ClientMutationStore {
             UUID clientId,
             UpdateClientCommand command,
             AuthenticatedActor actor,
-            Instant occurredAt);
+            Instant occurredAt,
+            UUID branchId);
+
+    default void update(
+            UUID clientId,
+            UpdateClientCommand command,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        update(clientId, command, actor, occurredAt, null);
+    }
 
     void changeStatus(
             UUID clientId,
@@ -21,5 +30,18 @@ public interface ClientMutationStore {
             String reason,
             long expectedVersion,
             AuthenticatedActor actor,
-            Instant occurredAt);
+            Instant occurredAt,
+            UUID branchId);
+
+    default void changeStatus(
+            UUID clientId,
+            ClientStatus expectedCurrentStatus,
+            ClientStatus requestedStatus,
+            String reason,
+            long expectedVersion,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        changeStatus(clientId, expectedCurrentStatus, requestedStatus, reason,
+                expectedVersion, actor, occurredAt, null);
+    }
 }

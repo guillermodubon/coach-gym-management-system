@@ -8,11 +8,16 @@ import io.github.guillermodubon.coachgym.membership.domain.MembershipCancellatio
 import io.github.guillermodubon.coachgym.membership.domain.MembershipCancellationPolicy;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipValidationException;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchOwnedResourceReference;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,12 +32,15 @@ public class MembershipCancellationApplicationService {
     private final ApplicationEventPublisher eventPublisher;
 
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
 
+    @Autowired
     public MembershipCancellationApplicationService(
             MembershipStore membershipStore,
             MembershipFreezeStore freezeStore,
             ApplicationEventPublisher eventPublisher,
-            Clock clock) {
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
 
         this.membershipStore =
                 membershipStore;
@@ -45,6 +53,15 @@ public class MembershipCancellationApplicationService {
 
         this.clock =
                 clock;
+        this.branchContextResolver = branchContextResolver;
+    }
+
+    public MembershipCancellationApplicationService(
+            MembershipStore membershipStore,
+            MembershipFreezeStore freezeStore,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock) {
+        this(membershipStore, freezeStore, eventPublisher, clock, null);
     }
 
     @Transactional
@@ -65,7 +82,8 @@ public class MembershipCancellationApplicationService {
 
         MembershipDetails membership =
                 requireMembership(
-                        membershipId);
+                        membershipId,
+                        actor);
 
         verifyVersion(
                 membershipId,
@@ -118,7 +136,8 @@ public class MembershipCancellationApplicationService {
                         closedOpenFreeze,
                         actor.id(),
                         actor.username(),
-                        occurredAt));
+                        occurredAt,
+                        cancelledMembership.registeredAtBranchId()));
 
         return cancelledMembership;
     }
@@ -162,7 +181,21 @@ public class MembershipCancellationApplicationService {
                 .orElseThrow(
                         () ->
                                 new MembershipNotFoundException(
-                                        membershipId));
+                                membershipId));
+    }
+
+    private MembershipDetails requireMembership(
+            UUID membershipId,
+            AuthenticatedActor actor) {
+        MembershipDetails membership = requireMembership(membershipId);
+        if (branchContextResolver != null && membership.registeredAtBranchId() != null) {
+            BranchOperationContext context = branchContextResolver.resolveOperation(actor.id());
+            BranchResourceAuthorizationPolicy.requireActiveResourceAccess(
+                    context,
+                    new BranchOwnedResourceReference(
+                            membership.id(), context.organizationId(), membership.registeredAtBranchId()));
+        }
+        return membership;
     }
 
     private static void verifyVersion(

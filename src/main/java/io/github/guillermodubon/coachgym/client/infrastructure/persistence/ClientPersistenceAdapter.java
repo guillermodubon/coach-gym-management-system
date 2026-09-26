@@ -33,9 +33,10 @@ class ClientPersistenceAdapter implements ClientStore {
     public ClientDetails register(
             ClientRegistration registration,
             AuthenticatedActor actor,
-            Instant occurredAt) {
+            Instant occurredAt,
+            UUID homeBranchId) {
         ClientJpaEntity client = clientRepository.saveAndFlush(
-                ClientJpaEntity.register(registration, actor, occurredAt));
+                ClientJpaEntity.register(registration, actor, occurredAt, homeBranchId));
         entityManager.refresh(client);
         return client.toDetails();
     }
@@ -44,5 +45,12 @@ class ClientPersistenceAdapter implements ClientStore {
     @Transactional(readOnly = true)
     public Optional<ClientDetails> findById(UUID id) {
         return clientRepository.findWithEmergencyContactsById(id).map(ClientJpaEntity::toDetails);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<ClientDetails> findById(UUID id, UUID homeBranchId) {
+        return clientRepository.findWithEmergencyContactsByIdAndHomeBranchId(id, homeBranchId)
+                .map(ClientJpaEntity::toDetails);
     }
 }

@@ -25,5 +25,34 @@ public record AccessRecordDetails(
         AccessReasonCode reasonCode,
         String reason,
         Instant checkedInAt,
-        UUID processedByUserId) {
+        UUID processedByUserId,
+        UUID branchId) {
+
+    /** Compatibility constructor for pre-scoping callers and old fixtures. */
+    public AccessRecordDetails(
+            UUID id,
+            String presentedIdentifier,
+            UUID clientId,
+            String clientCode,
+            UUID membershipId,
+            String membershipCode,
+            AccessResult result,
+            AccessReasonCode reasonCode,
+            String reason,
+            Instant checkedInAt,
+            UUID processedByUserId) {
+        this(
+                id,
+                presentedIdentifier,
+                clientId,
+                clientCode,
+                membershipId,
+                membershipCode,
+                result,
+                reasonCode,
+                reason,
+                checkedInAt,
+                processedByUserId,
+                null);
+    }
 }

@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.payment.infrastructure.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import io.github.guillermodubon.coachgym.payment.PaymentDetails;
@@ -196,6 +197,24 @@ class PaymentPersistenceAdapterTest {
         Optional<PaymentDetails> result = adapter.findById(unknownId);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void branchScopedPaymentLookupUsesIdAndBranchInTheRepositoryQuery() {
+        UUID paymentId = UUID.randomUUID();
+        UUID branchId = UUID.randomUUID();
+        PaymentJpaEntity entity = PaymentJpaEntity.register(
+                CLIENT_ID, MEMBERSHIP_ID, PERIOD_ID,
+                AMOUNT, CURRENCY, PaymentMethod.CASH, null, PAID_AT,
+                ACTOR, NOW);
+        given(paymentRepository.findByIdAndRegisteredAtBranchId(paymentId, branchId))
+                .willReturn(Optional.of(entity));
+
+        Optional<PaymentDetails> result = adapter.findById(paymentId, branchId);
+
+        assertThat(result).isPresent();
+        verify(paymentRepository).findByIdAndRegisteredAtBranchId(paymentId, branchId);
+        verify(paymentRepository, never()).findById(paymentId);
     }
 
     @Test

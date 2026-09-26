@@ -12,6 +12,8 @@ import io.github.guillermodubon.coachgym.accesscredential.application.AccessCred
 import io.github.guillermodubon.coachgym.accesscredential.application.AccessCredentialValidationException;
 import io.github.guillermodubon.coachgym.accesscredential.application.AccessCredentialVersionConflictException;
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
+import io.github.guillermodubon.coachgym.user.ActiveBranchContextUnavailableException;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -110,6 +112,24 @@ class AccessCredentialProblemHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "ACCESS_CREDENTIAL_DATA_ACCESS_FAILED",
                 "The access credential operation could not be completed.");
+    }
+
+    @ExceptionHandler(ActiveBranchContextUnavailableException.class)
+    ResponseEntity<ProblemDetail> handleActiveBranchUnavailable(
+            ActiveBranchContextUnavailableException exception) {
+        return problem(
+                HttpStatus.CONFLICT,
+                "ACTIVE_BRANCH_UNAVAILABLE",
+                "The active branch context is unavailable.");
+    }
+
+    @ExceptionHandler(BranchResourceAuthorizationException.class)
+    ResponseEntity<ProblemDetail> handleBranchAuthorization(
+            BranchResourceAuthorizationException exception) {
+        return problem(
+                HttpStatus.NOT_FOUND,
+                "RESOURCE_NOT_FOUND",
+                "The requested resource was not found.");
     }
 
     /**

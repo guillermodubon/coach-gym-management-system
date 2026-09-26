@@ -55,9 +55,19 @@ class IncidentPersistenceAdapter implements IncidentStore {
             IncidentDefinition definition,
             AuthenticatedActor actor,
             Instant occurredAt) {
+        return report(definition, actor, occurredAt,
+                UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002"));
+    }
+
+    @Override
+    public IncidentDetails report(
+            IncidentDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
         UUID id = UUID.randomUUID();
         IncidentJpaEntity entity = IncidentJpaEntity.report(
-                id, definition, actor, occurredAt);
+                id, definition, actor, occurredAt, branchId);
         IncidentJpaEntity saved = flush(entity, id, 0L);
         historyRepository.saveAndFlush(
                 IncidentStatusHistoryJpaEntity.initial(
@@ -72,10 +82,22 @@ class IncidentPersistenceAdapter implements IncidentStore {
     }
 
     @Override
+    public Optional<IncidentDetails> findById(UUID incidentId, UUID branchId) {
+        return incidentRepository.findByIdAndBranchId(incidentId, branchId)
+                .map(this::toDetails);
+    }
+
+    @Override
     public IncidentPage findAll(IncidentSearchQuery query) {
+        return findAll(query, null);
+    }
+
+    @Override
+    public IncidentPage findAll(IncidentSearchQuery query, UUID branchId) {
         PageRequest pageRequest = PageRequest.of(
                 query.page(), query.size(), toSort(query));
-        var page = incidentRepository.findAll(toSpecification(query), pageRequest);
+        var page = incidentRepository.findAll(
+                toSpecification(query, branchId), pageRequest);
         return new IncidentPage(
                 page.getContent().stream().map(this::toDetails).toList(),
                 page.getNumber(),
@@ -124,6 +146,19 @@ class IncidentPersistenceAdapter implements IncidentStore {
     public List<IncidentStatusHistoryDetails> findStatusHistory(
             UUID incidentId) {
         if (!incidentRepository.existsById(incidentId)) {
+            throw new IncidentNotFoundException(incidentId);
+        }
+        return historyRepository
+                .findByIncidentIdOrderByOccurredAtAscIdAsc(incidentId)
+                .stream()
+                .map(IncidentPersistenceAdapter::toHistoryDetails)
+                .toList();
+    }
+
+    @Override
+    public List<IncidentStatusHistoryDetails> findStatusHistory(
+            UUID incidentId, UUID branchId) {
+        if (incidentRepository.findByIdAndBranchId(incidentId, branchId).isEmpty()) {
             throw new IncidentNotFoundException(incidentId);
         }
         return historyRepository
@@ -182,7 +217,8 @@ class IncidentPersistenceAdapter implements IncidentStore {
                 entity.resolutionNotes(),
                 entity.createdAt(),
                 entity.updatedAt(),
-                entity.version());
+                entity.version(),
+                entity.branchId());
     }
 
     private static IncidentStatusHistoryDetails toHistoryDetails(
@@ -194,9 +230,13 @@ class IncidentPersistenceAdapter implements IncidentStore {
     }
 
     private static Specification<IncidentJpaEntity> toSpecification(
-            IncidentSearchQuery query) {
+            IncidentSearchQuery query,
+            UUID branchId) {
         return (root, criteriaQuery, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
+            if (branchId != null) {
+                predicates.add(builder.equal(root.get("branchId"), branchId));
+            }
             if (query.equipmentId() != null) {
                 predicates.add(builder.equal(
                         root.get("equipmentId"), query.equipmentId()));

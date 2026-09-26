@@ -11,7 +11,23 @@ public record ClientProfileChangedEvent(
         ClientStatus previousStatus,
         ClientStatus newStatus,
         UUID changedByUserId,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID homeBranchId) {
+
+    public ClientProfileChangedEvent(
+            UUID clientId,
+            ChangeType changeType,
+            ClientStatus previousStatus,
+            ClientStatus newStatus,
+            UUID changedByUserId,
+            Instant occurredAt) {
+        this(clientId, changeType, previousStatus, newStatus, changedByUserId,
+                occurredAt, null);
+    }
+
+    public UUID branchId() {
+        return homeBranchId;
+    }
 
     public enum ChangeType {
         PROFILE_UPDATED,

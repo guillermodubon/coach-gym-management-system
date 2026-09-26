@@ -43,6 +43,7 @@ class JdbcTransactionalEmailDeliveryAdapter
 
     private static final String COLUMNS = """
             id, delivery_type, source_resource_id, client_id,
+            branch_id,
             recipient_snapshot, subject_snapshot, template_version,
             attachment_resource_type, attachment_resource_id,
             attachment_filename, attachment_content_type,
@@ -122,6 +123,7 @@ class JdbcTransactionalEmailDeliveryAdapter
         String sql = """
                 insert into gym.email_deliveries (
                     id, delivery_type, source_resource_id, client_id,
+                    branch_id,
                     recipient_snapshot, subject_snapshot, template_version,
                     attachment_resource_type, attachment_resource_id,
                     attachment_filename, attachment_content_type,
@@ -132,6 +134,7 @@ class JdbcTransactionalEmailDeliveryAdapter
                     created_at, updated_at, version)
                 values (
                     :id, :deliveryType, :sourceResourceId, :clientId,
+                    COALESCE(:branchId, '7b0bf7d5-5184-43d2-8f9a-200000000002'::uuid),
                     :recipient, :subject, :templateVersion,
                     :attachmentType, :attachmentId, :filename, :contentType,
                     :attachmentSize, :attachmentChecksum, :idempotencyDigest,
@@ -379,6 +382,15 @@ class JdbcTransactionalEmailDeliveryAdapter
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<EmailDeliveryDetails> findById(UUID deliveryId, UUID branchId) {
+        requireIdentifier(deliveryId);
+        return find("where id = :id and branch_id = :branchId",
+                new MapSqlParameterSource().addValue("id", deliveryId)
+                        .addValue("branchId", branchId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Optional<EmailDeliveryDetails> findByIdempotencyKeyDigest(String digest) {
         String normalized = EmailDeliveryValuePolicy.normalizeDigest(digest);
         return find("where idempotency_key_digest = :digest",
@@ -388,9 +400,18 @@ class JdbcTransactionalEmailDeliveryAdapter
     @Override
     @Transactional(readOnly = true)
     public EmailDeliveryPage findAll(EmailDeliverySearchQuery query) {
+        return findAll(query, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public EmailDeliveryPage findAll(
+            EmailDeliverySearchQuery query, UUID branchId) {
         Objects.requireNonNull(query, "Email delivery search query is required.");
         StringBuilder where = new StringBuilder(" where 1 = 1");
         MapSqlParameterSource parameters = new MapSqlParameterSource();
+        where.append(" and (CAST(:branchId AS uuid) is null or branch_id = :branchId)");
+        parameters.addValue("branchId", branchId);
         if (query.deliveryType() != null) {
             where.append(" and delivery_type = :deliveryType");
             parameters.addValue("deliveryType", query.deliveryType().name());
@@ -441,14 +462,26 @@ class JdbcTransactionalEmailDeliveryAdapter
     @Override
     @Transactional(readOnly = true)
     public List<EmailDeliveryAttemptDetails> findAttempts(UUID deliveryId) {
+        return findAttempts(deliveryId, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EmailDeliveryAttemptDetails> findAttempts(
+            UUID deliveryId, UUID branchId) {
         requireIdentifier(deliveryId);
         try {
             return jdbcTemplate.query(
                     "select " + ATTEMPT_COLUMNS
-                            + " from gym.email_delivery_attempts"
-                            + " where delivery_id = :deliveryId"
+                            + " from gym.email_delivery_attempts a"
+                            + " where a.delivery_id = :deliveryId"
+                            + " and exists (select 1 from gym.email_deliveries d"
+                            + " where d.id = a.delivery_id"
+                            + " and (CAST(:branchId AS uuid) is null or d.branch_id = :branchId))"
                             + " order by attempt_number asc, id asc",
-                    new MapSqlParameterSource("deliveryId", deliveryId),
+                    new MapSqlParameterSource()
+                            .addValue("deliveryId", deliveryId)
+                            .addValue("branchId", branchId),
                     JdbcTransactionalEmailDeliveryAdapter::mapAttempt);
         } catch (DataAccessException exception) {
             throw dataAccess("Email delivery attempts could not be read.", exception);
@@ -488,6 +521,7 @@ class JdbcTransactionalEmailDeliveryAdapter
                 .addValue("deliveryType", delivery.deliveryType().name())
                 .addValue("sourceResourceId", delivery.sourceResourceId())
                 .addValue("clientId", delivery.clientId())
+                .addValue("branchId", delivery.branchId())
                 .addValue("recipient", delivery.recipientSnapshot())
                 .addValue("subject", delivery.subjectSnapshot())
                 .addValue("templateVersion", delivery.templateVersion())
@@ -554,7 +588,8 @@ class JdbcTransactionalEmailDeliveryAdapter
                 instant(rs, "last_attempt_at"),
                 instant(rs, "created_at"),
                 instant(rs, "updated_at"),
-                rs.getLong("version"));
+                rs.getLong("version"),
+                rs.getObject("branch_id", UUID.class));
     }
 
     private static EmailDeliveryAttemptDetails mapAttempt(ResultSet rs, int row)

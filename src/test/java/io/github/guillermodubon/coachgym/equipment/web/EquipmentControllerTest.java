@@ -2,6 +2,8 @@ package io.github.guillermodubon.coachgym.equipment.web;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -23,6 +25,7 @@ import io.github.guillermodubon.coachgym.equipment.application.exception.Duplica
 import io.github.guillermodubon.coachgym.equipment.application.exception.EquipmentCategoryInactiveException;
 import io.github.guillermodubon.coachgym.equipment.application.exception.EquipmentCategoryNotFoundException;
 import io.github.guillermodubon.coachgym.equipment.application.exception.EquipmentNotFoundException;
+import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -119,6 +122,9 @@ class EquipmentControllerTest {
 
         when(principal.getUsername())
                 .thenReturn("equipment-test-user");
+
+        when(principal.authenticatedActor())
+                .thenReturn(new AuthenticatedActor(USER_ID, "equipment-test-user"));
 
         Authentication userAuthentication =
                 new UsernamePasswordAuthenticationToken(
@@ -391,8 +397,8 @@ class EquipmentControllerTest {
     void findById_returns200_withEquipmentDetails()
             throws Exception {
 
-        when(equipmentService.findById(
-                EQUIPMENT_ID))
+        when(equipmentService.findByIdForActor(
+                eq(EQUIPMENT_ID), any(AuthenticatedActor.class)))
                 .thenReturn(sampleDetails());
 
         mockMvc.perform(
@@ -422,8 +428,8 @@ class EquipmentControllerTest {
     void findById_returns200_forMaintenance()
             throws Exception {
 
-        when(equipmentService.findById(
-                EQUIPMENT_ID))
+        when(equipmentService.findByIdForActor(
+                eq(EQUIPMENT_ID), any(AuthenticatedActor.class)))
                 .thenReturn(sampleDetails());
 
         mockMvc.perform(
@@ -444,8 +450,8 @@ class EquipmentControllerTest {
     void findById_returns200_forReceptionist()
             throws Exception {
 
-        when(equipmentService.findById(
-                EQUIPMENT_ID))
+        when(equipmentService.findByIdForActor(
+                eq(EQUIPMENT_ID), any(AuthenticatedActor.class)))
                 .thenReturn(sampleDetails());
 
         mockMvc.perform(
@@ -466,8 +472,8 @@ class EquipmentControllerTest {
     void findById_returns404_whenNotFound()
             throws Exception {
 
-        when(equipmentService.findById(
-                EQUIPMENT_ID))
+        when(equipmentService.findByIdForActor(
+                eq(EQUIPMENT_ID), any(AuthenticatedActor.class)))
                 .thenThrow(
                         new EquipmentNotFoundException(
                                 EQUIPMENT_ID));
@@ -504,8 +510,9 @@ class EquipmentControllerTest {
     void findAll_returns200_emptyPage()
             throws Exception {
 
-        when(equipmentService.findAll(
-                any(EquipmentSearchQuery.class)))
+        when(equipmentService.findAllForActor(
+                any(EquipmentSearchQuery.class), any(AuthenticatedActor.class),
+                nullable(UUID.class)))
                 .thenReturn(
                         new EquipmentPage(
                                 List.of(),

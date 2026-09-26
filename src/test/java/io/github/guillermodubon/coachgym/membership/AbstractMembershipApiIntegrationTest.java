@@ -26,6 +26,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @AutoConfigureMockMvc
 abstract class AbstractMembershipApiIntegrationTest {
 
+    private static final UUID INITIAL_BRANCH_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002");
+
     protected static final String ADMIN_USERNAME =
             "coach-admin";
 
@@ -391,12 +394,18 @@ abstract class AbstractMembershipApiIntegrationTest {
                     userId);
         }
 
-        jdbcTemplate.update(
-                """
-                delete from gym.user_roles
-                where user_id = ?
-                """,
+        Integer existingScopeCount = jdbcTemplate.queryForObject(
+                "select count(*) from gym.staff_scopes where user_id = ?",
+                Integer.class,
                 userId);
+        if (existingScopeCount == null || existingScopeCount == 0) {
+            jdbcTemplate.update(
+                    """
+                    delete from gym.user_roles
+                    where user_id = ?
+                    """,
+                    userId);
+        }
 
         int roleAssignments =
                 jdbcTemplate.update(
@@ -437,6 +446,37 @@ abstract class AbstractMembershipApiIntegrationTest {
                                 + roleCode
                                 + " was not found.");
             }
+        }
+
+        if ("RECEPTIONIST".equals(roleCode)) {
+            jdbcTemplate.update(
+                    """
+                    insert into gym.staff_scopes (
+                        user_id,
+                        scope_type,
+                        version
+                    ) values (?, 'BRANCH', 0)
+                    on conflict (user_id) do nothing
+                    """,
+                    userId);
+
+            jdbcTemplate.update(
+                    """
+                    insert into gym.staff_branch_assignments (
+                        id,
+                        user_id,
+                        branch_id,
+                        status,
+                        assigned_at,
+                        version
+                    ) values (?, ?, ?, 'ACTIVE', current_timestamp, 0)
+                    on conflict (id) do nothing
+                    """,
+                    UUID.nameUUIDFromBytes(
+                            (userId + ":initial-branch")
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                    userId,
+                    INITIAL_BRANCH_ID);
         }
     }
 

@@ -15,15 +15,21 @@ class IncidentAuditEntryJpaEntityTest {
     private static final UUID INCIDENT_ID = UUID.randomUUID();
     private static final UUID EQUIPMENT_ID = UUID.randomUUID();
     private static final UUID ACTOR_ID = UUID.randomUUID();
+    private static final UUID BRANCH_ID = UUID.randomUUID();
     private static final Instant NOW = Instant.parse("2026-09-03T02:00:00Z");
 
     @Test void mapsReportedEventWithSafeMetadata() {
-        var entity = AuditEntryJpaEntity.from(new IncidentReportedEvent(INCIDENT_ID, "INC-000001", EQUIPMENT_ID, "EQP-000001", IncidentPriority.CRITICAL, true, ACTOR_ID, "admin", NOW));
+        var entity = AuditEntryJpaEntity.from(new IncidentReportedEvent(
+                INCIDENT_ID, "INC-000001", EQUIPMENT_ID, "EQP-000001",
+                IncidentPriority.CRITICAL, true, ACTOR_ID, "admin", NOW, BRANCH_ID));
         assertThat(entity.actionCode()).isEqualTo("INCIDENT_REPORTED");
         assertThat(entity.resourceType()).isEqualTo("INCIDENT");
         assertThat(entity.resourceId()).isEqualTo(INCIDENT_ID);
         assertThat(entity.resourceCodeSnapshot()).isEqualTo("INC-000001");
-        assertThat(entity.metadata()).containsEntry("priority", "CRITICAL").containsEntry("takenOutOfService", true).doesNotContainKeys("description", "resolutionNotes", "reason");
+        assertThat(entity.metadata()).containsEntry("priority", "CRITICAL")
+                .containsEntry("takenOutOfService", true)
+                .containsEntry("branchId", BRANCH_ID.toString())
+                .doesNotContainKeys("description", "resolutionNotes", "reason");
     }
 
     @Test void mapsLifecycleEvents() {

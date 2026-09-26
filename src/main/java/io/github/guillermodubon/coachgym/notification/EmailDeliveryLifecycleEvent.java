@@ -25,7 +25,8 @@ public record EmailDeliveryLifecycleEvent(
         UUID sourceResourceId,
         UUID clientId,
         String maskedRecipient,
-        String actorIdentifier) {
+        String actorIdentifier,
+        UUID branchId) {
 
     /**
      * Compatibility constructor for publishers created before the audit
@@ -46,6 +47,27 @@ public record EmailDeliveryLifecycleEvent(
         this(deliveryId, deliveryType, previousStatus, currentStatus,
                 attemptResult, attemptNumber, failureCode, actorUserId,
                 occurredAt, null, null, null, null);
+    }
+
+    /** Compatibility constructor for the pre-branch audit snapshot shape. */
+    public EmailDeliveryLifecycleEvent(
+            UUID deliveryId,
+            EmailDeliveryType deliveryType,
+            EmailDeliveryStatus previousStatus,
+            EmailDeliveryStatus currentStatus,
+            EmailAttemptResult attemptResult,
+            int attemptNumber,
+            EmailDeliveryFailureCode failureCode,
+            UUID actorUserId,
+            Instant occurredAt,
+            UUID sourceResourceId,
+            UUID clientId,
+            String maskedRecipient,
+            String actorIdentifier) {
+        this(deliveryId, deliveryType, previousStatus, currentStatus,
+                attemptResult, attemptNumber, failureCode, actorUserId,
+                occurredAt, sourceResourceId, clientId, maskedRecipient,
+                actorIdentifier, null);
     }
 
     /**
@@ -86,7 +108,8 @@ public record EmailDeliveryLifecycleEvent(
                 sourceResourceId,
                 clientId,
                 maskedRecipient,
-                actorIdentifier);
+                actorIdentifier,
+                null);
     }
 
     public EmailDeliveryLifecycleEvent {

@@ -8,6 +8,10 @@ import io.github.guillermodubon.coachgym.membership.domain.MembershipFreeze;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipFreezePolicy;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipValidationException;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchOwnedResourceReference;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -15,6 +19,7 @@ import java.time.ZoneId;
 import java.util.UUID;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +32,24 @@ public class MembershipFreezeApplicationService {
     private final ClientQuery clientQuery;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
+    private final BranchOperationContextResolver branchContextResolver;
+
+    @Autowired
+    public MembershipFreezeApplicationService(
+            MembershipStore membershipStore,
+            MembershipFreezeStore freezeStore,
+            ClientQuery clientQuery,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
+
+        this.membershipStore = membershipStore;
+        this.freezeStore = freezeStore;
+        this.clientQuery = clientQuery;
+        this.eventPublisher = eventPublisher;
+        this.clock = clock;
+        this.branchContextResolver = branchContextResolver;
+    }
 
     public MembershipFreezeApplicationService(
             MembershipStore membershipStore,
@@ -34,12 +57,7 @@ public class MembershipFreezeApplicationService {
             ClientQuery clientQuery,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
-
-        this.membershipStore = membershipStore;
-        this.freezeStore = freezeStore;
-        this.clientQuery = clientQuery;
-        this.eventPublisher = eventPublisher;
-        this.clock = clock;
+        this(membershipStore, freezeStore, clientQuery, eventPublisher, clock, null);
     }
 
     @Transactional
@@ -55,7 +73,7 @@ public class MembershipFreezeApplicationService {
         validateActor(actor);
 
         MembershipDetails membership =
-                requireMembership(membershipId);
+                requireMembership(membershipId, actor);
 
         verifyVersion(
                 membershipId,
@@ -110,7 +128,8 @@ public class MembershipFreezeApplicationService {
                         MembershipStatus.FROZEN,
                         actor.id(),
                         actor.username(),
-                        occurredAt));
+                        occurredAt,
+                        frozenMembership.registeredAtBranchId()));
 
         return frozenMembership;
     }
@@ -128,7 +147,7 @@ public class MembershipFreezeApplicationService {
         validateActor(actor);
 
         MembershipDetails membership =
-                requireMembership(membershipId);
+                requireMembership(membershipId, actor);
 
         verifyVersion(
                 membershipId,
@@ -188,7 +207,8 @@ public class MembershipFreezeApplicationService {
                         MembershipStatus.ACTIVE,
                         actor.id(),
                         actor.username(),
-                        occurredAt));
+                        occurredAt,
+                        reactivatedMembership.registeredAtBranchId()));
 
         return reactivatedMembership;
     }
@@ -201,6 +221,20 @@ public class MembershipFreezeApplicationService {
                 .orElseThrow(
                         () -> new MembershipNotFoundException(
                                 membershipId));
+    }
+
+    private MembershipDetails requireMembership(
+            UUID membershipId,
+            AuthenticatedActor actor) {
+        MembershipDetails membership = requireMembership(membershipId);
+        if (branchContextResolver != null && membership.registeredAtBranchId() != null) {
+            BranchOperationContext context = branchContextResolver.resolveOperation(actor.id());
+            BranchResourceAuthorizationPolicy.requireActiveResourceAccess(
+                    context,
+                    new BranchOwnedResourceReference(
+                            membership.id(), context.organizationId(), membership.registeredAtBranchId()));
+        }
+        return membership;
     }
 
     private void ensureClientIsActive(

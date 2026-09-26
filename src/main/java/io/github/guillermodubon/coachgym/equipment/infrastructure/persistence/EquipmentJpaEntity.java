@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -43,6 +44,9 @@ class EquipmentJpaEntity {
 
     @Column(name = "equipment_category_id", nullable = false)
     private UUID categoryId;
+
+    @Column(name = "branch_id", nullable = false, updatable = false)
+    private UUID branchId;
 
     @Column(nullable = false, length = 160)
     private String name;
@@ -106,8 +110,19 @@ class EquipmentJpaEntity {
             EquipmentDefinition definition,
             AuthenticatedActor actor,
             Instant occurredAt) {
+        return register(id, definition, actor, occurredAt,
+                UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002"));
+    }
+
+    static EquipmentJpaEntity register(
+            UUID id,
+            EquipmentDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
         EquipmentJpaEntity entity = new EquipmentJpaEntity();
         entity.id = id;
+        entity.branchId = Objects.requireNonNull(branchId, "Equipment branch is required.");
         entity.status = EquipmentStatus.AVAILABLE;
         entity.createdByUserId = actor.id();
         entity.updatedByUserId = actor.id();
@@ -179,10 +194,12 @@ class EquipmentJpaEntity {
                 updatedByUserId,
                 createdAt,
                 updatedAt,
-                version);
+                version,
+                branchId);
     }
 
     UUID id() { return id; }
+    UUID branchId() { return branchId; }
     String equipmentCode() { return equipmentCode; }
     UUID categoryId() { return categoryId; }
     EquipmentStatus status() { return status; }

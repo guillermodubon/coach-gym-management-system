@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.audit.infrastructure.persistence;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.guillermodubon.coachgym.membership.MembershipCreated;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodCoverageCaptured;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -40,6 +41,40 @@ class MembershipAuditEntryJpaEntityTest {
     private static final Instant NOW =
             Instant.parse(
                     "2026-08-16T21:00:00Z");
+
+    @Test
+    void recordsOnlySafeCoverageSnapshotAuditMetadata() {
+        UUID branchId = UUID.randomUUID();
+        MembershipPeriodCoverageCaptured event = new MembershipPeriodCoverageCaptured(
+                MEMBERSHIP_ID,
+                PERIOD_ID,
+                PLAN_ID,
+                branchId,
+                io.github.guillermodubon.coachgym.plan.MembershipPlanBranchCoverageScope
+                        .ALL_BRANCHES,
+                4,
+                7,
+                ACTOR_ID,
+                "coach-admin",
+                NOW);
+
+        AuditEntryJpaEntity entry = AuditEntryJpaEntity.from(event);
+
+        assertThat(field(entry, "actionCode"))
+                .isEqualTo("MEMBERSHIP_PERIOD_COVERAGE_CAPTURED");
+        assertThat(field(entry, "resourceType")).isEqualTo("MEMBERSHIP_PERIOD");
+        assertThat(field(entry, "resourceId")).isEqualTo(PERIOD_ID);
+        assertThat(metadata(entry))
+                .containsEntry("membershipId", MEMBERSHIP_ID.toString())
+                .containsEntry("membershipPeriodId", PERIOD_ID.toString())
+                .containsEntry("membershipPlanId", PLAN_ID.toString())
+                .containsEntry("branchId", branchId.toString())
+                .containsEntry("coverageScope", "ALL_BRANCHES")
+                .containsEntry("coveredBranchCount", 4)
+                .containsEntry("sourcePlanVersion", 7L)
+                .doesNotContainKey("coveredBranchIds")
+                .doesNotContainKey("clientEmail");
+    }
 
     @Test
     void createsMembershipAuditEntryWithPromotionMetadata() {

@@ -36,7 +36,38 @@ public record PaymentReceiptSnapshot(
         Instant generatedAt,
         UUID generatedByUserId,
         String generatedByDisplayName,
-        boolean testMode) {
+        boolean testMode,
+        UUID branchId) {
+
+    public PaymentReceiptSnapshot(
+            String receiptNumber,
+            UUID paymentId,
+            String paymentCode,
+            PaymentStatus paymentStatus,
+            String clientCode,
+            String clientDisplayName,
+            String membershipCode,
+            String planName,
+            String promotionName,
+            int membershipPeriodNumber,
+            LocalDate periodStartsOn,
+            LocalDate periodEndsOn,
+            BigDecimal listPrice,
+            BigDecimal discountAmount,
+            BigDecimal amount,
+            String currency,
+            PaymentMethod paymentMethod,
+            Instant paidAt,
+            Instant generatedAt,
+            UUID generatedByUserId,
+            String generatedByDisplayName,
+            boolean testMode) {
+        this(receiptNumber, paymentId, paymentCode, paymentStatus, clientCode,
+                clientDisplayName, membershipCode, planName, promotionName,
+                membershipPeriodNumber, periodStartsOn, periodEndsOn, listPrice,
+                discountAmount, amount, currency, paymentMethod, paidAt, generatedAt,
+                generatedByUserId, generatedByDisplayName, testMode, null);
+    }
 
     private static final int MONEY_SCALE = 2;
     private static final int MAX_TEXT_LENGTH = 200;

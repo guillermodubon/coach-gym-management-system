@@ -17,5 +17,17 @@ public record MaintenanceCompletedEvent(
         String currency,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public MaintenanceCompletedEvent(UUID maintenanceId, String maintenanceCode,
+            UUID equipmentId, String equipmentCode, UUID incidentId,
+            MaintenanceStatus previousStatus, MaintenanceStatus newStatus,
+            EquipmentMaintenanceOutcome equipmentOutcome, BigDecimal actualCost,
+            String currency, UUID actorUserId, String actorIdentifier,
+            Instant occurredAt) {
+        this(maintenanceId, maintenanceCode, equipmentId, equipmentCode,
+                incidentId, previousStatus, newStatus, equipmentOutcome, actualCost,
+                currency, actorUserId, actorIdentifier, occurredAt, null);
+    }
 }

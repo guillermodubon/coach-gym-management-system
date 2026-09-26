@@ -18,6 +18,7 @@ import io.github.guillermodubon.coachgym.payment.domain.PaymentValidationExcepti
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -112,9 +113,11 @@ class PaymentController {
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
     @ApiResponse(responseCode = "404", description = "Payment not found")
-    PaymentResponse findById(@PathVariable UUID id) {
+    PaymentResponse findById(
+            @PathVariable UUID id,
+            Authentication authentication) {
         return PaymentResponse.from(
-                paymentApplicationService.findById(id));
+                paymentApplicationService.findById(id, actor(authentication)));
     }
 
     @GetMapping
@@ -124,7 +127,11 @@ class PaymentController {
                     Returns a paginated, filterable list of payments.
 
                     Approved filters: clientId, membershipId, membershipPeriodId,
-                    status, paymentMethod, paidFrom, paidUntil.
+                    status, paymentMethod, paidFrom, paidUntil, and branchId.
+
+                    A branchId filter is available to organization administrators
+                    only for an active branch they are currently authorized to address.
+                    Without it, the selected active branch is required.
 
                     Approved sort fields: PAID_AT (default), AMOUNT, CREATED_AT,
                     UPDATED_AT. Default direction: DESC.
@@ -137,6 +144,8 @@ class PaymentController {
     @ApiResponse(responseCode = "400", description = "Invalid filter or pagination parameters")
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
+    @ApiResponse(responseCode = "404", description = "Requested branch is not available")
+    @ApiResponse(responseCode = "409", description = "No valid active branch is selected")
     PaymentPageResponse findAll(
             @RequestParam(required = false) UUID clientId,
             @RequestParam(required = false) UUID membershipId,
@@ -145,18 +154,21 @@ class PaymentController {
             @RequestParam(required = false) String paymentMethod,
             @RequestParam(required = false) Instant paidFrom,
             @RequestParam(required = false) Instant paidUntil,
+            @Parameter(description = "Optional active branch UUID for organization administrators; other staff are restricted to their active branch")
+            @RequestParam(required = false) UUID branchId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
             @RequestParam(defaultValue = "PAID_AT") String sort,
-            @RequestParam(defaultValue = "DESC") String direction) {
+            @RequestParam(defaultValue = "DESC") String direction,
+            Authentication authentication) {
 
         PaymentSearchQuery query = PaymentSearchQuery.from(
                 clientId, membershipId, membershipPeriodId,
                 status, paymentMethod, paidFrom, paidUntil,
-                page, size, sort, direction);
+                page, size, sort, direction, branchId);
 
         return PaymentPageResponse.from(
-                paymentApplicationService.findAll(query));
+                paymentApplicationService.findAll(query, actor(authentication)));
     }
 
     // ------------------------------------------------------------------

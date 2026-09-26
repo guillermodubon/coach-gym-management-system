@@ -13,6 +13,10 @@ import io.github.guillermodubon.coachgym.client.ClientAccessDetails;
 import io.github.guillermodubon.coachgym.client.ClientAccessQuery;
 import io.github.guillermodubon.coachgym.accesscredential.domain.AccessCredentialPolicy;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchOwnedResourceReference;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -60,6 +64,34 @@ public class AccessCredentialApplicationService {
     private final AccessCredentialStorage storage;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
+
+    public AccessCredentialApplicationService(
+            AccessCredentialStore credentialStore,
+            AccessCredentialQuery credentialQuery,
+            AccessCredentialHistoryStore historyStore,
+            AccessCredentialHistoryQuery historyQuery,
+            ClientAccessQuery clientQuery,
+            AccessCredentialTokenGenerator tokenGenerator,
+            AccessCredentialTokenProtector tokenProtector,
+            AccessCredentialQrRenderer qrRenderer,
+            AccessCredentialStorage storage,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock) {
+        this(
+                credentialStore,
+                credentialQuery,
+                historyStore,
+                historyQuery,
+                clientQuery,
+                tokenGenerator,
+                tokenProtector,
+                qrRenderer,
+                storage,
+                eventPublisher,
+                clock,
+                null);
+    }
 
     @Autowired
     public AccessCredentialApplicationService(
@@ -73,7 +105,8 @@ public class AccessCredentialApplicationService {
             AccessCredentialQrRenderer qrRenderer,
             AccessCredentialStorage storage,
             ApplicationEventPublisher eventPublisher,
-            Clock clock) {
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
         this.credentialStore = Objects.requireNonNull(credentialStore);
         this.credentialQuery = Objects.requireNonNull(credentialQuery);
         this.historyStore = Objects.requireNonNull(historyStore);
@@ -85,6 +118,7 @@ public class AccessCredentialApplicationService {
         this.storage = Objects.requireNonNull(storage);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.clock = Objects.requireNonNull(clock);
+        this.branchContextResolver = branchContextResolver;
     }
 
     /**
@@ -110,6 +144,7 @@ public class AccessCredentialApplicationService {
             throw new AccessCredentialDataAccessException(
                     "Client access projection does not match the requested client.", null);
         }
+        UUID branchId = authorizeClientBranch(client, actor);
         AccessCredentialPolicy.requireIssueAllowed(client.id(), client.status());
 
         Optional<AccessCredentialDetails> existing =
@@ -138,7 +173,8 @@ public class AccessCredentialApplicationService {
                     prepared.tokenSchemeVersion(),
                     actor.id(),
                     actor.username(),
-                    persisted.issuedAt()),
+                    persisted.issuedAt(),
+                    branchId),
                     prepared.storageKey());
             return persisted;
         } catch (AccessCredentialDuplicateException duplicate) {
@@ -172,25 +208,56 @@ public class AccessCredentialApplicationService {
                 .orElseThrow(() -> new AccessCredentialNotFoundException(clientId));
     }
 
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public AccessCredentialDetails findActiveByClientId(
+            UUID clientId,
+            AuthenticatedActor actor) {
+        requireActor(actor);
+        authorizeClientBranch(clientId, actor);
+        return findActiveByClientId(clientId);
+    }
+
     /**
      * Loads the canonical active PNG after checking persisted artifact metadata.
      * The raw token is never reconstructed from the database.
      */
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public AccessCredentialContent downloadActiveByClientId(UUID clientId) {
+        requireLegacyDownloadAllowed();
         requireIdentifier(clientId, "Client id");
-        return downloadActive(clientId);
+        return downloadActive(clientId, null);
+    }
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public AccessCredentialContent downloadActiveByClientId(
+            UUID clientId,
+            AuthenticatedActor actor) {
+        requireActor(actor);
+        authorizeClientBranch(clientId, actor);
+        return downloadActive(clientId, actor);
     }
 
     /** Compatibility name for callers that address downloads by client. */
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public AccessCredentialContent downloadByClientId(UUID clientId) {
+        requireLegacyDownloadAllowed();
         requireIdentifier(clientId, "Client id");
-        return downloadActive(clientId);
+        return downloadActive(clientId, null);
     }
 
-    private AccessCredentialContent downloadActive(UUID clientId) {
-        AccessCredentialDetails details = findActiveByClientId(clientId);
+    private void requireLegacyDownloadAllowed() {
+        if (branchContextResolver != null) {
+            throw new io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException();
+        }
+    }
+
+    private AccessCredentialContent downloadActive(
+            UUID clientId,
+            AuthenticatedActor actor) {
+        AccessCredentialDetails details = actor == null
+                ? findActiveByClientId(clientId)
+                : findActiveByClientId(clientId, actor);
         AccessCredentialStoredDocument metadata = credentialQuery
                 .findArtifactByCredentialId(details.id())
                 .orElseThrow(() -> new AccessCredentialDataAccessException(
@@ -220,12 +287,14 @@ public class AccessCredentialApplicationService {
                     "Access credential revoke command is required.");
         }
         requireActor(actor);
-        AccessCredentialDetails current = loadCurrentForClient(command.clientId());
+        UUID branchId = authorizeClientBranch(command.clientId(), actor);
+        AccessCredentialDetails current = loadCurrentForClient(command.clientId(), actor);
         return revokeLocked(
                 new RevokeAccessCredentialCommand(
                         current.id(), command.reason(), command.expectedVersion()),
                 actor,
-                current);
+                current,
+                branchId);
     }
 
     /** Revokes an active credential while preserving its immutable PNG artifact. */
@@ -245,16 +314,18 @@ public class AccessCredentialApplicationService {
         // target the same client concurrently.
         AccessCredentialDetails hint = credentialQuery.findById(command.credentialId())
                 .orElseThrow(() -> new AccessCredentialNotFoundException(command.credentialId()));
+        UUID branchId = authorizeClientBranch(hint.clientId(), actor);
         credentialStore.lockClientForLifecycle(hint.clientId());
         AccessCredentialDetails current = credentialStore.findByIdForUpdate(command.credentialId())
                 .orElseThrow(() -> new AccessCredentialNotFoundException(command.credentialId()));
-        return revokeLocked(command, actor, current);
+        return revokeLocked(command, actor, current, branchId);
     }
 
     private AccessCredentialDetails revokeLocked(
             RevokeAccessCredentialCommand command,
             AuthenticatedActor actor,
-            AccessCredentialDetails current) {
+            AccessCredentialDetails current,
+            UUID branchId) {
         AccessCredentialPolicy.requireRevocationAllowed(current.id(), current.status());
         Instant revokedAt = serverNow();
         AccessCredentialDetails revoked = credentialStore.revoke(
@@ -286,7 +357,8 @@ public class AccessCredentialApplicationService {
                 actor.id(),
                 actor.username(),
                 revoked.revokedAt(),
-                true));
+                true,
+                branchId));
         return revoked;
     }
 
@@ -305,12 +377,14 @@ public class AccessCredentialApplicationService {
                     "Access credential replacement command is required.");
         }
         requireActor(actor);
-        AccessCredentialDetails current = loadCurrentForClient(command.clientId());
+        UUID branchId = authorizeClientBranch(command.clientId(), actor);
+        AccessCredentialDetails current = loadCurrentForClient(command.clientId(), actor);
         return replaceLocked(
                 new ReplaceAccessCredentialCommand(
                         current.id(), command.reason(), command.expectedVersion()),
                 actor,
-                current);
+                current,
+                branchId);
     }
 
     /**
@@ -331,16 +405,18 @@ public class AccessCredentialApplicationService {
 
         AccessCredentialDetails hint = credentialQuery.findById(command.credentialId())
                 .orElseThrow(() -> new AccessCredentialNotFoundException(command.credentialId()));
+        UUID branchId = authorizeClientBranch(hint.clientId(), actor);
         credentialStore.lockClientForLifecycle(hint.clientId());
         AccessCredentialDetails current = credentialStore.findByIdForUpdate(command.credentialId())
                 .orElseThrow(() -> new AccessCredentialNotFoundException(command.credentialId()));
-        return replaceLocked(command, actor, current);
+        return replaceLocked(command, actor, current, branchId);
     }
 
     private AccessCredentialDetails replaceLocked(
             ReplaceAccessCredentialCommand command,
             AuthenticatedActor actor,
-            AccessCredentialDetails current) {
+            AccessCredentialDetails current,
+            UUID branchId) {
         AccessCredentialPolicy.requireReplacementAllowed(current.id(), current.status());
 
         Instant replacedAt = serverNow();
@@ -393,7 +469,8 @@ public class AccessCredentialApplicationService {
                     actor.id(),
                     actor.username(),
                     replacedAt,
-                    true),
+                    true,
+                    branchId),
                     prepared.storageKey());
             return replacement;
         } catch (RuntimeException failure) {
@@ -417,8 +494,23 @@ public class AccessCredentialApplicationService {
         return historyQuery.findByClientId(clientId, page, size);
     }
 
-    private AccessCredentialDetails loadCurrentForClient(UUID clientId) {
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public AccessCredentialHistoryPage findHistoryByClientId(
+            UUID clientId,
+            int page,
+            int size,
+            AuthenticatedActor actor) {
+        requireActor(actor);
+        authorizeClientBranch(clientId, actor);
+        return findHistoryByClientId(clientId, page, size);
+    }
+
+    private AccessCredentialDetails loadCurrentForClient(
+            UUID clientId,
+            AuthenticatedActor actor) {
         requireIdentifier(clientId, "Client id");
+        authorizeClientBranch(clientId, actor);
         credentialStore.lockClientForLifecycle(clientId);
         return credentialStore.findActiveByClientIdForUpdate(clientId)
                 .orElseGet(() -> credentialStore.findLatestByClientIdForUpdate(clientId)
@@ -620,6 +712,44 @@ public class AccessCredentialApplicationService {
             throw new AccessCredentialDataAccessException(
                     "Stored access credential does not match its metadata.", null);
         }
+    }
+
+    private UUID authorizeClientBranch(
+            UUID clientId,
+            AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        ClientAccessDetails client = clientQuery.findById(clientId)
+                .orElseThrow(() -> new AccessCredentialClientNotFoundException(clientId));
+        if (!clientId.equals(client.id())) {
+            throw new AccessCredentialDataAccessException(
+                    "Client access projection does not match the requested client.", null);
+        }
+        return authorizeClientBranch(client, actor);
+    }
+
+    private UUID authorizeClientBranch(
+            ClientAccessDetails client,
+            AuthenticatedActor actor) {
+        if (branchContextResolver == null || client.homeBranchId() == null) {
+            return client.homeBranchId();
+        }
+        BranchOperationContext context = branchContextResolver.resolveOperation(actor.id());
+        BranchOwnedResourceReference resource = new BranchOwnedResourceReference(
+                client.id(),
+                context.organizationId(),
+                client.homeBranchId());
+        if (context.organizationWide()) {
+            BranchResourceAuthorizationPolicy.requireOrganizationResourceAccess(
+                    context,
+                    resource);
+        } else {
+            BranchResourceAuthorizationPolicy.requireActiveResourceAccess(
+                    context,
+                    resource);
+        }
+        return client.homeBranchId();
     }
 
     private static void requireHistory(AccessCredentialHistoryDetails history) {

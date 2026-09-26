@@ -43,6 +43,42 @@ class AccessPaymentPolicyOpenApiIntegrationTest extends AbstractIncidentApiInteg
                         .doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.AccessPaymentPolicyResponse.properties"
                         + ".updatedByUserId").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/plans/{id}/branch-coverage'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/plans/{id}/branch-coverage'].put").exists())
+                .andExpect(jsonPath("$.paths['/api/v1/plans/{id}/branch-coverage'].get.security[0].sessionCookie")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/api/v1/plans/{id}/branch-coverage'].put.description",
+                        containsString("CSRF")))
+                .andExpect(jsonPath("$.components.schemas.UpdatePlanBranchCoverageRequest.properties.scope")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.UpdatePlanBranchCoverageRequest.properties.branchIds")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.UpdatePlanBranchCoverageRequest.properties.expectedVersion")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.UpdatePlanBranchCoverageRequest.properties.actor")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/v1/plans'].get.description",
+                        containsString("active branch")))
+                .andExpect(jsonPath("$.components.schemas.MembershipPeriodCoverageResponse.properties.scopeSnapshot")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.MembershipPeriodCoverageResponse.properties.coveredBranchCount")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.MembershipPeriodCoverageResponse.properties.branchIds")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/v1/branches/{branchId}/access-payment-policy'].get")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/api/v1/branches/{branchId}/access-payment-policy'].put")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/api/v1/branches/{branchId}/access-payment-policy'].delete")
+                        .exists())
+                .andExpect(jsonPath("$.paths['/api/v1/branches/{branchId}/access-payment-policy'].get.security[0].sessionCookie")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.BranchAccessPolicyResponse.properties.branchMode")
+                        .exists())
+                .andExpect(jsonPath("$.components.schemas.BranchAccessPolicyResponse.properties.organizationDefaultRequiresConfirmedPayment")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.AccessRecordResponse.properties.reason.description",
+                        containsString("server-generated")))
                 .andExpect(content().string(not(containsString("stripeSecretKey"))));
     }
 }

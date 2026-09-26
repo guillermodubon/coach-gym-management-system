@@ -17,7 +17,17 @@ public record PaymentReceiptGenerated(
         UUID generatedByUserId,
         String actorIdentifier,
         boolean testMode,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public PaymentReceiptGenerated(UUID receiptId, String receiptNumber,
+            UUID paymentId, String paymentCode, PaymentStatus paymentStatus,
+            BigDecimal amount, String currency, UUID generatedByUserId,
+            String actorIdentifier, boolean testMode, Instant occurredAt) {
+        this(receiptId, receiptNumber, paymentId, paymentCode, paymentStatus,
+                amount, currency, generatedByUserId, actorIdentifier, testMode,
+                occurredAt, null);
+    }
 
     public PaymentReceiptGenerated {
         if (receiptId == null || paymentId == null || generatedByUserId == null) {

@@ -24,7 +24,8 @@ public record AccessRecordResponse(
         AccessReasonCode reasonCode,
         String reason,
         Instant checkedInAt,
-        UUID processedByUserId) {
+        UUID processedByUserId,
+        UUID branchId) {
 
     public static AccessRecordResponse from(
             AccessRecordDetails details) {
@@ -45,7 +46,8 @@ public record AccessRecordResponse(
                 details.reasonCode(),
                 details.reason(),
                 details.checkedInAt(),
-                details.processedByUserId());
+                details.processedByUserId(),
+                details.branchId());
     }
 }
 

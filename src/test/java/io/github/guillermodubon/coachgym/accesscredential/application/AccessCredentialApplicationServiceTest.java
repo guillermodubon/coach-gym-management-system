@@ -22,6 +22,10 @@ import io.github.guillermodubon.coachgym.client.ClientAccessDetails;
 import io.github.guillermodubon.coachgym.client.ClientAccessQuery;
 import io.github.guillermodubon.coachgym.client.ClientStatus;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException;
+import io.github.guillermodubon.coachgym.user.StaffScopeType;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
@@ -29,6 +33,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.HexFormat;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,6 +76,7 @@ class AccessCredentialApplicationServiceTest {
     @Mock private AccessCredentialQrRenderer qrRenderer;
     @Mock private AccessCredentialStorage storage;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private BranchOperationContextResolver branchContextResolver;
 
     private AccessCredentialApplicationService service;
     private AccessCredentialDocument document;
@@ -451,6 +457,35 @@ class AccessCredentialApplicationServiceTest {
     }
 
     @Test
+    void branchScopedDownloadRejectsCrossBranchClientBeforeReadingArtifactOrStorage() {
+        UUID activeBranchId = UUID.randomUUID();
+        UUID clientHomeBranchId = UUID.randomUUID();
+        UUID organizationId = UUID.randomUUID();
+        given(clientQuery.findById(CLIENT_ID)).willReturn(Optional.of(
+                new ClientAccessDetails(
+                        CLIENT_ID, "CLI-000001", ClientStatus.ACTIVE, clientHomeBranchId)));
+        given(branchContextResolver.resolveOperation(ACTOR_ID)).willReturn(
+                new BranchOperationContext(
+                        ACTOR_ID, organizationId, StaffScopeType.BRANCH,
+                        activeBranchId, Set.of(activeBranchId)));
+
+        assertThatThrownBy(() -> branchAwareService()
+                .downloadActiveByClientId(CLIENT_ID, ACTOR))
+                .isInstanceOf(BranchResourceAuthorizationException.class);
+
+        verifyNoInteractions(credentialQuery, storage);
+    }
+
+    @Test
+    void branchAwareServiceRejectsLegacyActorlessDownloadBeforeAnyLookup() {
+        assertThatThrownBy(() -> branchAwareService()
+                .downloadActiveByClientId(CLIENT_ID))
+                .isInstanceOf(BranchResourceAuthorizationException.class);
+
+        verifyNoInteractions(clientQuery, credentialQuery, storage);
+    }
+
+    @Test
     void lifecycleMethodsDeclareTransactionsAndTheBlueprintRoleMatrix() throws Exception {
         var issue = AccessCredentialApplicationService.class.getMethod(
                 "issue", IssueAccessCredentialCommand.class, AuthenticatedActor.class);
@@ -540,6 +575,22 @@ class AccessCredentialApplicationServiceTest {
 
     private static ClientAccessDetails activeClient() {
         return new ClientAccessDetails(CLIENT_ID, "CLI-000001", ClientStatus.ACTIVE);
+    }
+
+    private AccessCredentialApplicationService branchAwareService() {
+        return new AccessCredentialApplicationService(
+                credentialStore,
+                credentialQuery,
+                historyStore,
+                historyQuery,
+                clientQuery,
+                tokenGenerator,
+                tokenProtector,
+                qrRenderer,
+                storage,
+                eventPublisher,
+                Clock.fixed(NOW, ZoneOffset.UTC),
+                branchContextResolver);
     }
 
     private static AccessCredentialStoredDocument storedDocumentFor(String storageKey) {

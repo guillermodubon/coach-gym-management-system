@@ -51,8 +51,10 @@ class ClientPhotoController {
     @Operation(
             summary = "Download a client photo",
             security = @SecurityRequirement(name = "sessionCookie"))
-    ResponseEntity<byte[]> load(@PathVariable UUID clientId) {
-        ClientPhotoContent content = service.load(clientId);
+    ResponseEntity<byte[]> load(
+            @PathVariable UUID clientId,
+            Authentication authentication) {
+        ClientPhotoContent content = service.load(clientId, actor(authentication));
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(content.contentType()))
                 .cacheControl(CacheControl.noCache().cachePrivate())
@@ -68,8 +70,9 @@ class ClientPhotoController {
             security = @SecurityRequirement(name = "sessionCookie"))
     ResponseEntity<Void> delete(
             @PathVariable UUID clientId,
-            @RequestParam long version) {
-        service.delete(clientId, version);
+            @RequestParam long version,
+            Authentication authentication) {
+        service.delete(clientId, version, actor(authentication));
         return ResponseEntity.noContent().build();
     }
 

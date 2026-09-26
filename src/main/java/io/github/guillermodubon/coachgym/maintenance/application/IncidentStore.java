@@ -19,9 +19,25 @@ public interface IncidentStore {
             AuthenticatedActor actor,
             Instant occurredAt);
 
+    default IncidentDetails report(
+            IncidentDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
+        return report(definition, actor, occurredAt);
+    }
+
     Optional<IncidentDetails> findById(UUID incidentId);
 
+    default Optional<IncidentDetails> findById(UUID incidentId, UUID branchId) {
+        return findById(incidentId);
+    }
+
     IncidentPage findAll(IncidentSearchQuery query);
+
+    default IncidentPage findAll(IncidentSearchQuery query, UUID branchId) {
+        return findAll(query);
+    }
 
     IncidentDetails transitionStatus(
             UUID incidentId,
@@ -40,4 +56,9 @@ public interface IncidentStore {
 
     List<IncidentStatusHistoryDetails> findStatusHistory(
             UUID incidentId);
+
+    default List<IncidentStatusHistoryDetails> findStatusHistory(
+            UUID incidentId, UUID branchId) {
+        return findStatusHistory(incidentId);
+    }
 }

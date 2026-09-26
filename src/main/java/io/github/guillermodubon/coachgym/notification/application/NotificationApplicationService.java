@@ -3,11 +3,15 @@ package io.github.guillermodubon.coachgym.notification.application;
 import io.github.guillermodubon.coachgym.notification.NotificationDetails;
 import io.github.guillermodubon.coachgym.notification.NotificationUnreadCount;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,13 +21,23 @@ public class NotificationApplicationService {
 
     private final NotificationStore notificationStore;
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
 
     public NotificationApplicationService(
             NotificationStore notificationStore,
             Clock clock) {
+        this(notificationStore, clock, null);
+    }
+
+    @Autowired
+    public NotificationApplicationService(
+            NotificationStore notificationStore,
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
         this.notificationStore = Objects.requireNonNull(
                 notificationStore, "Notification store is required.");
         this.clock = Objects.requireNonNull(clock, "Application clock is required.");
+        this.branchContextResolver = branchContextResolver;
     }
 
     @Transactional(readOnly = true)
@@ -32,9 +46,12 @@ public class NotificationApplicationService {
             NotificationSearchQuery query,
             AuthenticatedActor actor) {
         requireActor(actor);
-        return notificationStore.findAllByRecipientUserId(
-                actor.id(),
-                Objects.requireNonNull(query, "Notification search query is required."));
+        UUID branchId = branchId(actor);
+        return branchContextResolver == null
+                ? notificationStore.findAllByRecipientUserId(
+                        actor.id(), Objects.requireNonNull(query, "Notification search query is required."))
+                : notificationStore.findAllByRecipientUserId(
+                        actor.id(), Objects.requireNonNull(query, "Notification search query is required."), branchId);
     }
 
     @Transactional(readOnly = true)
@@ -44,7 +61,11 @@ public class NotificationApplicationService {
             AuthenticatedActor actor) {
         requireId(notificationId);
         requireActor(actor);
-        return notificationStore.findByIdAndRecipientUserId(notificationId, actor.id())
+        Optional<NotificationDetails> details = branchContextResolver == null
+                ? notificationStore.findByIdAndRecipientUserId(notificationId, actor.id())
+                : notificationStore.findByIdAndRecipientUserId(
+                        notificationId, actor.id(), branchId(actor));
+        return details
                 .orElseThrow(() -> new NotificationNotFoundException(notificationId));
     }
 
@@ -53,7 +74,10 @@ public class NotificationApplicationService {
     public NotificationUnreadCount countUnread(AuthenticatedActor actor) {
         requireActor(actor);
         return new NotificationUnreadCount(
-                notificationStore.countUnreadByRecipientUserId(actor.id()));
+                branchContextResolver == null
+                        ? notificationStore.countUnreadByRecipientUserId(actor.id())
+                        : notificationStore.countUnreadByRecipientUserId(
+                                actor.id(), branchId(actor)));
     }
 
     @Transactional
@@ -63,16 +87,24 @@ public class NotificationApplicationService {
             AuthenticatedActor actor) {
         requireId(notificationId);
         requireActor(actor);
-        return notificationStore.markAsRead(notificationId, actor.id(), now());
+        return branchContextResolver == null
+                ? notificationStore.markAsRead(notificationId, actor.id(), now())
+                : notificationStore.markAsRead(
+                        notificationId, actor.id(), now(), branchId(actor));
     }
 
     @Transactional
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public NotificationUnreadCount markAllAsRead(AuthenticatedActor actor) {
         requireActor(actor);
-        notificationStore.markAllAsRead(actor.id(), now());
+        int ignored = branchContextResolver == null
+                ? notificationStore.markAllAsRead(actor.id(), now())
+                : notificationStore.markAllAsRead(actor.id(), now(), branchId(actor));
         return new NotificationUnreadCount(
-                notificationStore.countUnreadByRecipientUserId(actor.id()));
+                branchContextResolver == null
+                        ? notificationStore.countUnreadByRecipientUserId(actor.id())
+                        : notificationStore.countUnreadByRecipientUserId(
+                                actor.id(), branchId(actor)));
     }
 
     private static void requireId(UUID notificationId) {
@@ -90,5 +122,13 @@ public class NotificationApplicationService {
 
     private Instant now() {
         return clock.instant();
+    }
+
+    private UUID branchId(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(
+                branchContextResolver.resolveOperation(actor.id()));
     }
 }

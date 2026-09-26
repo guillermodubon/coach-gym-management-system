@@ -15,5 +15,22 @@ public record ClientDetails(
         ClientStatus status,
         Instant createdAt,
         Instant updatedAt,
-        EmergencyContactDetails emergencyContact) {
+        EmergencyContactDetails emergencyContact,
+        UUID homeBranchId) {
+
+    public ClientDetails(
+            UUID id,
+            String clientCode,
+            String firstName,
+            String lastName,
+            String email,
+            String phone,
+            LocalDate dateOfBirth,
+            ClientStatus status,
+            Instant createdAt,
+            Instant updatedAt,
+            EmergencyContactDetails emergencyContact) {
+        this(id, clientCode, firstName, lastName, email, phone, dateOfBirth,
+                status, createdAt, updatedAt, emergencyContact, null);
+    }
 }

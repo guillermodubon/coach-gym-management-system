@@ -24,6 +24,7 @@ class JdbcPaymentCorrectionQuery implements PaymentCorrectionQuery {
 
     static final String SQL = """
             select p.id, p.payment_code, p.status, p.version,
+                   p.registered_at_branch_id,
                    h.reason, h.occurred_at, h.changed_by_user_id,
                    r.id as refund_id, r.amount as refund_amount,
                    r.currency as refund_currency, r.reason as refund_reason,
@@ -52,11 +53,20 @@ class JdbcPaymentCorrectionQuery implements PaymentCorrectionQuery {
     @Override
     @Transactional(readOnly = true)
     public Optional<PaymentCorrectionDetails> findByPaymentId(UUID paymentId) {
+        return findByPaymentId(paymentId, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<PaymentCorrectionDetails> findByPaymentId(
+            UUID paymentId, UUID branchId) {
         Objects.requireNonNull(paymentId, "Payment id is required.");
         try {
             List<PaymentCorrectionDetails> rows = jdbcTemplate.query(
-                    SQL,
-                    new MapSqlParameterSource("paymentId", paymentId),
+                    SQL + " and (CAST(:branchId AS uuid) is null or p.registered_at_branch_id = :branchId)",
+                    new MapSqlParameterSource()
+                            .addValue("paymentId", paymentId)
+                            .addValue("branchId", branchId),
                     JdbcPaymentCorrectionQuery::mapCorrection);
             return rows.stream().findFirst();
         } catch (DataAccessException exception) {
@@ -82,7 +92,8 @@ class JdbcPaymentCorrectionQuery implements PaymentCorrectionQuery {
                     rs.getString("reason"),
                     occurredAt.toInstant(),
                     actorId,
-                    rs.getLong("version"));
+                    rs.getLong("version"),
+                    rs.getObject("registered_at_branch_id", UUID.class));
         }
 
         PaymentRefundDetails refund = new PaymentRefundDetails(
@@ -105,6 +116,7 @@ class JdbcPaymentCorrectionQuery implements PaymentCorrectionQuery {
                 occurredAt.toInstant(),
                 actorId,
                 rs.getLong("version"),
-                refund);
+                refund,
+                rs.getObject("registered_at_branch_id", UUID.class));
     }
 }

@@ -22,7 +22,8 @@ public record PaymentResponse(
         UUID registeredByUserId,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID registeredAtBranchId) {
 
     static PaymentResponse from(PaymentDetails details) {
         return new PaymentResponse(
@@ -40,6 +41,7 @@ public record PaymentResponse(
                 details.registeredByUserId(),
                 details.createdAt(),
                 details.updatedAt(),
-                details.version());
+                details.version(),
+                details.registeredAtBranchId());
     }
 }

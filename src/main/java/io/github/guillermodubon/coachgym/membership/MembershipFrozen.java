@@ -19,7 +19,26 @@ public record MembershipFrozen(
         MembershipStatus resultingStatus,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public MembershipFrozen(
+            UUID membershipId,
+            String membershipCode,
+            UUID clientId,
+            UUID membershipPeriodId,
+            LocalDate startsOn,
+            LocalDate plannedEndsOn,
+            String reason,
+            MembershipStatus previousStatus,
+            MembershipStatus resultingStatus,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+        this(membershipId, membershipCode, clientId, membershipPeriodId,
+                startsOn, plannedEndsOn, reason, previousStatus, resultingStatus,
+                actorUserId, actorIdentifier, occurredAt, null);
+    }
 
     public MembershipFrozen {
         if (membershipId == null) {
@@ -96,4 +115,6 @@ public record MembershipFrozen(
         reason = reason.trim();
         actorIdentifier = actorIdentifier.trim();
     }
+
+    public UUID registeredAtBranchId() { return branchId; }
 }

@@ -87,8 +87,9 @@ class ClientAccessQueryAdapterTest {
     }
 
     @Test
-    void projectionHasExactlyThreeComponentsAndNoPersonalData() {
-        // ClientAccessDetails only has id, clientCode, status — no PII.
+    void projectionIncludesOnlyAccessIdentityAndBranchOwnership() {
+        // ClientAccessDetails carries only access identity, status, and the
+        // server-owned home branch — never personal data.
         // If the record were to add email/phone fields this assertion would
         // fail, forcing a deliberate review of the minimal-projection contract.
         ClientJpaEntity entity = activeClientEntity();
@@ -98,9 +99,10 @@ class ClientAccessQueryAdapterTest {
 
         ClientAccessDetails details = adapter.findByCode("CLI-000001").orElseThrow();
 
-        assertThat(details.getClass().getRecordComponents()).hasSize(3);
+        assertThat(details.getClass().getRecordComponents()).hasSize(4);
         assertThat(details.id()).isNotNull();
         assertThat(details.status()).isEqualTo(ClientStatus.ACTIVE);
+        assertThat(details.homeBranchId()).isNull();
         // clientCode is null in unit tests (DB-generated column, no DB round-trip)
     }
 

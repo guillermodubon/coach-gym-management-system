@@ -44,6 +44,9 @@ class MaintenanceJpaEntity {
     @Column(name = "equipment_id", nullable = false, updatable = false)
     private UUID equipmentId;
 
+    @Column(name = "branch_id", nullable = false, updatable = false)
+    private UUID branchId;
+
     @Column(name = "incident_id", updatable = false)
     private UUID incidentId;
 
@@ -120,6 +123,15 @@ class MaintenanceJpaEntity {
             MaintenanceDefinition definition,
             AuthenticatedActor actor,
             Instant occurredAt) {
+        return schedule(definition, actor, occurredAt,
+                UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002"));
+    }
+
+    static MaintenanceJpaEntity schedule(
+            MaintenanceDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
         Objects.requireNonNull(definition, "Maintenance definition is required.");
         Objects.requireNonNull(actor, "Authenticated actor is required.");
         Objects.requireNonNull(occurredAt, "Occurrence timestamp is required.");
@@ -127,6 +139,7 @@ class MaintenanceJpaEntity {
         MaintenanceJpaEntity entity = new MaintenanceJpaEntity();
         entity.id = UUID.randomUUID();
         entity.equipmentId = definition.equipmentId();
+        entity.branchId = Objects.requireNonNull(branchId, "Maintenance branch is required.");
         entity.incidentId = definition.incidentId();
         entity.maintenanceType = definition.maintenanceType();
         entity.status = MaintenanceStatus.SCHEDULED;
@@ -211,7 +224,8 @@ class MaintenanceJpaEntity {
     MaintenanceDetails toDetails(
             String equipmentCode,
             String equipmentName,
-            String incidentCode) {
+            String incidentCode,
+            UUID branchId) {
         return new MaintenanceDetails(
                 id,
                 maintenanceNumber == null ? 0L : maintenanceNumber,
@@ -238,7 +252,8 @@ class MaintenanceJpaEntity {
                 completedByUserId,
                 createdAt,
                 updatedAt,
-                version);
+                version,
+                branchId);
     }
 
     private void requireVersion(long expectedVersion) {
@@ -264,6 +279,7 @@ class MaintenanceJpaEntity {
 
     UUID id() { return id; }
     UUID equipmentId() { return equipmentId; }
+    UUID branchId() { return branchId; }
     UUID incidentId() { return incidentId; }
     MaintenanceStatus status() { return status; }
     long version() { return version; }

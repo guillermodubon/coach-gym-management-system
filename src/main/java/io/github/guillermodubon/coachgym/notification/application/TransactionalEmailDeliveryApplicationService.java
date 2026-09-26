@@ -17,6 +17,9 @@ import io.github.guillermodubon.coachgym.notification.domain.EmailDeliveryLifecy
 import io.github.guillermodubon.coachgym.notification.domain.EmailDeliveryValidationException;
 import io.github.guillermodubon.coachgym.notification.domain.EmailDeliveryValuePolicy;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.ActiveBranchContextUnavailableException;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -49,6 +52,7 @@ public class TransactionalEmailDeliveryApplicationService {
     private final EmailDeliveryLifecyclePolicy lifecyclePolicy;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
 
     @Autowired
     public TransactionalEmailDeliveryApplicationService(
@@ -59,7 +63,8 @@ public class TransactionalEmailDeliveryApplicationService {
             EmailDeliveryQuery deliveryQuery,
             EmailDeliveryLifecyclePolicy lifecyclePolicy,
             ApplicationEventPublisher eventPublisher,
-            Clock clock) {
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
         this.sourceResolver = Objects.requireNonNull(
                 sourceResolver, "Email delivery source resolver is required.");
         this.composer = Objects.requireNonNull(composer, "Email composer is required.");
@@ -73,6 +78,7 @@ public class TransactionalEmailDeliveryApplicationService {
         this.eventPublisher = Objects.requireNonNull(
                 eventPublisher, "Email lifecycle event publisher is required.");
         this.clock = Objects.requireNonNull(clock, "Application clock is required.");
+        this.branchContextResolver = branchContextResolver;
     }
 
     /** Convenience constructor using the domain default retry bound. */
@@ -85,7 +91,20 @@ public class TransactionalEmailDeliveryApplicationService {
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this(sourceResolver, composer, sender, deliveryStore, deliveryQuery,
-                new EmailDeliveryLifecyclePolicy(), eventPublisher, clock);
+                new EmailDeliveryLifecyclePolicy(), eventPublisher, clock, null);
+    }
+
+    public TransactionalEmailDeliveryApplicationService(
+            EmailDeliverySourceResolver sourceResolver,
+            EmailComposer composer,
+            EmailSender sender,
+            EmailDeliveryStore deliveryStore,
+            EmailDeliveryQuery deliveryQuery,
+            EmailDeliveryLifecyclePolicy lifecyclePolicy,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock) {
+        this(sourceResolver, composer, sender, deliveryStore, deliveryQuery,
+                lifecyclePolicy, eventPublisher, clock, null);
     }
 
     /** Requests the canonical receipt email for a confirmed payment. */
@@ -95,9 +114,11 @@ public class TransactionalEmailDeliveryApplicationService {
             AuthenticatedActor actor) {
         requireCommand(command, "Payment receipt email command");
         requireActor(actor);
+        UUID branchId = branchId(actor);
         EmailDeliverySource source = sourceResolver.resolvePaymentReceiptForPayment(
                 command.paymentId());
-        return requestCanonical(source, actor.id(), actor.username());
+        requireBranch(source.branchId(), branchId);
+        return requestCanonical(withBranch(source, branchId), actor.id(), actor.username());
     }
 
     /** Requests the current canonical access credential email for a client. */
@@ -107,9 +128,11 @@ public class TransactionalEmailDeliveryApplicationService {
             AuthenticatedActor actor) {
         requireCommand(command, "Access credential email command");
         requireActor(actor);
+        UUID branchId = branchId(actor);
         EmailDeliverySource source = sourceResolver.resolveCurrentAccessCredentialForClient(
                 command.clientId());
-        return requestCanonical(source, actor.id(), actor.username());
+        requireBranch(source.branchId(), branchId);
+        return requestCanonical(withBranch(source, branchId), actor.id(), actor.username());
     }
 
     /** Retries one failed delivery using its persisted server-owned snapshots. */
@@ -120,12 +143,18 @@ public class TransactionalEmailDeliveryApplicationService {
         requireCommand(command, "Email delivery retry command");
         requireActor(actor);
 
-        EmailDeliveryDetails delivery = deliveryQuery.findById(command.deliveryId())
+        UUID branchId = branchId(actor);
+        EmailDeliveryDetails delivery = (branchContextResolver == null
+                ? deliveryQuery.findById(command.deliveryId())
+                : deliveryQuery.findById(command.deliveryId(), branchId))
                 .orElseThrow(() -> new EmailDeliveryNotFoundException(command.deliveryId()));
         lifecyclePolicy.requireRetryAllowed(delivery, command.expectedVersion());
 
         EmailDeliverySource resolved = sourceResolver.resolve(
                 delivery.deliveryType(), delivery.sourceResourceId());
+        requireBranch(delivery.branchId(), branchId);
+        requireBranch(resolved.branchId(), delivery.branchId());
+        resolved = withBranch(resolved, delivery.branchId());
         validateRetrySource(delivery, resolved);
         EmailDeliverySource retrySource = withPersistedRecipient(delivery, resolved);
         ComposedEmail composed = composeSafely(retrySource);
@@ -144,6 +173,17 @@ public class TransactionalEmailDeliveryApplicationService {
                 .orElseThrow(() -> new EmailDeliveryNotFoundException(deliveryId));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public EmailDeliveryDetails findById(
+            UUID deliveryId, AuthenticatedActor actor) {
+        requireActor(actor);
+        if (deliveryId == null) {
+            throw new EmailDeliveryValidationException("Email delivery id is required.");
+        }
+        return deliveryQuery.findById(deliveryId, branchId(actor))
+                .orElseThrow(() -> new EmailDeliveryNotFoundException(deliveryId));
+    }
+
     /** Returns bounded, allowlisted operational delivery history. */
     @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
     public EmailDeliveryPage findAll(EmailDeliverySearchQuery query) {
@@ -151,6 +191,29 @@ public class TransactionalEmailDeliveryApplicationService {
             throw new EmailDeliveryValidationException("Email delivery search query is required.");
         }
         return deliveryQuery.findAll(query);
+    }
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public EmailDeliveryPage findAll(
+            EmailDeliverySearchQuery query, AuthenticatedActor actor) {
+        return findAll(query, actor, null);
+    }
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public EmailDeliveryPage findAll(
+            EmailDeliverySearchQuery query,
+            AuthenticatedActor actor,
+            UUID requestedBranchId) {
+        requireActor(actor);
+        if (query == null) {
+            throw new EmailDeliveryValidationException("Email delivery search query is required.");
+        }
+        if (branchContextResolver == null) {
+            throw new ActiveBranchContextUnavailableException();
+        }
+        UUID branchId = BranchResourceAuthorizationPolicy.requireListBranch(
+                branchContextResolver.resolveOperation(actor.id()), requestedBranchId);
+        return deliveryQuery.findAll(query, branchId);
     }
 
     /** Returns append-only attempts for one delivery. */
@@ -163,6 +226,19 @@ public class TransactionalEmailDeliveryApplicationService {
             throw new EmailDeliveryNotFoundException(deliveryId);
         }
         return List.copyOf(deliveryQuery.findAttempts(deliveryId));
+    }
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public List<EmailDeliveryAttemptDetails> findAttempts(
+            UUID deliveryId, AuthenticatedActor actor) {
+        requireActor(actor);
+        if (deliveryId == null) {
+            throw new EmailDeliveryValidationException("Email delivery id is required.");
+        }
+        if (deliveryQuery.findById(deliveryId, branchId(actor)).isEmpty()) {
+            throw new EmailDeliveryNotFoundException(deliveryId);
+        }
+        return List.copyOf(deliveryQuery.findAttempts(deliveryId, branchId(actor)));
     }
 
     private EmailDeliveryDetails requestCanonical(
@@ -255,7 +331,8 @@ public class TransactionalEmailDeliveryApplicationService {
                 finalized.sourceResourceId(),
                 finalized.clientId(),
                 EmailDeliveryValuePolicy.maskRecipient(finalized.recipientSnapshot()),
-                actorIdentifier));
+                actorIdentifier,
+                finalized.branchId()));
         return finalized;
     }
 
@@ -333,7 +410,8 @@ public class TransactionalEmailDeliveryApplicationService {
                 null,
                 requestedAt,
                 requestedAt,
-                0);
+                0,
+                source.branchId());
     }
 
     private EmailMessage messageForRetry(
@@ -438,6 +516,29 @@ public class TransactionalEmailDeliveryApplicationService {
         if (actor == null || actor.id() == null
                 || actor.username() == null || actor.username().isBlank()) {
             throw new EmailDeliveryValidationException("Authenticated actor is required.");
+        }
+    }
+
+    private UUID branchId(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(
+                branchContextResolver.resolveOperation(actor.id()));
+    }
+
+    private static EmailDeliverySource withBranch(
+            EmailDeliverySource source, UUID branchId) {
+        UUID effectiveBranchId = source.branchId() == null ? branchId : source.branchId();
+        return new EmailDeliverySource(source.deliveryType(), source.sourceResourceId(),
+                source.clientId(), source.recipient(), source.attachment(),
+                source.templateData(), effectiveBranchId);
+    }
+
+    private static void requireBranch(UUID resourceBranchId, UUID activeBranchId) {
+        if (activeBranchId != null && (resourceBranchId == null
+                || !activeBranchId.equals(resourceBranchId))) {
+            throw new io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException();
         }
     }
 

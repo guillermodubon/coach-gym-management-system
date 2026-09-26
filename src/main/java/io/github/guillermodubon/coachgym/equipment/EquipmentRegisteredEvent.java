@@ -19,8 +19,16 @@ public record EquipmentRegisteredEvent(
         UUID categoryId,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt
+        Instant occurredAt,
+        UUID branchId
 ) {
+    public EquipmentRegisteredEvent(UUID equipmentId, String equipmentCode,
+            UUID categoryId, UUID actorUserId, String actorIdentifier,
+            Instant occurredAt) {
+        this(equipmentId, equipmentCode, categoryId, actorUserId,
+                actorIdentifier, occurredAt, null);
+    }
+
     public EquipmentRegisteredEvent {
         if (equipmentId == null) {
             throw new IllegalArgumentException("Equipment identifier must be provided.");

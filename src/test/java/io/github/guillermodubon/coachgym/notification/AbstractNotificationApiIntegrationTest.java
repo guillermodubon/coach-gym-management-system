@@ -51,6 +51,15 @@ abstract class AbstractNotificationApiIntegrationTest
             String notificationType,
             String severity,
             Instant readAt) {
+        return insertNotification(recipientUserId, notificationType, severity, readAt, null);
+    }
+
+    protected UUID insertNotification(
+            UUID recipientUserId,
+            String notificationType,
+            String severity,
+            Instant readAt,
+            UUID branchId) {
 
         UUID id = UUID.randomUUID();
 
@@ -78,6 +87,7 @@ abstract class AbstractNotificationApiIntegrationTest
                         body,
                         resource_type,
                         resource_id,
+                        branch_id,
                         read_at,
                         created_at,
                         updated_at,
@@ -95,6 +105,7 @@ abstract class AbstractNotificationApiIntegrationTest
                     ?,
                     ?,
                     ?,
+                    ?,
                     0
                 )
                 """,
@@ -105,6 +116,7 @@ abstract class AbstractNotificationApiIntegrationTest
                 "Integration notification",
                 "Notification inbox integration fixture.",
                 UUID.randomUUID(),
+                branchId,
                 readTimestamp,
                 fixtureTimestamp,
                 fixtureTimestamp);

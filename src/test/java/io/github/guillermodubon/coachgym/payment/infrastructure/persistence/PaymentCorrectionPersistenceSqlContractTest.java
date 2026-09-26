@@ -45,7 +45,7 @@ class PaymentCorrectionPersistenceSqlContractTest {
     @Test
     void readQueriesArePaginatedAndNewestFirst() {
         assertThat(normalized(JdbcPaymentStatusHistoryQuery.SELECT_SQL))
-                .contains("order by occurred_at desc, id desc")
+                .contains("order by h.occurred_at desc, h.id desc")
                 .contains("limit :limit offset :offset")
                 .doesNotContain("update gym")
                 .doesNotContain("delete from");

@@ -58,16 +58,38 @@ class NotificationPersistenceAdapter implements NotificationStore {
 
     @Override
     @Transactional(readOnly = true)
+    public Optional<NotificationDetails> findByIdAndRecipientUserId(
+            UUID notificationId,
+            UUID recipientUserId,
+            UUID branchId) {
+        requireId(notificationId, "Notification id");
+        requireId(recipientUserId, "Notification recipient user id");
+        return repository.findVisibleToRecipientAtBranch(
+                        notificationId, recipientUserId, branchId)
+                .map(NotificationJpaEntity::toDetails);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public NotificationPage findAllByRecipientUserId(
             UUID recipientUserId,
             NotificationSearchQuery query) {
+        return findAllByRecipientUserId(recipientUserId, query, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public NotificationPage findAllByRecipientUserId(
+            UUID recipientUserId,
+            NotificationSearchQuery query,
+            UUID branchId) {
         requireId(recipientUserId, "Notification recipient user id");
         Objects.requireNonNull(query, "Notification search query is required.");
 
         Pageable pageable = PageRequest.of(
                 query.page(), query.size(), sort(query.sortField(), query.sortDirection()));
         Page<NotificationJpaEntity> result = repository.findAll(
-                specification(recipientUserId, query), pageable);
+                specification(recipientUserId, query, branchId), pageable);
         List<NotificationDetails> items = result.getContent().stream()
                 .map(NotificationJpaEntity::toDetails)
                 .toList();
@@ -84,6 +106,13 @@ class NotificationPersistenceAdapter implements NotificationStore {
     public long countUnreadByRecipientUserId(UUID recipientUserId) {
         requireId(recipientUserId, "Notification recipient user id");
         return repository.countByRecipientUserIdAndReadAtIsNull(recipientUserId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countUnreadByRecipientUserId(UUID recipientUserId, UUID branchId) {
+        requireId(recipientUserId, "Notification recipient user id");
+        return repository.countUnreadVisibleToRecipientAtBranch(recipientUserId, branchId);
     }
 
     @Override
@@ -107,6 +136,26 @@ class NotificationPersistenceAdapter implements NotificationStore {
 
     @Override
     @Transactional
+    public NotificationDetails markAsRead(
+            UUID notificationId,
+            UUID recipientUserId,
+            Instant readAt,
+            UUID branchId) {
+        requireId(notificationId, "Notification id");
+        requireId(recipientUserId, "Notification recipient user id");
+        Objects.requireNonNull(readAt, "Notification read timestamp is required.");
+        NotificationJpaEntity entity = repository
+                .findVisibleToRecipientAtBranch(
+                        notificationId, recipientUserId, branchId)
+                .orElseThrow(() -> new NotificationNotFoundException(notificationId));
+        if (entity.markAsRead(readAt)) {
+            entity = repository.saveAndFlush(entity);
+        }
+        return entity.toDetails();
+    }
+
+    @Override
+    @Transactional
     public int markAllAsRead(UUID recipientUserId, Instant readAt) {
         requireId(recipientUserId, "Notification recipient user id");
         Objects.requireNonNull(readAt, "Notification read timestamp is required.");
@@ -120,12 +169,32 @@ class NotificationPersistenceAdapter implements NotificationStore {
         return unread.size();
     }
 
+    @Override
+    @Transactional
+    public int markAllAsRead(UUID recipientUserId, Instant readAt, UUID branchId) {
+        requireId(recipientUserId, "Notification recipient user id");
+        Objects.requireNonNull(readAt, "Notification read timestamp is required.");
+        List<NotificationJpaEntity> unread = repository.findAll(
+                unreadByRecipient(recipientUserId, branchId));
+        unread.forEach(entity -> entity.markAsRead(readAt));
+        if (!unread.isEmpty()) {
+            repository.saveAllAndFlush(unread);
+        }
+        return unread.size();
+    }
+
     private static Specification<NotificationJpaEntity> specification(
             UUID recipientUserId,
-            NotificationSearchQuery query) {
+            NotificationSearchQuery query,
+            UUID branchId) {
         return (root, criteriaQuery, builder) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(builder.equal(root.get("recipientUserId"), recipientUserId));
+            if (branchId != null) {
+                predicates.add(builder.or(
+                        builder.isNull(root.get("branchId")),
+                        builder.equal(root.get("branchId"), branchId)));
+            }
 
             if (query.readFilter() == NotificationReadFilter.UNREAD) {
                 predicates.add(builder.isNull(root.get("readAt")));
@@ -157,9 +226,23 @@ class NotificationPersistenceAdapter implements NotificationStore {
 
     private static Specification<NotificationJpaEntity> unreadByRecipient(
             UUID recipientUserId) {
-        return (root, query, builder) -> builder.and(
-                builder.equal(root.get("recipientUserId"), recipientUserId),
-                builder.isNull(root.get("readAt")));
+        return unreadByRecipient(recipientUserId, null);
+    }
+
+    private static Specification<NotificationJpaEntity> unreadByRecipient(
+            UUID recipientUserId,
+            UUID branchId) {
+        return (root, query, builder) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            predicates.add(builder.equal(root.get("recipientUserId"), recipientUserId));
+            predicates.add(builder.isNull(root.get("readAt")));
+            if (branchId != null) {
+                predicates.add(builder.or(
+                        builder.isNull(root.get("branchId")),
+                        builder.equal(root.get("branchId"), branchId)));
+            }
+            return builder.and(predicates.toArray(Predicate[]::new));
+        };
     }
 
     private static Sort sort(

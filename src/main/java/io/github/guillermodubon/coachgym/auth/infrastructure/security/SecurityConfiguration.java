@@ -238,6 +238,18 @@ class SecurityConfiguration {
                         .requestMatchers(HttpMethod.PUT, "/api/v1/organization")
                                 .hasRole("ADMIN")
                         .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/branches/*/access-payment-policy")
+                                .hasAnyRole("ADMIN", "RECEPTIONIST")
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/api/v1/branches/*/access-payment-policy")
+                                .hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.DELETE,
+                                "/api/v1/branches/*/access-payment-policy")
+                                .hasRole("ADMIN")
+                        .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/branches",
                                 "/api/v1/branches/*/activate",

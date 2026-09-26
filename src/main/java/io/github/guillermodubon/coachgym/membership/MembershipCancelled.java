@@ -16,7 +16,26 @@ public record MembershipCancelled(
         boolean closedOpenFreeze,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public MembershipCancelled(
+            UUID membershipId,
+            String membershipCode,
+            UUID clientId,
+            UUID membershipPeriodId,
+            LocalDate cancelledOn,
+            String reason,
+            MembershipStatus previousStatus,
+            MembershipStatus resultingStatus,
+            boolean closedOpenFreeze,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+        this(membershipId, membershipCode, clientId, membershipPeriodId,
+                cancelledOn, reason, previousStatus, resultingStatus,
+                closedOpenFreeze, actorUserId, actorIdentifier, occurredAt, null);
+    }
 
     public MembershipCancelled {
         if (membershipId == null) {
@@ -107,4 +126,6 @@ public record MembershipCancelled(
         actorIdentifier =
                 actorIdentifier.trim();
     }
+
+    public UUID registeredAtBranchId() { return branchId; }
 }

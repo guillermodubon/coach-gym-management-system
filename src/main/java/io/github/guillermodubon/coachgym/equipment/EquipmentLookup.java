@@ -20,4 +20,9 @@ public interface EquipmentLookup {
      * @return an optional containing the details, or empty
      */
     Optional<EquipmentDetails> findById(UUID id);
+
+    /** Branch-scoped lookup; implementations must constrain SQL by branch. */
+    default Optional<EquipmentDetails> findById(UUID id, UUID branchId) {
+        return findById(id);
+    }
 }

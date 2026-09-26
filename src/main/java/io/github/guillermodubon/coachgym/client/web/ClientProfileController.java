@@ -11,6 +11,8 @@ import io.github.guillermodubon.coachgym.client.ClientStatusHistoryDetails;
 import io.github.guillermodubon.coachgym.client.application.ClientProfileApplicationService;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -40,18 +42,25 @@ class ClientProfileController {
     @GetMapping
     @Operation(
             summary = "Search clients",
-            description = "ADMIN and RECEPTIONIST can search the client catalog using allowlisted filters and stable pagination.",
+            description = "ADMIN and RECEPTIONIST can search the client catalog using allowlisted filters and stable pagination. An explicit branchId is available only to organization administrators for an active authorized branch; otherwise the active branch is required.",
             security = @SecurityRequirement(name = "sessionCookie"))
+    @ApiResponse(responseCode = "200", description = "Client page returned")
+    @ApiResponse(responseCode = "404", description = "Requested branch is not available")
+    @ApiResponse(responseCode = "409", description = "No valid active branch is selected")
     ClientPage findAll(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) ClientStatus status,
             @RequestParam(required = false) String membershipStatus,
+            @Parameter(description = "Optional branch UUID for organization administrators; must be an active branch the administrator is authorized to address. Otherwise the active branch is used.")
+            @RequestParam(required = false) UUID branchId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size,
             @RequestParam(defaultValue = "LAST_NAME") ClientSortField sort,
-            @RequestParam(defaultValue = "ASC") ClientSortDirection direction) {
+            @RequestParam(defaultValue = "ASC") ClientSortDirection direction,
+            Authentication authentication) {
         return service.findAll(new ClientSearchQuery(
-                search, status, membershipStatus, page, size, sort, direction));
+                search, status, membershipStatus, page, size, sort, direction, branchId),
+                actor(authentication));
     }
 
     @GetMapping("/{id}/profile")
@@ -59,16 +68,20 @@ class ClientProfileController {
             summary = "Get an operational client profile",
             description = "ADMIN and RECEPTIONIST can view the client, current membership, payment summary, last access, emergency contact, and safe photo metadata.",
             security = @SecurityRequirement(name = "sessionCookie"))
-    ClientOperationalProfile findProfile(@PathVariable UUID id) {
-        return service.findProfile(id);
+    ClientOperationalProfile findProfile(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        return service.findProfile(id, actor(authentication));
     }
 
     @GetMapping("/{id}/status-history")
     @Operation(
             summary = "Get client status history",
             security = @SecurityRequirement(name = "sessionCookie"))
-    List<ClientStatusHistoryDetails> findStatusHistory(@PathVariable UUID id) {
-        return service.findStatusHistory(id);
+    List<ClientStatusHistoryDetails> findStatusHistory(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        return service.findStatusHistory(id, actor(authentication));
     }
 
     @PutMapping("/{id}")

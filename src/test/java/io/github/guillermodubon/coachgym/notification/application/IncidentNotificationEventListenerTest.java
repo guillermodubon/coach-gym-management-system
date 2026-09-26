@@ -39,11 +39,12 @@ class IncidentNotificationEventListenerTest {
     void sendsCriticalIncidentAlertToOtherActiveAdministrators() {
         UUID actorId = UUID.randomUUID();
         UUID recipientId = UUID.randomUUID();
+        UUID branchId = UUID.randomUUID();
         when(recipientDirectory.findActiveByRole("ADMIN")).thenReturn(List.of(
                 new NotificationRecipient(actorId, "actor-admin", Set.of("ADMIN")),
                 new NotificationRecipient(recipientId, "other-admin", Set.of("ADMIN"))));
 
-        listener.on(event(actorId, IncidentPriority.CRITICAL));
+        listener.on(event(actorId, IncidentPriority.CRITICAL, branchId));
 
         ArgumentCaptor<NotificationDefinition> captor =
                 ArgumentCaptor.forClass(NotificationDefinition.class);
@@ -53,6 +54,7 @@ class IncidentNotificationEventListenerTest {
         assertThat(definition.notificationType())
                 .isEqualTo(NotificationType.INCIDENT_ASSIGNED);
         assertThat(definition.severity()).isEqualTo(NotificationSeverity.CRITICAL);
+        assertThat(definition.branchId()).isEqualTo(branchId);
         assertThat(definition.content().body()).doesNotContain("password", "token");
     }
 
@@ -65,6 +67,11 @@ class IncidentNotificationEventListenerTest {
     }
 
     private static IncidentReportedEvent event(UUID actorId, IncidentPriority priority) {
+        return event(actorId, priority, null);
+    }
+
+    private static IncidentReportedEvent event(
+            UUID actorId, IncidentPriority priority, UUID branchId) {
         return new IncidentReportedEvent(
                 UUID.randomUUID(),
                 "INC-000001",
@@ -74,6 +81,7 @@ class IncidentNotificationEventListenerTest {
                 true,
                 actorId,
                 "admin-user",
-                Instant.parse("2026-09-05T16:00:00Z"));
+                Instant.parse("2026-09-05T16:00:00Z"),
+                branchId);
     }
 }

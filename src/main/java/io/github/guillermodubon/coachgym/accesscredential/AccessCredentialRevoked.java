@@ -13,7 +13,16 @@ public record AccessCredentialRevoked(
         UUID actorUserId,
         String actorIdentifier,
         Instant occurredAt,
-        boolean reasonPresent) {
+        boolean reasonPresent,
+        UUID branchId) {
+
+    public AccessCredentialRevoked(UUID credentialId, UUID clientId,
+            String credentialCode, AccessCredentialStatus previousStatus,
+            AccessCredentialStatus newStatus, UUID actorUserId,
+            String actorIdentifier, Instant occurredAt, boolean reasonPresent) {
+        this(credentialId, clientId, credentialCode, previousStatus, newStatus,
+                actorUserId, actorIdentifier, occurredAt, reasonPresent, null);
+    }
 
     public AccessCredentialRevoked {
         credentialId = requiredId(credentialId, "Credential event id");

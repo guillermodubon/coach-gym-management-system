@@ -25,5 +25,17 @@ public record PaymentRegistered(
         PaymentStatus resultingStatus,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public PaymentRegistered(
+            UUID paymentId, String paymentCode, UUID clientId, UUID membershipId,
+            UUID membershipPeriodId, BigDecimal amount, String currency,
+            PaymentMethod paymentMethod, boolean hasExternalReference,
+            Instant paidAt, PaymentStatus resultingStatus, UUID actorUserId,
+            String actorIdentifier, Instant occurredAt) {
+        this(paymentId, paymentCode, clientId, membershipId, membershipPeriodId,
+                amount, currency, paymentMethod, hasExternalReference, paidAt,
+                resultingStatus, actorUserId, actorIdentifier, occurredAt, null);
+    }
 }

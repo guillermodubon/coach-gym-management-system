@@ -68,14 +68,24 @@ class AccessCredentialController {
     }
 
     @GetMapping
-    @Operation(summary = "Get the active access credential metadata")
+    @Operation(
+            summary = "Get the active access credential metadata",
+            description = "Reads only the credential for a client in the authenticated staff "
+                    + "member's active or explicitly authorized branch. Cross-branch access is "
+                    + "reported as not found.")
     @ApiResponse(responseCode = "200", description = "Credential metadata returned",
             content = @Content(schema = @Schema(implementation = AccessCredentialResponse.class)))
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
     @ApiResponse(responseCode = "404", description = "Active credential not found")
-    AccessCredentialResponse findActive(@PathVariable UUID clientId) {
-        return response(service.findActiveByClientId(clientId));
+    @ApiResponse(responseCode = "409", description = "Active branch context unavailable")
+    AccessCredentialResponse findActive(
+            @PathVariable UUID clientId,
+            Authentication authentication) {
+        AuthenticatedActor authenticatedActor = actor(authentication);
+        AccessCredentialDetails details = service.findActiveByClientId(
+                clientId, authenticatedActor);
+        return response(details);
     }
 
     @GetMapping(value = "/content", produces = MediaType.IMAGE_PNG_VALUE)
@@ -88,9 +98,15 @@ class AccessCredentialController {
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
     @ApiResponse(responseCode = "404", description = "Active credential not found")
+    @ApiResponse(responseCode = "409", description = "Active branch context unavailable")
     @ApiResponse(responseCode = "500", description = "Credential document unavailable")
-    ResponseEntity<byte[]> download(@PathVariable UUID clientId) {
-        AccessCredentialContent content = service.downloadActiveByClientId(clientId);
+    ResponseEntity<byte[]> download(
+            @PathVariable UUID clientId,
+            Authentication authentication) {
+        AuthenticatedActor authenticatedActor = actor(authentication);
+        AccessCredentialContent content = service.downloadActiveByClientId(
+                clientId,
+                authenticatedActor);
         AccessCredentialDocument document = content.document();
         return ResponseEntity.ok()
                 .contentType(MediaType.IMAGE_PNG)
@@ -149,8 +165,14 @@ class AccessCredentialController {
     AccessCredentialHistoryPageResponse history(
             @PathVariable UUID clientId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "25") int size) {
-        AccessCredentialHistoryPage result = service.findHistoryByClientId(clientId, page, size);
+            @RequestParam(defaultValue = "25") int size,
+            Authentication authentication) {
+        AuthenticatedActor authenticatedActor = actor(authentication);
+        AccessCredentialHistoryPage result = service.findHistoryByClientId(
+                clientId,
+                page,
+                size,
+                authenticatedActor);
         return AccessCredentialHistoryPageResponse.from(result);
     }
 

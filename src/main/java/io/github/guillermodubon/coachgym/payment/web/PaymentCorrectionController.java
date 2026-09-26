@@ -99,8 +99,10 @@ class PaymentCorrectionController {
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
     @ApiResponse(responseCode = "404", description = "Payment correction not found")
     PaymentCorrectionResponse findCorrection(
-            @PathVariable UUID paymentId) {
-        PaymentCorrectionDetails correction = service.findCorrection(paymentId)
+            @PathVariable UUID paymentId,
+            Authentication authentication) {
+        PaymentCorrectionDetails correction = service.findCorrection(
+                        paymentId, actor(authentication))
                 .orElseThrow(() ->
                         new PaymentCorrectionResourceNotFoundException(paymentId));
         return PaymentCorrectionResponse.from(correction);
@@ -122,9 +124,10 @@ class PaymentCorrectionController {
     PaymentStatusHistoryPageResponse findStatusHistory(
             @PathVariable UUID paymentId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "25") int size) {
+            @RequestParam(defaultValue = "25") int size,
+            Authentication authentication) {
         return PaymentStatusHistoryPageResponse.from(
-                service.findStatusHistory(paymentId, page, size));
+                service.findStatusHistory(paymentId, page, size, actor(authentication)));
     }
 
     private static AuthenticatedActor actor(Authentication authentication) {

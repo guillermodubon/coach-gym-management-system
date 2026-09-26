@@ -115,7 +115,8 @@ public class EquipmentIncidentApplicationService
                 transition.reason(),
                 actor.id(),
                 actor.username(),
-                occurredAt));
+                occurredAt,
+                updated.branchId()));
 
         return updated;
     }

@@ -82,7 +82,8 @@ class MembershipPersistenceAdapter
     public MembershipDetails create(
             MembershipCreation creation,
             AuthenticatedActor actor,
-            Instant occurredAt) {
+            Instant occurredAt,
+            UUID registeredAtBranchId) {
 
         try {
             MembershipJpaEntity membership =
@@ -90,7 +91,8 @@ class MembershipPersistenceAdapter
                             MembershipJpaEntity.create(
                                     creation.clientId(),
                                     actor,
-                                    occurredAt));
+                                    occurredAt,
+                                    registeredAtBranchId));
 
             entityManager.refresh(
                     membership);
@@ -101,7 +103,8 @@ class MembershipPersistenceAdapter
                                     membership.id(),
                                     creation,
                                     actor,
-                                    occurredAt));
+                                    occurredAt,
+                                    registeredAtBranchId));
 
             entityManager.refresh(
                     period);
@@ -143,9 +146,21 @@ class MembershipPersistenceAdapter
                                                 membership.id())
                                         .map(
                                                 period ->
-                                                        toDetails(
-                                                                membership,
-                                                                period)));
+                                        toDetails(
+                                                membership,
+                                                period)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<MembershipDetails> findById(
+            UUID membershipId,
+            UUID registeredAtBranchId) {
+        return membershipRepository
+                .findByIdAndRegisteredAtBranchId(membershipId, registeredAtBranchId)
+                .flatMap(membership -> periodRepository
+                        .findFirstByMembershipIdOrderByPeriodNumberDesc(membership.id())
+                        .map(period -> toDetails(membership, period)));
     }
 
     @Override
@@ -192,7 +207,8 @@ class MembershipPersistenceAdapter
                                 membershipId,
                                 renewal,
                                 actor,
-                                occurredAt));
+                                occurredAt,
+                                membership.registeredAtBranchId()));
 
         entityManager.refresh(
                 period);
@@ -480,7 +496,8 @@ class MembershipPersistenceAdapter
                 periodDetails,
                 membership.createdAt(),
                 membership.updatedAt(),
-                membership.version());
+                membership.version(),
+                membership.registeredAtBranchId());
     }
 
     private static boolean isCurrentMembershipConflict(

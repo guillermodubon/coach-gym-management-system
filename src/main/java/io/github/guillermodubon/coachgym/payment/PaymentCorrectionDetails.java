@@ -14,7 +14,16 @@ public record PaymentCorrectionDetails(
         Instant correctedAt,
         UUID correctedByUserId,
         long version,
-        PaymentRefundDetails refund) {
+        PaymentRefundDetails refund,
+        UUID branchId) {
+
+    public PaymentCorrectionDetails(UUID paymentId, String paymentCode,
+            PaymentCorrectionType correctionType, PaymentStatus previousStatus,
+            PaymentStatus currentStatus, String reason, Instant correctedAt,
+            UUID correctedByUserId, long version, PaymentRefundDetails refund) {
+        this(paymentId, paymentCode, correctionType, previousStatus, currentStatus,
+                reason, correctedAt, correctedByUserId, version, refund, null);
+    }
 
     public PaymentCorrectionDetails {
         if (paymentId == null) {
@@ -55,6 +64,18 @@ public record PaymentCorrectionDetails(
             Instant correctedAt,
             UUID correctedByUserId,
             long version) {
+        return voided(paymentId, paymentCode, reason, correctedAt,
+                correctedByUserId, version, null);
+    }
+
+    public static PaymentCorrectionDetails voided(
+            UUID paymentId,
+            String paymentCode,
+            String reason,
+            Instant correctedAt,
+            UUID correctedByUserId,
+            long version,
+            UUID branchId) {
         return new PaymentCorrectionDetails(
                 paymentId,
                 paymentCode,
@@ -65,7 +86,8 @@ public record PaymentCorrectionDetails(
                 correctedAt,
                 correctedByUserId,
                 version,
-                null);
+                null,
+                branchId);
     }
 
     public static PaymentCorrectionDetails refunded(
@@ -76,6 +98,19 @@ public record PaymentCorrectionDetails(
             UUID correctedByUserId,
             long version,
             PaymentRefundDetails refund) {
+        return refunded(paymentId, paymentCode, reason, correctedAt,
+                correctedByUserId, version, refund, null);
+    }
+
+    public static PaymentCorrectionDetails refunded(
+            UUID paymentId,
+            String paymentCode,
+            String reason,
+            Instant correctedAt,
+            UUID correctedByUserId,
+            long version,
+            PaymentRefundDetails refund,
+            UUID branchId) {
         return new PaymentCorrectionDetails(
                 paymentId,
                 paymentCode,
@@ -86,7 +121,8 @@ public record PaymentCorrectionDetails(
                 correctedAt,
                 correctedByUserId,
                 version,
-                refund);
+                refund,
+                branchId);
     }
 
     private static void validateTargetStatus(

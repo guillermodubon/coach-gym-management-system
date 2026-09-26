@@ -14,7 +14,23 @@ public record ProviderConfirmedPaymentCommand(
         String currency,
         UUID registeredByUserId,
         Instant paidAt,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID registeredAtBranchId) {
+
+    /** Compatibility constructor for provider tests predating branch ownership. */
+    public ProviderConfirmedPaymentCommand(
+            UUID paymentId,
+            UUID clientId,
+            UUID membershipId,
+            UUID membershipPeriodId,
+            BigDecimal amount,
+            String currency,
+            UUID registeredByUserId,
+            Instant paidAt,
+            Instant occurredAt) {
+        this(paymentId, clientId, membershipId, membershipPeriodId, amount, currency,
+                registeredByUserId, paidAt, occurredAt, null);
+    }
 
     public ProviderConfirmedPaymentCommand {
         if (paymentId == null || clientId == null || membershipId == null

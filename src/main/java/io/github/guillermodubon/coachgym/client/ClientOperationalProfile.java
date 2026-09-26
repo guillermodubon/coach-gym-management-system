@@ -21,7 +21,30 @@ public record ClientOperationalProfile(
         ClientPhotoDetails photo,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID homeBranchId) {
+
+    public ClientOperationalProfile(
+            UUID id,
+            String clientCode,
+            String firstName,
+            String lastName,
+            String email,
+            String phone,
+            LocalDate dateOfBirth,
+            ClientStatus status,
+            ClientEmergencyContactDetails emergencyContact,
+            ClientMembershipSummary currentMembership,
+            ClientPaymentSummary currentPeriodPayment,
+            ClientAccessSummary lastAccess,
+            ClientPhotoDetails photo,
+            Instant createdAt,
+            Instant updatedAt,
+            long version) {
+        this(id, clientCode, firstName, lastName, email, phone, dateOfBirth,
+                status, emergencyContact, currentMembership, currentPeriodPayment,
+                lastAccess, photo, createdAt, updatedAt, version, null);
+    }
 
     public ClientOperationalProfile {
         if (id == null) {

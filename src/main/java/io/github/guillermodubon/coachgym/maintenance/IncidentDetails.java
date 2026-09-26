@@ -23,7 +23,34 @@ public record IncidentDetails(
         String resolutionNotes,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID branchId) {
+
+    /** Compatibility constructor for pre-branch projections. */
+    public IncidentDetails(
+            UUID id,
+            long incidentNumber,
+            String incidentCode,
+            UUID equipmentId,
+            String equipmentCode,
+            String equipmentName,
+            IncidentStatus status,
+            IncidentPriority priority,
+            String description,
+            Instant reportedAt,
+            UUID reportedByUserId,
+            UUID assignedToUserId,
+            Instant resolvedAt,
+            UUID resolvedByUserId,
+            String resolutionNotes,
+            Instant createdAt,
+            Instant updatedAt,
+            long version) {
+        this(id, incidentNumber, incidentCode, equipmentId, equipmentCode,
+                equipmentName, status, priority, description, reportedAt,
+                reportedByUserId, assignedToUserId, resolvedAt, resolvedByUserId,
+                resolutionNotes, createdAt, updatedAt, version, null);
+    }
 
     public IncidentDetails {
         Objects.requireNonNull(id, "Incident id is required.");

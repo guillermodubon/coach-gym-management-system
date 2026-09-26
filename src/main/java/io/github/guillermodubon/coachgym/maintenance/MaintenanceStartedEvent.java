@@ -13,5 +13,15 @@ public record MaintenanceStartedEvent(
         MaintenanceStatus newStatus,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public MaintenanceStartedEvent(UUID maintenanceId, String maintenanceCode,
+            UUID equipmentId, String equipmentCode, UUID incidentId,
+            MaintenanceStatus previousStatus, MaintenanceStatus newStatus,
+            UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        this(maintenanceId, maintenanceCode, equipmentId, equipmentCode,
+                incidentId, previousStatus, newStatus, actorUserId,
+                actorIdentifier, occurredAt, null);
+    }
 }

@@ -37,6 +37,15 @@ public interface EquipmentStore {
             AuthenticatedActor actor,
             Instant occurredAt);
 
+    default EquipmentDetails register(
+            UUID id,
+            EquipmentDefinition definition,
+            AuthenticatedActor actor,
+            Instant occurredAt,
+            UUID branchId) {
+        return register(id, definition, actor, occurredAt);
+    }
+
     /**
      * Updates the allowlisted mutable fields of an existing equipment item using
      * optimistic locking.
@@ -81,10 +90,18 @@ public interface EquipmentStore {
      */
     Optional<EquipmentDetails> findById(UUID equipmentId);
 
+    default Optional<EquipmentDetails> findById(UUID equipmentId, UUID branchId) {
+        return findById(equipmentId);
+    }
+
     /**
      * Returns a paginated list of equipment matching the query.
      */
     EquipmentPage findAll(EquipmentSearchQuery query);
+
+    default EquipmentPage findAll(EquipmentSearchQuery query, UUID branchId) {
+        return findAll(query);
+    }
 
     /**
      * Returns {@code true} if any equipment (other than {@code excludeId}) has the
@@ -92,4 +109,9 @@ public interface EquipmentStore {
      * checking for a new registration.
      */
     boolean existsBySerialNumberIgnoreCase(String serialNumber, UUID excludeId);
+
+    default boolean existsBySerialNumberIgnoreCase(
+            String serialNumber, UUID excludeId, UUID branchId) {
+        return existsBySerialNumberIgnoreCase(serialNumber, excludeId);
+    }
 }

@@ -241,12 +241,12 @@ class MembershipController {
             responseCode = "404",
             description = "Membership not found")
     MembershipResponse findById(
-            @PathVariable
-            UUID id) {
+            @PathVariable UUID id,
+            Authentication authentication) {
 
         return MembershipResponse.from(
                 membershipApplicationService
-                        .findById(id));
+                        .findById(id, actor(authentication)));
     }
 
     @PostMapping("/{id}/freeze")

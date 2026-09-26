@@ -13,6 +13,8 @@ import io.github.guillermodubon.coachgym.access.domain.QrAccessPayloadValidation
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.ActiveBranchContextUnavailableException;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -168,9 +170,19 @@ public class AccessController {
     @ApiResponse(
             responseCode = "404",
             description = "Access record not found")
-    public ResponseEntity<AccessRecordResponse> findById(@PathVariable UUID id) {
-        AccessRecordDetails record = accessApplicationService.findById(id);
+    public ResponseEntity<AccessRecordResponse> findById(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        AccessRecordDetails record = accessApplicationService.findById(
+                id,
+                actor(authentication));
         return ResponseEntity.ok(AccessRecordResponse.from(record));
+    }
+
+    /** Compatibility entry point retained for focused controller tests. */
+    ResponseEntity<AccessRecordResponse> findById(UUID id) {
+        return ResponseEntity.ok(AccessRecordResponse.from(
+                accessApplicationService.findById(id)));
     }
 
     @GetMapping("/records")
@@ -190,6 +202,11 @@ public class AccessController {
                     The default order is CHECKED_IN_AT DESC, followed by
                     record ID ascending for stable pagination.
 
+                    An explicit branchId is available only to organization
+                    administrators for an active branch they are authorized to
+                    address. Otherwise the selected active branch is required;
+                    omitting branchId never requests all branches.
+
                     This operation requires an authenticated ADMIN or
                     RECEPTIONIST session.
                     """)
@@ -205,6 +222,8 @@ public class AccessController {
     @ApiResponse(
             responseCode = "403",
             description = "Insufficient permissions")
+    @ApiResponse(responseCode = "404", description = "Requested branch is not available")
+    @ApiResponse(responseCode = "409", description = "No valid active branch is selected")
     public ResponseEntity<AccessRecordPageResponse> findAll(
             @RequestParam(required = false) UUID clientId,
             @RequestParam(required = false) UUID membershipId,
@@ -227,7 +246,10 @@ public class AccessController {
             @Parameter(description = "Only CHECKED_IN_AT is supported")
             @RequestParam(defaultValue = "CHECKED_IN_AT") String sort,
             @Parameter(description = "ASC or DESC")
-            @RequestParam(defaultValue = "DESC") String direction) {
+             @RequestParam(defaultValue = "DESC") String direction,
+             @Parameter(description = "Optional active branch UUID for organization administrators; other staff are restricted to their active branch")
+             @RequestParam(required = false) UUID branchId,
+             Authentication authentication) {
 
         AccessRecordSearchQuery query = AccessRecordSearchQuery.from(
                 clientId,
@@ -242,7 +264,37 @@ public class AccessController {
                 sort,
                 direction);
 
-        return ResponseEntity.ok(AccessRecordPageResponse.from(accessApplicationService.findAll(query)));
+        return ResponseEntity.ok(AccessRecordPageResponse.from(
+                accessApplicationService.findAll(query, actor(authentication), branchId)));
+    }
+
+    /** Compatibility entry point retained for focused controller tests. */
+    ResponseEntity<AccessRecordPageResponse> findAll(
+            UUID clientId,
+            UUID membershipId,
+            String result,
+            String reasonCode,
+            Instant checkedInFrom,
+            Instant checkedInUntil,
+            UUID processedByUserId,
+            int page,
+            int size,
+            String sort,
+            String direction) {
+        AccessRecordSearchQuery query = AccessRecordSearchQuery.from(
+                clientId,
+                membershipId,
+                result,
+                reasonCode,
+                checkedInFrom,
+                checkedInUntil,
+                processedByUserId,
+                page,
+                size,
+                sort,
+                direction);
+        return ResponseEntity.ok(AccessRecordPageResponse.from(
+                accessApplicationService.findAll(query)));
     }
 
     @ExceptionHandler(AccessValidationException.class)
@@ -313,6 +365,26 @@ public class AccessController {
                 HttpStatus.NOT_FOUND,
                 "ACCESS_RECORD_NOT_FOUND",
                 exception.getMessage());
+    }
+
+    @ExceptionHandler(ActiveBranchContextUnavailableException.class)
+    ResponseEntity<ProblemDetail> handleActiveBranchUnavailable(
+            ActiveBranchContextUnavailableException exception) {
+
+        return problem(
+                HttpStatus.CONFLICT,
+                "ACTIVE_BRANCH_UNAVAILABLE",
+                "The active branch context is unavailable.");
+    }
+
+    @ExceptionHandler(BranchResourceAuthorizationException.class)
+    ResponseEntity<ProblemDetail> handleBranchAuthorization(
+            BranchResourceAuthorizationException exception) {
+
+        return problem(
+                HttpStatus.NOT_FOUND,
+                "RESOURCE_NOT_FOUND",
+                "The requested resource was not found.");
     }
 
     private static ResponseEntity<ProblemDetail> problem(

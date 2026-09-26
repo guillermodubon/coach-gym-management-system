@@ -36,6 +36,7 @@ class MaintenanceNotificationLookupService implements MaintenanceNotificationLoo
                 details.equipmentId(),
                 details.equipmentCode(),
                 details.createdByUserId(),
-                details.assignedToUserId());
+                details.assignedToUserId(),
+                details.branchId());
     }
 }

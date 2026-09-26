@@ -23,6 +23,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 abstract class AbstractEquipmentApiIntegrationTest {
 
+    private static final UUID INITIAL_BRANCH_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002");
+
     protected static final String ADMIN_USERNAME = "eq-admin";
     protected static final String ADMIN_PASSWORD = "A-strong-password";
     protected static final String RECEPTIONIST_USERNAME = "eq-receptionist";
@@ -59,11 +62,36 @@ abstract class AbstractEquipmentApiIntegrationTest {
                 values (?,?,?,?,?,?,'ACTIVE')
                 on conflict (id) do update set password_hash=excluded.password_hash, status='ACTIVE'
                 """, id, username, email, passwordEncoder.encode(password), "Equipment", "Staff");
-        jdbcTemplate.update("delete from gym.user_roles where user_id=?", id);
+        Integer existingScopeCount = jdbcTemplate.queryForObject(
+                "select count(*) from gym.staff_scopes where user_id=?",
+                Integer.class,
+                id);
+        if (existingScopeCount == null || existingScopeCount == 0) {
+            jdbcTemplate.update("delete from gym.user_roles where user_id=?", id);
+        }
         jdbcTemplate.update("""
                 insert into gym.user_roles(user_id,role_id)
                 select ?,id from gym.roles where role_code=?
+                on conflict (user_id, role_id) do nothing
                 """, id, roleCode);
+        jdbcTemplate.update("""
+                insert into gym.staff_scopes (user_id, scope_type, version)
+                values (?, ?, 0)
+                on conflict (user_id) do nothing
+                """, id, "ADMIN".equals(roleCode) ? "ORGANIZATION" : "BRANCH");
+        if ("RECEPTIONIST".equals(roleCode)) {
+            jdbcTemplate.update("""
+                    insert into gym.staff_branch_assignments
+                        (id, user_id, branch_id, status, assigned_at, version)
+                    values (?, ?, ?, 'ACTIVE', current_timestamp, 0)
+                    on conflict (id) do nothing
+                    """,
+                    UUID.nameUUIDFromBytes(
+                            (id + ":initial-branch")
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                    id,
+                    INITIAL_BRANCH_ID);
+        }
     }
 
     protected MockHttpSession loginAsAdmin() throws Exception {

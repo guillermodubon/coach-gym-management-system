@@ -14,13 +14,36 @@ public interface NotificationStore {
     Optional<NotificationDetails> findByIdAndRecipientUserId(
             UUID notificationId, UUID recipientUserId);
 
+    default Optional<NotificationDetails> findByIdAndRecipientUserId(
+            UUID notificationId, UUID recipientUserId, UUID branchId) {
+        return findByIdAndRecipientUserId(notificationId, recipientUserId);
+    }
+
     NotificationPage findAllByRecipientUserId(
             UUID recipientUserId, NotificationSearchQuery query);
 
+    default NotificationPage findAllByRecipientUserId(
+            UUID recipientUserId, NotificationSearchQuery query, UUID branchId) {
+        return findAllByRecipientUserId(recipientUserId, query);
+    }
+
     long countUnreadByRecipientUserId(UUID recipientUserId);
+
+    default long countUnreadByRecipientUserId(UUID recipientUserId, UUID branchId) {
+        return countUnreadByRecipientUserId(recipientUserId);
+    }
 
     NotificationDetails markAsRead(
             UUID notificationId, UUID recipientUserId, Instant readAt);
 
+    default NotificationDetails markAsRead(
+            UUID notificationId, UUID recipientUserId, Instant readAt, UUID branchId) {
+        return markAsRead(notificationId, recipientUserId, readAt);
+    }
+
     int markAllAsRead(UUID recipientUserId, Instant readAt);
+
+    default int markAllAsRead(UUID recipientUserId, Instant readAt, UUID branchId) {
+        return markAllAsRead(recipientUserId, readAt);
+    }
 }

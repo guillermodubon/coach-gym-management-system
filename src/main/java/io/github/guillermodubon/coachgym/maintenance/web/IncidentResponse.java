@@ -24,7 +24,8 @@ public record IncidentResponse(
         String resolutionNotes,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID branchId) {
 
     static IncidentResponse from(IncidentDetails details) {
         return new IncidentResponse(
@@ -33,6 +34,7 @@ public record IncidentResponse(
                 details.status(), details.priority(), details.description(),
                 details.reportedAt(), details.reportedByUserId(), details.assignedToUserId(),
                 details.resolvedAt(), details.resolvedByUserId(), details.resolutionNotes(),
-                details.createdAt(), details.updatedAt(), details.version());
+                details.createdAt(), details.updatedAt(), details.version(),
+                details.branchId());
     }
 }

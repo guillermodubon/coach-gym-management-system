@@ -24,5 +24,30 @@ public record MembershipCreated(
         LocalDate effectiveEndsOn,
         UUID actorUserId,
         String actorIdentifier,
-        Instant occurredAt) {
+        Instant occurredAt,
+        UUID branchId) {
+
+    public MembershipCreated(
+            UUID membershipId,
+            String membershipCode,
+            UUID clientId,
+            UUID membershipPeriodId,
+            UUID membershipPlanId,
+            UUID promotionId,
+            BigDecimal listPrice,
+            BigDecimal discountAmount,
+            BigDecimal finalPrice,
+            String currency,
+            LocalDate startsOn,
+            LocalDate effectiveEndsOn,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredAt) {
+        this(membershipId, membershipCode, clientId, membershipPeriodId,
+                membershipPlanId, promotionId, listPrice, discountAmount,
+                finalPrice, currency, startsOn, effectiveEndsOn, actorUserId,
+                actorIdentifier, occurredAt, null);
+    }
+
+    public UUID registeredAtBranchId() { return branchId; }
 }

@@ -13,11 +13,16 @@ import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationRequest;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationResult;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluator;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchOwnedResourceReference;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +36,26 @@ public class MembershipApplicationService {
     private final PromotionEvaluator promotionEvaluator;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
+
+    @Autowired
+    public MembershipApplicationService(
+            MembershipStore membershipStore,
+            ClientQuery clientQuery,
+            PlanQuery planQuery,
+            PromotionEvaluator promotionEvaluator,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
+
+        this.membershipStore = membershipStore;
+        this.clientQuery = clientQuery;
+        this.planQuery = planQuery;
+        this.promotionEvaluator = promotionEvaluator;
+        this.eventPublisher = eventPublisher;
+        this.clock = clock;
+        this.branchContextResolver = branchContextResolver;
+    }
 
     public MembershipApplicationService(
             MembershipStore membershipStore,
@@ -39,13 +64,8 @@ public class MembershipApplicationService {
             PromotionEvaluator promotionEvaluator,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
-
-        this.membershipStore = membershipStore;
-        this.clientQuery = clientQuery;
-        this.planQuery = planQuery;
-        this.promotionEvaluator = promotionEvaluator;
-        this.eventPublisher = eventPublisher;
-        this.clock = clock;
+        this(membershipStore, clientQuery, planQuery, promotionEvaluator,
+                eventPublisher, clock, null);
     }
 
     @Transactional
@@ -58,9 +78,12 @@ public class MembershipApplicationService {
         validateCommand(command);
         validateActor(actor);
 
+        UUID branchId = branchForCreation(actor);
+
         ClientDetails client =
                 requireActiveClient(
-                        command.clientId());
+                        command.clientId(),
+                        branchId);
 
         PlanDetails plan =
                 requireActivePlan(
@@ -89,11 +112,9 @@ public class MembershipApplicationService {
         Instant occurredAt =
                 clock.instant();
 
-        MembershipDetails membership =
-                membershipStore.create(
-                        creation,
-                        actor,
-                        occurredAt);
+        MembershipDetails membership = branchContextResolver == null
+                ? membershipStore.create(creation, actor, occurredAt)
+                : membershipStore.create(creation, actor, occurredAt, branchId);
 
         publishCreated(
                 membership,
@@ -117,7 +138,8 @@ public class MembershipApplicationService {
 
         MembershipDetails currentMembership =
                 requireMembership(
-                        membershipId);
+                        membershipId,
+                        actor);
 
         verifyVersion(
                 membershipId,
@@ -126,7 +148,8 @@ public class MembershipApplicationService {
 
         ClientDetails client =
                 requireActiveClient(
-                        currentMembership.clientId());
+                        currentMembership.clientId(),
+                        currentMembership.registeredAtBranchId());
 
         PlanDetails plan =
                 requireActivePlan(
@@ -194,6 +217,18 @@ public class MembershipApplicationService {
                 membershipId);
     }
 
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public MembershipDetails findById(
+            UUID membershipId,
+            AuthenticatedActor actor) {
+        if (membershipId == null) {
+            throw new MembershipValidationException(
+                    "Membership identifier must be provided.");
+        }
+        return requireMembership(membershipId, actor);
+    }
+
 
     private ClientDetails requireActiveClient(
             UUID clientId) {
@@ -210,6 +245,25 @@ public class MembershipApplicationService {
 
             throw new InactiveMembershipClientException(
                     clientId);
+        }
+
+        return client;
+    }
+
+    private ClientDetails requireActiveClient(
+            UUID clientId,
+            UUID homeBranchId) {
+        if (branchContextResolver == null || homeBranchId == null) {
+            return requireActiveClient(clientId);
+        }
+
+        ClientDetails client =
+                clientQuery.findClientById(clientId, homeBranchId)
+                        .orElseThrow(
+                                () -> new MembershipClientNotFoundException(clientId));
+
+        if (client.status() != ClientStatus.ACTIVE) {
+            throw new InactiveMembershipClientException(clientId);
         }
 
         return client;
@@ -327,7 +381,8 @@ public class MembershipApplicationService {
                         period.effectiveEndsOn(),
                         actor.id(),
                         actor.username(),
-                        occurredAt));
+                        occurredAt,
+                        membership.registeredAtBranchId()));
     }
 
     private static void validateCommand(
@@ -383,6 +438,39 @@ public class MembershipApplicationService {
                 .orElseThrow(
                         () -> new MembershipNotFoundException(
                                 membershipId));
+    }
+
+    private MembershipDetails requireMembership(
+            UUID membershipId,
+            AuthenticatedActor actor) {
+        MembershipDetails membership = requireMembership(membershipId);
+        authorizeMembershipBranch(membership, actor);
+        UUID branchId = membership.registeredAtBranchId();
+        return branchId == null || branchContextResolver == null
+                ? membership
+                : membershipStore.findById(membershipId, branchId)
+                        .orElseThrow(() -> new MembershipNotFoundException(membershipId));
+    }
+
+    private UUID branchForCreation(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        BranchOperationContext context = branchContextResolver.resolveOperation(actor.id());
+        return BranchResourceAuthorizationPolicy.requireCreationBranch(context, null);
+    }
+
+    private void authorizeMembershipBranch(
+            MembershipDetails membership,
+            AuthenticatedActor actor) {
+        if (branchContextResolver == null || membership.registeredAtBranchId() == null) {
+            return;
+        }
+        BranchOperationContext context = branchContextResolver.resolveOperation(actor.id());
+        BranchResourceAuthorizationPolicy.requireActiveResourceAccess(
+                context,
+                new BranchOwnedResourceReference(
+                        membership.id(), context.organizationId(), membership.registeredAtBranchId()));
     }
 
     private static void verifyVersion(
@@ -453,7 +541,8 @@ public class MembershipApplicationService {
                         renewal.resultingStatus(),
                         actor.id(),
                         actor.username(),
-                        occurredAt));
+                        occurredAt,
+                        membership.registeredAtBranchId()));
     }
 
 }

@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.configuration.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyActor;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -11,19 +12,20 @@ class AccessPaymentPolicyMethodSecurityContractTest {
 
     @Test
     void policyAdministrationRequiresAdminRole() throws Exception {
-        assertSecurity("findCurrent", "hasRole('ADMIN')");
+        assertSecurity("findCurrent", "hasRole('ADMIN')",
+                AccessPaymentPolicyActor.class);
         assertSecurity("update", "hasRole('ADMIN')",
                 UpdateAccessPaymentPolicyCommand.class,
-                io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyActor.class);
+                AccessPaymentPolicyActor.class);
     }
 
     @Test
     void publicUseCasesDeclareTheirTransactionSemantics() throws Exception {
         Method read = AccessPaymentPolicyApplicationService.class
-                .getMethod("findCurrent");
+                .getMethod("findCurrent", AccessPaymentPolicyActor.class);
         Method update = AccessPaymentPolicyApplicationService.class
                 .getMethod("update", UpdateAccessPaymentPolicyCommand.class,
-                        io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyActor.class);
+                        AccessPaymentPolicyActor.class);
 
         assertThat(read.getAnnotation(Transactional.class)).isNotNull();
         assertThat(read.getAnnotation(Transactional.class).readOnly()).isTrue();

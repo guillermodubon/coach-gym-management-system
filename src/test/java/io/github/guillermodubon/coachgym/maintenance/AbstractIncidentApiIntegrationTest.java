@@ -18,11 +18,15 @@ import org.testcontainers.containers.PostgreSQLContainer;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = "spring.docker.compose.enabled=false")
 @AutoConfigureMockMvc
 public abstract class AbstractIncidentApiIntegrationTest {
+
+    private static final UUID INITIAL_BRANCH_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002");
 
     protected AbstractIncidentApiIntegrationTest() {}
 
@@ -58,7 +62,7 @@ public abstract class AbstractIncidentApiIntegrationTest {
     }
 
     @BeforeEach
-    void setUpIncidentFixtures() {
+    protected void setUpIncidentFixtures() {
         jdbcTemplate.update("""
             delete from gym.audit_entries
             where resource_type in (
@@ -148,20 +152,47 @@ public abstract class AbstractIncidentApiIntegrationTest {
                     status='ACTIVE'
                 """, id, username, email, passwordEncoder.encode(password),
                 "Incident", "Staff");
-        jdbcTemplate.update("delete from gym.user_roles where user_id=?", id);
+        Integer existingScopeCount = jdbcTemplate.queryForObject(
+                "select count(*) from gym.staff_scopes where user_id=?",
+                Integer.class,
+                id);
+        if (existingScopeCount == null || existingScopeCount == 0) {
+            jdbcTemplate.update("delete from gym.user_roles where user_id=?", id);
+        }
         jdbcTemplate.update("""
                 insert into gym.user_roles(user_id,role_id)
                 select ?,id from gym.roles where role_code=?
+                on conflict (user_id, role_id) do nothing
                 """, id, roleCode);
+        jdbcTemplate.update("""
+                insert into gym.staff_scopes (user_id, scope_type, version)
+                values (?, ?, 0)
+                on conflict (user_id) do nothing
+                """, id, "ADMIN".equals(roleCode) ? "ORGANIZATION" : "BRANCH");
+        if ("ADMIN".equals(roleCode) || "RECEPTIONIST".equals(roleCode)) {
+            jdbcTemplate.update("""
+                insert into gym.staff_branch_assignments
+                    (id, user_id, branch_id, status, assigned_at, version)
+                    values (?, ?, ?, 'ACTIVE', current_timestamp, 0)
+                    on conflict (user_id, branch_id) where status = 'ACTIVE' do nothing
+                    """,
+                    UUID.randomUUID(),
+                    id,
+                    INITIAL_BRANCH_ID);
+        }
         return id;
     }
 
     protected MockHttpSession loginAsAdmin() throws Exception {
-        return login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        MockHttpSession session = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        selectInitialBranch(session);
+        return session;
     }
 
     protected MockHttpSession loginAsReceptionist() throws Exception {
-        return login(RECEPTIONIST_USERNAME, RECEPTIONIST_PASSWORD);
+        MockHttpSession session = login(RECEPTIONIST_USERNAME, RECEPTIONIST_PASSWORD);
+        selectInitialBranch(session);
+        return session;
     }
 
     protected UUID reportIncident(
@@ -222,5 +253,14 @@ public abstract class AbstractIncidentApiIntegrationTest {
                 .andExpect(status().isNoContent())
                 .andReturn();
         return (MockHttpSession) result.getRequest().getSession(false);
+    }
+
+    private void selectInitialBranch(MockHttpSession session) throws Exception {
+        mockMvc.perform(put("/api/v1/me/branch-context")
+                        .session(session)
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"branchId\":\"%s\"}".formatted(INITIAL_BRANCH_ID)))
+                .andExpect(status().isOk());
     }
 }

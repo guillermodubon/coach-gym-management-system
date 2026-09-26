@@ -5,6 +5,8 @@ import io.github.guillermodubon.coachgym.user.ActiveBranchContextResolver;
 import io.github.guillermodubon.coachgym.user.ActiveBranchContextUnavailableException;
 import io.github.guillermodubon.coachgym.user.AuthorizedBranchQuery;
 import io.github.guillermodubon.coachgym.user.AuthorizedBranchSummary;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
 import io.github.guillermodubon.coachgym.user.SelectActiveBranchCommand;
 import io.github.guillermodubon.coachgym.user.StaffAuthorizationContext;
 import io.github.guillermodubon.coachgym.user.StaffBranchContext;
@@ -18,11 +20,13 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** Resolves and manages the authenticated user's server-side branch preference. */
 @Service
 public class ActiveBranchContextApplicationService
-        implements ActiveBranchContextResolver, ActiveBranchContextManager {
+        implements ActiveBranchContextResolver, ActiveBranchContextManager,
+        BranchOperationContextResolver {
 
     private static final Comparator<AuthorizedBranchSummary> BRANCH_ORDER =
             Comparator.comparing(AuthorizedBranchSummary::code)
@@ -52,7 +56,10 @@ public class ActiveBranchContextApplicationService
                         .findFirst()
                         .orElseThrow(ActiveBranchContextUnavailableException::new));
 
-        UUID selectedBranchId = sessionStore.selectedBranchId().orElse(null);
+        UUID selectedBranchId = sessionStore.selectedBranchId()
+                .orElseGet(() -> availableBranches.size() == 1
+                        ? availableBranches.get(0).id()
+                        : null);
         if (selectedBranchId != null
                 && availableBranches.stream().noneMatch(branch -> branch.id().equals(selectedBranchId))) {
             sessionStore.clear();
@@ -68,6 +75,30 @@ public class ActiveBranchContextApplicationService
                 actor.scopeType(),
                 selectedBranchId,
                 availableBranches);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BranchOperationContext resolveOperation(UUID userId) {
+        StaffAuthorizationContext actor = requireActiveScope(userId);
+        StaffBranchContext context = resolve(userId);
+        if (context.activeBranchId() != null
+                && TransactionSynchronizationManager.isActualTransactionActive()
+                && !TransactionSynchronizationManager.isCurrentTransactionReadOnly()
+                && !authorizedBranchQuery.lockAuthorizedActiveBranchForOperation(
+                        userId, context.activeBranchId(), actor.scopeType())) {
+            sessionStore.clear();
+            throw new ActiveBranchContextUnavailableException();
+        }
+        Set<UUID> authorizedBranchIds = context.availableBranches().stream()
+                .map(AuthorizedBranchSummary::id)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        return new BranchOperationContext(
+                actor.userId(),
+                context.organizationId(),
+                actor.scopeType(),
+                context.activeBranchId(),
+                authorizedBranchIds);
     }
 
     @Override

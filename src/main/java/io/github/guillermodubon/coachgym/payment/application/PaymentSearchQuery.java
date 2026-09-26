@@ -19,7 +19,25 @@ public record PaymentSearchQuery(
         int page,
         int size,
         PaymentSortField sortField,
-        PaymentSortDirection direction) {
+        PaymentSortDirection direction,
+        UUID branchId) {
+
+    /** Compatibility constructor for callers that do not select a branch. */
+    public PaymentSearchQuery(
+            UUID clientId,
+            UUID membershipId,
+            UUID membershipPeriodId,
+            PaymentStatus status,
+            PaymentMethod paymentMethod,
+            Instant paidFrom,
+            Instant paidUntil,
+            int page,
+            int size,
+            PaymentSortField sortField,
+            PaymentSortDirection direction) {
+        this(clientId, membershipId, membershipPeriodId, status, paymentMethod,
+                paidFrom, paidUntil, page, size, sortField, direction, null);
+    }
 
     public static final int MAX_SIZE = 100;
     public static final Duration MAX_DATE_RANGE = Duration.ofDays(366);
@@ -71,6 +89,25 @@ public record PaymentSearchQuery(
             String sort,
             String direction) {
 
+        return from(clientId, membershipId, membershipPeriodId, status,
+                paymentMethod, paidFrom, paidUntil, page, size, sort,
+                direction, null);
+    }
+
+    public static PaymentSearchQuery from(
+            UUID clientId,
+            UUID membershipId,
+            UUID membershipPeriodId,
+            String status,
+            String paymentMethod,
+            Instant paidFrom,
+            Instant paidUntil,
+            int page,
+            int size,
+            String sort,
+            String direction,
+            UUID branchId) {
+
         return new PaymentSearchQuery(
                 clientId,
                 membershipId,
@@ -82,7 +119,8 @@ public record PaymentSearchQuery(
                 page,
                 size,
                 parseSortField(sort),
-                parseSortDirection(direction));
+                parseSortDirection(direction),
+                branchId);
     }
 
     private static PaymentStatus parseStatus(String value) {

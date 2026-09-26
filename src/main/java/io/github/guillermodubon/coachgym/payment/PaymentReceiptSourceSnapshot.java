@@ -29,7 +29,33 @@ public record PaymentReceiptSourceSnapshot(
         BigDecimal amount,
         String currency,
         PaymentMethod paymentMethod,
-        Instant paidAt) {
+        Instant paidAt,
+        UUID branchId) {
+
+    /** Compatibility constructor for source fixtures predating branch scoping. */
+    public PaymentReceiptSourceSnapshot(
+            UUID paymentId,
+            String paymentCode,
+            PaymentStatus paymentStatus,
+            String clientCode,
+            String clientDisplayName,
+            String membershipCode,
+            String planName,
+            String promotionName,
+            int membershipPeriodNumber,
+            LocalDate periodStartsOn,
+            LocalDate periodEndsOn,
+            BigDecimal listPrice,
+            BigDecimal discountAmount,
+            BigDecimal amount,
+            String currency,
+            PaymentMethod paymentMethod,
+            Instant paidAt) {
+        this(paymentId, paymentCode, paymentStatus, clientCode, clientDisplayName,
+                membershipCode, planName, promotionName, membershipPeriodNumber,
+                periodStartsOn, periodEndsOn, listPrice, discountAmount, amount,
+                currency, paymentMethod, paidAt, null);
+    }
 
     public PaymentReceiptSourceSnapshot {
         if (paymentId == null || paymentCode == null || paymentCode.isBlank()) {

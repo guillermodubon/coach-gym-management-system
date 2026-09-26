@@ -41,7 +41,8 @@ public record PaymentReceiptResponse(
         String checksumSha256,
         String rendererVersion,
         long version,
-        URI downloadUrl) {
+        URI downloadUrl,
+        UUID branchId) {
 
     static PaymentReceiptResponse from(PaymentReceiptDetails details, URI downloadUrl) {
         return new PaymentReceiptResponse(
@@ -73,6 +74,7 @@ public record PaymentReceiptResponse(
                 details.checksumSha256(),
                 details.rendererVersion(),
                 details.version(),
-                downloadUrl);
+                downloadUrl,
+                details.branchId());
     }
 }

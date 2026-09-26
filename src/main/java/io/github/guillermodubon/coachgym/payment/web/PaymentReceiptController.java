@@ -81,8 +81,9 @@ class PaymentReceiptController {
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
     @ApiResponse(responseCode = "404", description = "Receipt not found")
     PaymentReceiptResponse findByPaymentId(
-            @PathVariable UUID paymentId) {
-        return response(service.findByPaymentId(paymentId));
+            @PathVariable UUID paymentId,
+            Authentication authentication) {
+        return response(service.findByPaymentId(paymentId, actor(authentication)));
     }
 
     @GetMapping(value = "/{paymentId}/receipt.pdf", produces = MediaType.APPLICATION_PDF_VALUE)
@@ -96,8 +97,11 @@ class PaymentReceiptController {
     @ApiResponse(responseCode = "403", description = "Insufficient permissions")
     @ApiResponse(responseCode = "404", description = "Receipt not found")
     @ApiResponse(responseCode = "500", description = "Receipt document unavailable")
-    ResponseEntity<byte[]> download(@PathVariable UUID paymentId) {
-        PaymentReceiptContent content = service.downloadByPaymentId(paymentId);
+    ResponseEntity<byte[]> download(
+            @PathVariable UUID paymentId,
+            Authentication authentication) {
+        PaymentReceiptContent content = service.downloadByPaymentId(
+                paymentId, actor(authentication));
         PaymentReceiptDocument document = content.document();
         String filename = filename(content.details().receiptNumber());
         return ResponseEntity.ok()

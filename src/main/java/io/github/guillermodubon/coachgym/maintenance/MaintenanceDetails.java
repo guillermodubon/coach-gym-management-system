@@ -65,5 +65,42 @@ public record MaintenanceDetails(
         UUID completedByUserId,
         Instant createdAt,
         Instant updatedAt,
-        long version) {
+        long version,
+        UUID branchId) {
+
+    /** Compatibility constructor for pre-branch projections. */
+    public MaintenanceDetails(
+            UUID id,
+            long maintenanceNumber,
+            String maintenanceCode,
+            UUID equipmentId,
+            String equipmentCode,
+            String equipmentName,
+            UUID incidentId,
+            String incidentCode,
+            MaintenanceType maintenanceType,
+            MaintenanceStatus status,
+            LocalDate scheduledOn,
+            Instant startedAt,
+            Instant completedAt,
+            String providerName,
+            String technicianName,
+            BigDecimal estimatedCost,
+            BigDecimal actualCost,
+            String currency,
+            String actionsTaken,
+            String notes,
+            UUID createdByUserId,
+            UUID assignedToUserId,
+            UUID completedByUserId,
+            Instant createdAt,
+            Instant updatedAt,
+            long version) {
+        this(id, maintenanceNumber, maintenanceCode, equipmentId, equipmentCode,
+                equipmentName, incidentId, incidentCode, maintenanceType, status,
+                scheduledOn, startedAt, completedAt, providerName, technicianName,
+                estimatedCost, actualCost, currency, actionsTaken, notes,
+                createdByUserId, assignedToUserId, completedByUserId, createdAt,
+                updatedAt, version, null);
+    }
 }

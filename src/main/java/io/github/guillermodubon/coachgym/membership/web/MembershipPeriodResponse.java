@@ -15,7 +15,8 @@ public record MembershipPeriodResponse(
         LocalDate baseEndsOn,
         LocalDate effectiveEndsOn,
         Instant createdAt,
-        long version) {
+        long version,
+        UUID registeredAtBranchId) {
 
     static MembershipPeriodResponse from(
             MembershipPeriodDetails period) {
@@ -30,6 +31,7 @@ public record MembershipPeriodResponse(
                 period.baseEndsOn(),
                 period.effectiveEndsOn(),
                 period.createdAt(),
-                period.version());
+                period.version(),
+                period.registeredAtBranchId());
     }
 }

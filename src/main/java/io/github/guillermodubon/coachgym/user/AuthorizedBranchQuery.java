@@ -10,4 +10,8 @@ public interface AuthorizedBranchQuery {
     Optional<UUID> findAuthorizedOrganizationId(UUID userId);
 
     List<AuthorizedBranchSummary> findAuthorizedActiveBranches(UUID userId);
+
+    /** Holds the active branch and (for branch scope) assignment against concurrent deactivation. */
+    boolean lockAuthorizedActiveBranchForOperation(
+            UUID userId, UUID branchId, StaffScopeType scopeType);
 }

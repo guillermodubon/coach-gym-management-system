@@ -10,4 +10,12 @@ public interface PaymentStatusHistoryQuery {
             UUID paymentId,
             int page,
             int size);
+
+    default PaymentStatusHistoryPage findByPaymentId(
+            UUID paymentId,
+            int page,
+            int size,
+            UUID branchId) {
+        return findByPaymentId(paymentId, page, size);
+    }
 }

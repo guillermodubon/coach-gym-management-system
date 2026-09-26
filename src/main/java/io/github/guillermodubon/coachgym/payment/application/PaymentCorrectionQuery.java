@@ -8,4 +8,9 @@ import java.util.UUID;
 public interface PaymentCorrectionQuery {
 
     Optional<PaymentCorrectionDetails> findByPaymentId(UUID paymentId);
+
+    default Optional<PaymentCorrectionDetails> findByPaymentId(
+            UUID paymentId, UUID branchId) {
+        return findByPaymentId(paymentId);
+    }
 }

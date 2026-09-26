@@ -5,6 +5,8 @@ import io.github.guillermodubon.coachgym.payment.PaymentCorrectionDetails;
 import io.github.guillermodubon.coachgym.payment.PaymentStatus;
 import io.github.guillermodubon.coachgym.payment.PaymentStatusHistoryPage;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
@@ -26,6 +28,23 @@ public class PaymentCorrectionApplicationService {
     private final PaymentStatusHistoryQuery historyQuery;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
+    private final BranchOperationContextResolver branchContextResolver;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PaymentCorrectionApplicationService(
+            PaymentCorrectionStore correctionStore,
+            PaymentCorrectionQuery correctionQuery,
+            PaymentStatusHistoryQuery historyQuery,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            BranchOperationContextResolver branchContextResolver) {
+        this.correctionStore = Objects.requireNonNull(correctionStore);
+        this.correctionQuery = Objects.requireNonNull(correctionQuery);
+        this.historyQuery = Objects.requireNonNull(historyQuery);
+        this.eventPublisher = Objects.requireNonNull(eventPublisher);
+        this.clock = Objects.requireNonNull(clock);
+        this.branchContextResolver = branchContextResolver;
+    }
 
     public PaymentCorrectionApplicationService(
             PaymentCorrectionStore correctionStore,
@@ -33,11 +52,7 @@ public class PaymentCorrectionApplicationService {
             PaymentStatusHistoryQuery historyQuery,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
-        this.correctionStore = Objects.requireNonNull(correctionStore);
-        this.correctionQuery = Objects.requireNonNull(correctionQuery);
-        this.historyQuery = Objects.requireNonNull(historyQuery);
-        this.eventPublisher = Objects.requireNonNull(eventPublisher);
-        this.clock = Objects.requireNonNull(clock);
+        this(correctionStore, correctionQuery, historyQuery, eventPublisher, clock, null);
     }
 
     @Transactional
@@ -49,8 +64,9 @@ public class PaymentCorrectionApplicationService {
         requireActor(actor);
         Instant occurredAt = clock.instant();
 
-        PaymentCorrectionDetails result = correctionStore.voidPayment(
-                command, actor, occurredAt);
+        PaymentCorrectionDetails result = branchContextResolver == null
+                ? correctionStore.voidPayment(command, actor, occurredAt)
+                : correctionStore.voidPayment(command, actor, occurredAt, branchId(actor));
 
         eventPublisher.publishEvent(new PaymentVoided(
                 result.paymentId(),
@@ -59,7 +75,8 @@ public class PaymentCorrectionApplicationService {
                 PaymentStatus.VOIDED,
                 actor.id(),
                 actor.username(),
-                occurredAt));
+                occurredAt,
+                result.branchId()));
 
         return result;
     }
@@ -73,8 +90,9 @@ public class PaymentCorrectionApplicationService {
         requireActor(actor);
         Instant occurredAt = clock.instant();
 
-        PaymentCorrectionDetails result = correctionStore.refundPayment(
-                command, actor, occurredAt);
+        PaymentCorrectionDetails result = branchContextResolver == null
+                ? correctionStore.refundPayment(command, actor, occurredAt)
+                : correctionStore.refundPayment(command, actor, occurredAt, branchId(actor));
 
         if (result.refund() == null) {
             throw new IllegalStateException(
@@ -92,7 +110,8 @@ public class PaymentCorrectionApplicationService {
                 result.refund().externalReference() != null,
                 actor.id(),
                 actor.username(),
-                occurredAt));
+                occurredAt,
+                result.branchId()));
 
         return result;
     }
@@ -102,6 +121,16 @@ public class PaymentCorrectionApplicationService {
     public Optional<PaymentCorrectionDetails> findCorrection(UUID paymentId) {
         requirePaymentId(paymentId);
         return correctionQuery.findByPaymentId(paymentId);
+    }
+
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public Optional<PaymentCorrectionDetails> findCorrection(
+            UUID paymentId,
+            AuthenticatedActor actor) {
+        requireActor(actor);
+        requirePaymentId(paymentId);
+        return correctionQuery.findByPaymentId(paymentId, branchId(actor));
     }
 
     @Transactional(readOnly = true)
@@ -118,6 +147,22 @@ public class PaymentCorrectionApplicationService {
         return historyQuery.findByPaymentId(paymentId, page, size);
     }
 
+    @Transactional(readOnly = true)
+    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    public PaymentStatusHistoryPage findStatusHistory(
+            UUID paymentId,
+            int page,
+            int size,
+            AuthenticatedActor actor) {
+        requireActor(actor);
+        requirePaymentId(paymentId);
+        if (page < 0 || size < 1 || size > 100) {
+            throw new PaymentCorrectionValidationException(
+                    "Payment history pagination is invalid.");
+        }
+        return historyQuery.findByPaymentId(paymentId, page, size, branchId(actor));
+    }
+
     private static void requirePaymentId(UUID paymentId) {
         if (paymentId == null) {
             throw new PaymentCorrectionValidationException(
@@ -131,5 +176,13 @@ public class PaymentCorrectionApplicationService {
             throw new PaymentCorrectionValidationException(
                     "Authenticated actor is required.");
         }
+    }
+
+    private UUID branchId(AuthenticatedActor actor) {
+        if (branchContextResolver == null) {
+            return null;
+        }
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(
+                branchContextResolver.resolveOperation(actor.id()));
     }
 }

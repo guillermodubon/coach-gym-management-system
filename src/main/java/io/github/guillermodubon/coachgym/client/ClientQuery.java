@@ -13,4 +13,14 @@ public interface ClientQuery {
 
     Optional<ClientDetails> findClientById(
             UUID clientId);
+
+    /**
+     * Resolves a client only when its immutable home branch matches the
+     * authoritative branch context of the caller.
+     */
+    default Optional<ClientDetails> findClientById(
+            UUID clientId,
+            UUID homeBranchId) {
+        return findClientById(clientId);
+    }
 }

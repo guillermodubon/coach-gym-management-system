@@ -6,7 +6,14 @@ import java.util.UUID;
 
 /** Published after an incident has been resolved successfully. */
 public record IncidentResolvedEvent(UUID incidentId, String incidentCode, UUID equipmentId,
-        String resolutionNotes, UUID actorUserId, String actorIdentifier, Instant occurredAt) {
+        String resolutionNotes, UUID actorUserId, String actorIdentifier, Instant occurredAt,
+        UUID branchId) {
+    public IncidentResolvedEvent(UUID incidentId, String incidentCode, UUID equipmentId,
+            String resolutionNotes, UUID actorUserId, String actorIdentifier,
+            Instant occurredAt) {
+        this(incidentId, incidentCode, equipmentId, resolutionNotes, actorUserId,
+                actorIdentifier, occurredAt, null);
+    }
     public static final int MAX_RESOLUTION_NOTES_LENGTH = 2_000;
     public IncidentResolvedEvent {
         Objects.requireNonNull(incidentId, "Incident id is required.");

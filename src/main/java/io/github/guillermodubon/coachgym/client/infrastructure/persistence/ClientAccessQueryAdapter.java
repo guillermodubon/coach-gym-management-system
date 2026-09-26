@@ -36,6 +36,7 @@ class ClientAccessQueryAdapter implements ClientAccessQuery {
         return new ClientAccessDetails(
                 entity.id(),
                 entity.clientCode(),
-                entity.status());
+                entity.status(),
+                entity.homeBranchId());
     }
 }

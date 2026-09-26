@@ -26,23 +26,42 @@ class JdbcClientPhotoStore implements ClientPhotoStore {
 
     @Override
     public boolean clientExists(UUID clientId) {
+        return clientExists(clientId, null);
+    }
+
+    @Override
+    public boolean clientExists(UUID clientId, UUID branchId) {
         return Boolean.TRUE.equals(jdbcClient.sql(
-                        "select exists(select 1 from gym.clients where id = :clientId)")
+                        "select exists(select 1 from gym.clients where id = :clientId "
+                                + "and (cast(:branchId as uuid) is null "
+                                + "or home_branch_id = cast(:branchId as uuid)))")
                 .param("clientId", clientId)
+                .param("branchId", branchId)
                 .query(Boolean.class)
                 .single());
     }
 
     @Override
     public Optional<ClientPhotoRecord> findByClientId(UUID clientId) {
+        return findByClientId(clientId, null);
+    }
+
+    @Override
+    public Optional<ClientPhotoRecord> findByClientId(UUID clientId, UUID branchId) {
         try {
             return jdbcClient.sql("""
                             select id, storage_key, content_type, size_bytes,
                                    checksum_sha256, updated_at, version
                             from gym.client_photos
                             where client_id = :clientId
+                              and (cast(:branchId as uuid) is null
+                                   or exists (
+                                       select 1 from gym.clients client
+                                       where client.id = gym.client_photos.client_id
+                                         and client.home_branch_id = cast(:branchId as uuid)))
                             """)
                     .param("clientId", clientId)
+                    .param("branchId", branchId)
                     .query((rs, row) -> new ClientPhotoRecord(
                             new ClientPhotoDetails(
                                     rs.getObject("id", UUID.class),
@@ -67,7 +86,8 @@ class JdbcClientPhotoStore implements ClientPhotoStore {
             long sizeBytes,
             String checksumSha256,
             AuthenticatedActor actor,
-            Instant occurredAt) {
+            Instant occurredAt,
+            UUID branchId) {
         UUID id = UUID.randomUUID();
         OffsetDateTime timestamp = OffsetDateTime.ofInstant(occurredAt, ZoneOffset.UTC);
         try {
@@ -105,7 +125,7 @@ class JdbcClientPhotoStore implements ClientPhotoStore {
                             rs.getObject("updated_at", OffsetDateTime.class).toInstant(),
                             rs.getLong("version")))
                     .single();
-            return findByClientId(clientId).orElseThrow().details();
+            return findByClientId(clientId, branchId).orElseThrow().details();
         } catch (DataAccessException exception) {
             throw new ClientProfileDataAccessException(
                     "Client photo metadata could not be saved.", exception);
@@ -114,16 +134,27 @@ class JdbcClientPhotoStore implements ClientPhotoStore {
 
     @Override
     public String delete(UUID clientId, long expectedVersion) {
-        ClientPhotoRecord current = findByClientId(clientId)
+        return delete(clientId, expectedVersion, null);
+    }
+
+    @Override
+    public String delete(UUID clientId, long expectedVersion, UUID branchId) {
+        ClientPhotoRecord current = findByClientId(clientId, branchId)
                 .orElseThrow(() -> new ClientPhotoNotFoundException(
                         "Client photo was not found."));
         int affected = jdbcClient.sql("""
                         delete from gym.client_photos
                         where client_id = :clientId
                           and version = :expectedVersion
+                          and (cast(:branchId as uuid) is null
+                               or exists (
+                                   select 1 from gym.clients client
+                                   where client.id = gym.client_photos.client_id
+                                     and client.home_branch_id = cast(:branchId as uuid)))
                         """)
                 .param("clientId", clientId)
                 .param("expectedVersion", expectedVersion)
+                .param("branchId", branchId)
                 .update();
         if (affected != 1) {
             throw new ClientProfileDataAccessException(

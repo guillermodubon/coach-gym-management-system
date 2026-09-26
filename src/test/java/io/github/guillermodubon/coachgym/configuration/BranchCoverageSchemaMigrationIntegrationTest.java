@@ -90,7 +90,7 @@ class BranchCoverageSchemaMigrationIntegrationTest {
         JdbcTemplate jdbc = jdbcTemplate();
 
         flyway.validate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("42");
+assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("42");
         assertThat(jdbc.queryForObject("""
                 select count(*)
                 from flyway_schema_history

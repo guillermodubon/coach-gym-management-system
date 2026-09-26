@@ -22,16 +22,18 @@ class AuditMetadataSanitizerTest {
     @Test
     void coversEveryCurrentAuditActionFamilyWithExplicitPolicy() {
         Map<String, String> expectedKeys = Map.ofEntries(
-                Map.entry("CLIENT_REGISTERED", "missing"),
+                Map.entry("CLIENT_REGISTERED", "branchId"),
                 Map.entry("PLAN_CREATED", "missing"),
                 Map.entry("PROMOTION_ELIGIBLE_PLANS_CHANGED", "eligiblePlanIds"),
                 Map.entry("MEMBERSHIP_CREATED", "listPrice"),
+                Map.entry("MEMBERSHIP_PLAN_BRANCH_COVERAGE_CHANGED", "coverageScope"),
                 Map.entry("PAYMENT_REGISTERED", "paymentMethod"),
                 Map.entry("PAYMENT_ATTEMPT_FAILED", "failureCode"),
                 Map.entry("PAYMENT_RECEIPT_GENERATED", "paymentCode"),
                 Map.entry("ACCESS_CREDENTIAL_ISSUED", "tokenSchemeVersion"),
                 Map.entry("ACCESS_DENIED", "reasonCode"),
                 Map.entry("ACCESS_PAYMENT_POLICY_CHANGED", "previousValue"),
+                Map.entry("BRANCH_ACCESS_PAYMENT_POLICY_CHANGED", "newMode"),
                 Map.entry("EMAIL_DELIVERY_SENT", "deliveryType"),
                 Map.entry("EQUIPMENT_REGISTERED", "categoryId"),
                 Map.entry("INCIDENT_REPORTED", "equipmentId"),
@@ -78,6 +80,62 @@ class AuditMetadataSanitizerTest {
         assertThat(projection.values())
                 .doesNotContainKeys("unknownOperationalValue", "providerSecret");
         assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void sanitizesBranchPolicyMetadataWithoutExposingUnapprovedValues() {
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "BRANCH_ACCESS_PAYMENT_POLICY_CHANGED",
+                Map.of(
+                        "previousMode", "INHERIT",
+                        "newMode", "REQUIRED",
+                        "version", 4L,
+                        "paymentReference", "must disappear"));
+
+        assertThat(projection.values())
+                .containsEntry("previousMode", "INHERIT")
+                .containsEntry("newMode", "REQUIRED")
+                .containsEntry("version", 4L)
+                .doesNotContainKey("paymentReference");
+        assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void sanitizesPlanCoverageMetadataWithoutExposingBranchIds() {
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "MEMBERSHIP_PLAN_BRANCH_COVERAGE_CHANGED",
+                Map.of(
+                        "coverageScope", "SELECTED_BRANCHES",
+                        "coveredBranchCount", 3,
+                        "sourcePlanVersion", 5L,
+                        "branchIds", List.of(UUID.randomUUID().toString()),
+                        "internalPolicy", "must disappear"));
+
+        assertThat(projection.values())
+                .containsEntry("coverageScope", "SELECTED_BRANCHES")
+                .containsEntry("coveredBranchCount", 3)
+                .containsEntry("sourcePlanVersion", 5L)
+                .doesNotContainKeys("branchIds", "internalPolicy");
+        assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void preservesOnlyTheSafeBranchReferenceAcrossBranchOwnedActionFamilies() {
+        String branchId = UUID.randomUUID().toString();
+        List<String> actions = List.of(
+                "CLIENT_REGISTERED", "MEMBERSHIP_CREATED", "PAYMENT_REGISTERED",
+                "PAYMENT_ATTEMPT_CREATED", "PAYMENT_RECEIPT_GENERATED",
+                "ACCESS_DENIED", "ACCESS_CREDENTIAL_ISSUED", "EMAIL_DELIVERY_SENT",
+                "EQUIPMENT_REGISTERED", "INCIDENT_REPORTED", "MAINTENANCE_SCHEDULED");
+
+        for (String action : actions) {
+            AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                    action, Map.of("branchId", branchId, "branchAddress", "private"));
+            assertThat(projection.values())
+                    .as("safe branch snapshot for %s", action)
+                    .containsEntry("branchId", branchId)
+                    .doesNotContainKey("branchAddress");
+        }
     }
 
     @Test
