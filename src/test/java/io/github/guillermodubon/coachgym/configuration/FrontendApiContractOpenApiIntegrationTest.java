@@ -27,6 +27,8 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
 
         assertThat(paths.keySet()).contains(
                 "/api/v1/auth/csrf",
+                "/api/v1/auth/password-recovery-requests",
+                "/api/v1/auth/password-recovery/complete",
                 "/api/v1/me/profile",
                 "/api/v1/me/profile/photo",
                 "/api/v1/me/profile/password",
@@ -55,6 +57,16 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
                 "/api/v1/staff/branch-assignments/{assignmentId}/end",
                 "/api/v1/staff/{userId}/branch-assignments",
                 "/api/v1/staff/{userId}/scope",
+                "/api/v1/staff/{userId}/suspend",
+                "/api/v1/staff/{userId}/reactivate",
+                "/api/v1/staff/{userId}/deactivate",
+                "/api/v1/staff/{userId}/role-scope",
+                "/api/v1/staff-invitations",
+                "/api/v1/staff-invitations/{invitationId}",
+                "/api/v1/staff-invitations/{invitationId}/resend",
+                "/api/v1/staff-invitations/{invitationId}/revoke",
+                "/api/v1/staff-invitations/inspect",
+                "/api/v1/staff-invitations/accept",
                 "/api/v1/me/branch-context",
                 "/api/v1/equipment-categories",
                 "/api/v1/equipment",
@@ -96,6 +108,15 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
         assertSessionSecurity(document, "/api/v1/staff/{userId}/branch-assignments", "get");
         assertSessionSecurity(document, "/api/v1/staff/{userId}/scope", "get");
         assertSessionSecurity(document, "/api/v1/staff/{userId}/scope", "put");
+        assertSessionSecurity(document, "/api/v1/staff/{userId}/suspend", "post");
+        assertSessionSecurity(document, "/api/v1/staff/{userId}/reactivate", "post");
+        assertSessionSecurity(document, "/api/v1/staff/{userId}/deactivate", "post");
+        assertSessionSecurity(document, "/api/v1/staff/{userId}/role-scope", "put");
+        assertSessionSecurity(document, "/api/v1/staff-invitations", "get");
+        assertSessionSecurity(document, "/api/v1/staff-invitations", "post");
+        assertSessionSecurity(document, "/api/v1/staff-invitations/{invitationId}", "get");
+        assertSessionSecurity(document, "/api/v1/staff-invitations/{invitationId}/resend", "post");
+        assertSessionSecurity(document, "/api/v1/staff-invitations/{invitationId}/revoke", "post");
         assertSessionSecurity(document, "/api/v1/me/branch-context", "get");
         assertSessionSecurity(document, "/api/v1/me/branch-context", "put");
         assertSessionSecurity(document, "/api/v1/me/branch-context", "delete");
@@ -112,12 +133,75 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
         Map<String, Object> loginOperation = JsonPath.read(
                 document, "$.paths['/api/v1/auth/login'].post");
         assertThat(loginOperation).doesNotContainKey("security");
+
+        for (String path : List.of(
+                "/api/v1/staff-invitations/inspect",
+                "/api/v1/staff-invitations/accept",
+                "/api/v1/auth/password-recovery-requests",
+                "/api/v1/auth/password-recovery/complete")) {
+            Map<String, Object> operation = JsonPath.read(
+                    document, "$.paths['" + path + "'].post");
+            assertThat(operation).as("public token/recovery operation %s", path)
+                    .doesNotContainKey("security");
+        }
+    }
+
+    @Test
+    void documentsStaffIdentityLifecycleExpiryPasswordBoundsAndGenericAbuseResponses()
+            throws Exception {
+        String document = openApiDocument();
+        Map<String, Object> paths = JsonPath.read(document, "$.paths");
+        Map<String, Object> invitationInspect = JsonPath.read(
+                document, "$.paths['/api/v1/staff-invitations/inspect'].post");
+        Map<String, Object> invitationAccept = JsonPath.read(
+                document, "$.paths['/api/v1/staff-invitations/accept'].post");
+        Map<String, Object> recoveryRequest = JsonPath.read(
+                document, "$.paths['/api/v1/auth/password-recovery-requests'].post");
+        Map<String, Object> recoveryComplete = JsonPath.read(
+                document, "$.paths['/api/v1/auth/password-recovery/complete'].post");
+        Map<String, Object> createInvitation = JsonPath.read(
+                document, "$.paths['/api/v1/staff-invitations'].post");
+
+        assertThat(invitationInspect.get("responses")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsKeys("200", "409")
+                .doesNotContainKey("429");
+        assertThat(invitationAccept.get("responses")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsKeys("201", "409")
+                .doesNotContainKey("429");
+        assertThat(recoveryRequest.get("responses")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsKey("202");
+        assertThat(recoveryComplete.get("responses")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsKeys("204", "409")
+                .doesNotContainKey("429");
+        assertThat(createInvitation.get("responses")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.MAP)
+                .containsKey("429");
+
+        assertThat(document)
+                .contains("PENDING, ACCEPTED, EXPIRED, and REVOKED")
+                .contains("ADMIN invitations expire after 24 hours")
+                .contains("RECEPTIONIST invitations after 48 hours")
+                .contains("Recovery states are PENDING, USED, EXPIRED, and REVOKED")
+                .contains("expire after 15 minutes by default")
+                .contains("never exceed 30 minutes")
+                .contains("passwords must be 12–256 characters")
+                .contains("New passwords must be 12–256")
+                .contains("current-password reauthentication")
+                .contains("Abuse controls do not alter the public response");
+
+        Map<String, Object> acceptancePassword = JsonPath.read(
+                document, "$.components.schemas.AcceptStaffInvitationRequest.properties.password");
+        assertThat(acceptancePassword)
+                .containsEntry("minLength", 12)
+                .containsEntry("maxLength", 256);
+        assertThat(paths.keySet()).noneMatch(path -> path.toLowerCase(java.util.Locale.ROOT)
+                .contains("register") || path.toLowerCase(java.util.Locale.ROOT).contains("signup"));
     }
 
     @Test
     void documentsCommonPageShapeAndDoesNotExposeInternalOrUnsupportedContracts()
             throws Exception {
         String document = openApiDocument();
+        Map<String, Object> paths = JsonPath.read(document, "$.paths");
 
         for (String schema : Set.of(
                 "PlanPageResponse",
@@ -136,7 +220,10 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
         }
 
         assertThat(document)
-                .doesNotContain("ROLE_MAINTENANCE", "passwordHash", "secretKey", "serviceRoleKey", "storageKey");
+                .doesNotContain("ROLE_MAINTENANCE", "passwordHash", "secretKey", "serviceRoleKey", "storageKey")
+                .contains("public staff registration is not supported", "generic acknowledgement");
+        assertThat(paths.keySet()).noneMatch(path -> path.toLowerCase(java.util.Locale.ROOT)
+                .contains("register") || path.toLowerCase(java.util.Locale.ROOT).contains("signup"));
         Map<String, Object> profileSchema = JsonPath.read(
                 document, "$.components.schemas.StaffSelfProfile.properties");
         assertThat(profileSchema.keySet())
@@ -148,6 +235,14 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
                 .containsExactlyInAnyOrder(
                         "currentPassword", "newPassword", "newPasswordConfirmation")
                 .doesNotContain("userId", "role", "status", "passwordHash", "sessionId");
+
+        Map<String, Object> acceptanceProperties = JsonPath.read(
+                document, "$.components.schemas.AcceptStaffInvitationRequest.properties");
+        assertThat(acceptanceProperties.keySet()).containsExactlyInAnyOrder(
+                "token", "password", "passwordConfirmation", "firstName", "lastName");
+        assertThat(acceptanceProperties.keySet()).doesNotContain(
+                "email", "role", "scope", "branchIds", "status", "permissions", "actorUserId");
+        assertThat(document).doesNotContain("A".repeat(43));
     }
 
     @Test

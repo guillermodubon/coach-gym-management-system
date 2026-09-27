@@ -1,12 +1,14 @@
 package io.github.guillermodubon.coachgym.user.application;
 
 import io.github.guillermodubon.coachgym.configuration.InitialAdminProperties;
+import io.github.guillermodubon.coachgym.user.StaffInitialAdministratorProvisioned;
 import java.time.Clock;
 import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,16 +25,19 @@ public class InitialAdminProvisioner implements ApplicationRunner {
     private final UserAccountStore userAccountStore;
     private final PasswordEncoder passwordEncoder;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     public InitialAdminProvisioner(
             InitialAdminProperties properties,
             UserAccountStore userAccountStore,
             PasswordEncoder passwordEncoder,
-            Clock clock) {
+            Clock clock,
+            ApplicationEventPublisher eventPublisher) {
         this.properties = properties;
         this.userAccountStore = userAccountStore;
         this.passwordEncoder = passwordEncoder;
         this.clock = clock;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -50,6 +55,7 @@ public class InitialAdminProvisioner implements ApplicationRunner {
             return;
         }
 
+        userAccountStore.lockBootstrapLifecycle();
         if (userAccountStore.hasAnyUsers()) {
             LOGGER.info("Initial administrator provisioning skipped because staff accounts already exist.");
             return;
@@ -63,7 +69,8 @@ public class InitialAdminProvisioner implements ApplicationRunner {
                 properties.firstName().trim(),
                 properties.lastName().trim());
 
-        userAccountStore.createInitialAdministrator(administrator, provisionedAt);
-        LOGGER.info("Initial administrator account provisioned for username '{}'.", administrator.username());
+        java.util.UUID userId = userAccountStore.createInitialAdministrator(administrator, provisionedAt);
+        eventPublisher.publishEvent(new StaffInitialAdministratorProvisioned(userId, provisionedAt));
+        LOGGER.info("Initial administrator account provisioned.");
     }
 }

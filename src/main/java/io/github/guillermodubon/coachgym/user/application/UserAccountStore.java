@@ -10,7 +10,10 @@ public interface UserAccountStore {
 
     boolean hasAnyUsers();
 
-    void createInitialAdministrator(InitialAdministrator administrator, Instant grantedAt);
+    /** Serializes the empty-registry check and creation across concurrent application starts. */
+    void lockBootstrapLifecycle();
+
+    UUID createInitialAdministrator(InitialAdministrator administrator, Instant grantedAt);
 
     void recordSuccessfulLogin(UUID userId, Instant occurredAt);
 }

@@ -29,6 +29,14 @@ import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
 import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
 import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
 import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
+import io.github.guillermodubon.coachgym.user.StaffInvitationCreated;
+import io.github.guillermodubon.coachgym.user.StaffInvitationResent;
+import io.github.guillermodubon.coachgym.user.StaffInvitationRevoked;
+import io.github.guillermodubon.coachgym.user.StaffInvitationAccepted;
+import io.github.guillermodubon.coachgym.user.StaffIdentityLifecycleChanged;
+import io.github.guillermodubon.coachgym.user.StaffRoleScopeChanged;
+import io.github.guillermodubon.coachgym.user.StaffPasswordReset;
+import io.github.guillermodubon.coachgym.user.StaffInitialAdministratorProvisioned;
 import io.github.guillermodubon.coachgym.user.StaffBranchAssigned;
 import io.github.guillermodubon.coachgym.user.StaffBranchAssignmentEnded;
 import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
@@ -295,6 +303,55 @@ class AuditEntryPersistenceAdapter
     @Override
     @Transactional
     public void recordStaffPasswordChanged(StaffPasswordChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffInvitationCreated(StaffInvitationCreated event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffInvitationResent(StaffInvitationResent event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffInvitationRevoked(StaffInvitationRevoked event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffInvitationAccepted(StaffInvitationAccepted event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffIdentityLifecycleChanged(StaffIdentityLifecycleChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffRoleScopeChanged(StaffRoleScopeChanged event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordStaffPasswordReset(StaffPasswordReset event) {
+        repository.save(AuditEntryJpaEntity.from(event));
+    }
+
+    @Override
+    @Transactional
+    public void recordInitialAdministratorProvisioned(
+            StaffInitialAdministratorProvisioned event) {
         repository.save(AuditEntryJpaEntity.from(event));
     }
 

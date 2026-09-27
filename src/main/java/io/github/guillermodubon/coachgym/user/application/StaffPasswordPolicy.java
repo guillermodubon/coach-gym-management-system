@@ -1,10 +1,12 @@
 package io.github.guillermodubon.coachgym.user.application;
 
+import io.github.guillermodubon.coachgym.user.StaffCredentialPolicy;
+
 /** Password-strength boundaries shared by the self-service password command. */
 public final class StaffPasswordPolicy {
 
-    public static final int MIN_LENGTH = 12;
-    public static final int MAX_LENGTH = 256;
+    public static final int MIN_LENGTH = StaffCredentialPolicy.MIN_PASSWORD_LENGTH;
+    public static final int MAX_LENGTH = StaffCredentialPolicy.MAX_PASSWORD_LENGTH;
 
     private StaffPasswordPolicy() {
     }

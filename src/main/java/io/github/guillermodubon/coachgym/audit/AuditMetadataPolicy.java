@@ -129,6 +129,18 @@ public final class AuditMetadataPolicy {
                 "eligiblePlanCount", "eligiblePlanIds", "promotionId"));
         policy.put("STAFF_PROFILE_", immutableSet(
                 "changedFields", "photoPresent", "reauthenticationRequired"));
+        policy.put("STAFF_INVITATION_", immutableSet(
+                "invitationId", "organizationId", "invitedByUserId", "actorUserId",
+                "targetUserId", "previousStatus", "newStatus", "proposedRole",
+                "proposedScope", "role", "scope", "branchIds", "version",
+                "maskedRecipient"));
+        policy.put("STAFF_ACCOUNT_", immutableSet(
+                "targetUserId", "previousStatus", "newStatus", "reasonPresent"));
+        policy.put("STAFF_ROLE_SCOPE_", immutableSet(
+                "targetUserId", "previousRoles", "newRoles", "previousScope",
+                "newScope", "reasonPresent"));
+        policy.put("STAFF_PASSWORD_RECOVERY_", immutableSet("userIdPresent"));
+        policy.put("INITIAL_ADMIN_", immutableSet("userId"));
         policy.put("STAFF_PASSWORD_", immutableSet(
                 "reauthenticationRequired"));
         policy.put("STAFF_SCOPE_", immutableSet(

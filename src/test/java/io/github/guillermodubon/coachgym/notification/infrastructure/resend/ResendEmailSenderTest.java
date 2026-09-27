@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import com.fasterxml.jackson.databind.JsonNode;
 import io.github.guillermodubon.coachgym.notification.EmailAttachment;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryFailureCode;
 import io.github.guillermodubon.coachgym.notification.EmailMessage;
@@ -49,6 +50,28 @@ class ResendEmailSenderTest {
         assertThat(result.providerMessageId()).isEqualTo("re_123");
         assertThat(authorization.get()).isEqualTo("Bearer resend-secret");
         assertThat(body.get()).contains("receipt.pdf").doesNotContain("resend-secret");
+    }
+
+    @Test
+    void submitsInvitationWithoutPersistableAttachmentPayload() throws IOException {
+        AtomicReference<String> body = new AtomicReference<>();
+        server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        server.createContext("/emails", exchange -> {
+            body.set(new String(exchange.getRequestBody().readAllBytes()));
+            byte[] response = "{}".getBytes();
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        EmailMessage invitation = new EmailMessage(
+                "staff@example.test", "no-reply@example.com", "Coach Gym", null,
+                "Staff invitation", "Accept invitation", "<p>Accept invitation</p>", null);
+
+        assertThat(sender().send(invitation).result())
+                .isEqualTo(io.github.guillermodubon.coachgym.notification.EmailAttemptResult.SENT);
+        JsonNode payload = new ObjectMapper().readTree(body.get());
+        assertThat(payload.has("attachments")).isFalse();
     }
 
     @Test

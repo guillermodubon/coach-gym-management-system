@@ -147,6 +147,8 @@ class JdbcStaffProfilePersistenceAdapter
             int updated = jdbcClient.sql("""
                             update gym.users
                                set password_hash = :passwordHash,
+                                   password_change_required = false,
+                                   security_version = security_version + 1,
                                    version = version + 1
                              where id = :userId
                                and status = 'ACTIVE'

@@ -176,15 +176,17 @@ public final class ResendEmailSender implements EmailSender {
         payload.put("subject", message.subject());
         payload.put("text", message.plainTextBody());
         payload.put("html", message.htmlBody());
-        ArrayNode attachments = payload.putArray("attachments");
-        ObjectNode attachment = attachments.addObject();
-        attachment.put("filename", message.attachment().filename());
-        attachment.put("content", Base64.getEncoder().encodeToString(message.attachment().bytes()));
+        if (message.attachment() != null) {
+            ArrayNode attachments = payload.putArray("attachments");
+            ObjectNode attachment = attachments.addObject();
+            attachment.put("filename", message.attachment().filename());
+            attachment.put("content", Base64.getEncoder().encodeToString(message.attachment().bytes()));
+        }
         return payload;
     }
 
     private static long estimatedSize(EmailMessage message) {
-        long attachmentBytes = message.attachment().sizeBytes();
+        long attachmentBytes = message.attachment() == null ? 0L : message.attachment().sizeBytes();
         long encodedAttachmentBytes = ((attachmentBytes + 2) / 3) * 4;
         long size = 8 * 1024L + message.subject().getBytes(java.nio.charset.StandardCharsets.UTF_8).length
                 + message.plainTextBody().getBytes(java.nio.charset.StandardCharsets.UTF_8).length

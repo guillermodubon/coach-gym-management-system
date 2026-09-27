@@ -12,7 +12,8 @@ public record CurrentUserResponse(
         List<String> roles,
         StaffScopeType organizationScope,
         AuthorizedBranchSummary activeBranch,
-        List<AuthorizedBranchSummary> availableBranches) {
+        List<AuthorizedBranchSummary> availableBranches,
+        boolean passwordChangeRequired) {
 
     public CurrentUserResponse {
         roles = List.copyOf(roles);
@@ -21,6 +22,17 @@ public record CurrentUserResponse(
 
     /** Backward-compatible constructor for callers that only need identity and roles. */
     public CurrentUserResponse(UUID id, String username, String fullName, List<String> roles) {
-        this(id, username, fullName, roles, null, null, List.of());
+        this(id, username, fullName, roles, null, null, List.of(), false);
+    }
+
+    public CurrentUserResponse(
+            UUID id,
+            String username,
+            String fullName,
+            List<String> roles,
+            StaffScopeType organizationScope,
+            AuthorizedBranchSummary activeBranch,
+            List<AuthorizedBranchSummary> availableBranches) {
+        this(id, username, fullName, roles, organizationScope, activeBranch, availableBranches, false);
     }
 }

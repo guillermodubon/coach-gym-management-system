@@ -2,7 +2,7 @@ package io.github.guillermodubon.coachgym.notification;
 
 import io.github.guillermodubon.coachgym.notification.domain.EmailDeliveryValuePolicy;
 
-/** Provider-neutral email envelope with one approved canonical attachment. */
+/** Provider-neutral email envelope with an optional approved canonical attachment. */
 public record EmailMessage(
         String recipient,
         String fromAddress,
@@ -27,9 +27,6 @@ public record EmailMessage(
         subject = EmailDeliveryValuePolicy.normalizeSubject(subject);
         plainTextBody = requiredBody(plainTextBody, "Email plain-text body");
         htmlBody = requiredBody(htmlBody, "Email HTML body");
-        if (attachment == null) {
-            throw new IllegalArgumentException("Email attachment is required.");
-        }
     }
 
     @Override
@@ -41,7 +38,7 @@ public record EmailMessage(
                 + ", subjectPresent=true"
                 + ", plainTextBodyLength=" + plainTextBody.length()
                 + ", htmlBodyLength=" + htmlBody.length()
-                + ", attachment=" + attachment
+                + ", attachmentPresent=" + (attachment != null)
                 + ']';
     }
 

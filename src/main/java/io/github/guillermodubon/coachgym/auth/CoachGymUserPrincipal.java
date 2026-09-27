@@ -25,6 +25,8 @@ public final class CoachGymUserPrincipal implements UserDetails,
     private final String username;
     private final String passwordHash;
     private final String fullName;
+    private final long securityVersion;
+    private final boolean passwordChangeRequired;
     private final Collection<? extends GrantedAuthority> authorities;
 
     private CoachGymUserPrincipal(
@@ -32,11 +34,15 @@ public final class CoachGymUserPrincipal implements UserDetails,
             String username,
             String passwordHash,
             String fullName,
+            long securityVersion,
+            boolean passwordChangeRequired,
             Collection<? extends GrantedAuthority> authorities) {
         this.id = id;
         this.username = username;
         this.passwordHash = passwordHash;
         this.fullName = fullName;
+        this.securityVersion = securityVersion;
+        this.passwordChangeRequired = passwordChangeRequired;
         this.authorities = List.copyOf(authorities);
     }
 
@@ -45,7 +51,8 @@ public final class CoachGymUserPrincipal implements UserDetails,
                 .<GrantedAuthority>map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
                 .toList();
         return new CoachGymUserPrincipal(
-                user.id(), user.username(), user.passwordHash(), user.fullName(), authorities);
+                user.id(), user.username(), user.passwordHash(), user.fullName(),
+                user.securityVersion(), user.passwordChangeRequired(), authorities);
     }
 
     public UUID id() {
@@ -54,6 +61,14 @@ public final class CoachGymUserPrincipal implements UserDetails,
 
     public String fullName() {
         return fullName;
+    }
+
+    public long securityVersion() {
+        return securityVersion;
+    }
+
+    public boolean passwordChangeRequired() {
+        return passwordChangeRequired;
     }
 
     public AuthenticatedActor authenticatedActor() {

@@ -64,7 +64,10 @@ public final class AuditQueryPolicy {
             "PAYMENT_RECEIPT",
             "PROMOTION",
             "SETTINGS",
-            "STAFF_PROFILE");
+            "STAFF_PROFILE",
+            "STAFF_INVITATION",
+            "STAFF_ACCOUNT",
+            "STAFF_ROLE_SCOPE");
 
     private static final Set<String> ALLOWED_ACTION_CODES = immutableSet(
             "ACCESS_DENIED",
@@ -134,7 +137,17 @@ public final class AuditQueryPolicy {
             "STAFF_PASSWORD_CHANGED",
             "STAFF_PROFILE_PHOTO_REMOVED",
             "STAFF_PROFILE_PHOTO_UPDATED",
-            "STAFF_PROFILE_UPDATED");
+            "STAFF_PROFILE_UPDATED",
+            "STAFF_INVITATION_CREATED",
+            "STAFF_INVITATION_RESENT",
+            "STAFF_INVITATION_REVOKED",
+            "STAFF_INVITATION_ACCEPTED",
+            "STAFF_ACCOUNT_SUSPENDED",
+            "STAFF_ACCOUNT_REACTIVATED",
+            "STAFF_ACCOUNT_DEACTIVATED",
+            "STAFF_ROLE_SCOPE_CHANGED",
+            "STAFF_PASSWORD_RECOVERY_COMPLETED",
+            "INITIAL_ADMIN_BOOTSTRAPPED");
 
     private AuditQueryPolicy() {}
 
