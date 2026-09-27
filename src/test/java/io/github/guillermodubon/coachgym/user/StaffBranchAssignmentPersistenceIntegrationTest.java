@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.guillermodubon.coachgym.user.application.StaffAssignmentAuthorizationQuery;
 import io.github.guillermodubon.coachgym.user.application.StaffBranchAssignmentAdminQuery;
 import io.github.guillermodubon.coachgym.user.application.StaffBranchAssignmentDuplicateException;
+import io.github.guillermodubon.coachgym.user.application.StaffIdentityAdministrationApplicationService;
 import io.github.guillermodubon.coachgym.user.application.StaffBranchAssignmentSearchPage;
 import io.github.guillermodubon.coachgym.user.application.StaffBranchAssignmentSearchQuery;
 import io.github.guillermodubon.coachgym.user.application.StaffBranchAssignmentSearchResult;
@@ -28,6 +29,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -78,6 +84,12 @@ class StaffBranchAssignmentPersistenceIntegrationTest {
 
     @Autowired
     private StaffAssignmentAuthorizationQuery authorizationQuery;
+
+    @Autowired
+    private StaffIdentityAdministrationApplicationService identityAdministrationService;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Autowired
     private StaffBranchAssignmentAdminQuery adminQuery;
@@ -457,6 +469,179 @@ class StaffBranchAssignmentPersistenceIntegrationTest {
     void persistencePortsDoNotExposeDestructiveAssignmentOperation() {
         assertThat(List.of(StaffBranchAssignmentStore.class.getMethods()))
                 .allMatch(method -> !method.getName().equalsIgnoreCase("delete"));
+    }
+
+    @Test
+    void lifecycleRetainsAssignmentsOnSuspensionAndEndsThemOnDeactivation() {
+        String adminUsername = "identity-lifecycle-admin-" + UUID.randomUUID();
+        UUID adminId = insertUser(adminUsername, "ADMIN");
+        insertScope(adminId, StaffScopeType.ORGANIZATION);
+        UUID staffId = insertUser("identity-lifecycle-staff-" + UUID.randomUUID(), "RECEPTIONIST");
+        insertScope(staffId, StaffScopeType.BRANCH);
+        StaffBranchAssignmentDetails assignment = assignmentStore.assign(
+                new AssignStaffToBranchCommand(staffId, INITIAL_BRANCH_ID, "lifecycle integration"),
+                adminId,
+                Instant.now());
+        var actor = new AuthenticatedActor(adminId, adminUsername);
+
+        withOrganizationAdministrator(adminUsername, () -> {
+            var suspended = identityAdministrationService.changeStatus(
+                    new ChangeStaffIdentityStatusCommand(
+                            staffId, StaffIdentityStatus.SUSPENDED, "temporary suspension", 0),
+                    actor,
+                    null);
+            assertThat(suspended.accountStatus()).isEqualTo(StaffAccountStatus.SUSPENDED);
+            assertThat(suspended.securityVersion()).isEqualTo(1);
+            assertThat(assignmentQuery.findActive(staffId))
+                    .extracting(StaffBranchAssignmentDetails::id)
+                    .containsExactly(assignment.id());
+
+            var reactivated = identityAdministrationService.changeStatus(
+                    new ChangeStaffIdentityStatusCommand(
+                            staffId, StaffIdentityStatus.ACTIVE, "suspension cleared", 1),
+                    actor,
+                    null);
+            assertThat(reactivated.accountStatus()).isEqualTo(StaffAccountStatus.ACTIVE);
+            assertThat(reactivated.securityVersion()).isEqualTo(2);
+
+            var deactivated = identityAdministrationService.changeStatus(
+                    new ChangeStaffIdentityStatusCommand(
+                            staffId, StaffIdentityStatus.DEACTIVATED, "employment ended", 2),
+                    actor,
+                    null);
+            assertThat(deactivated.accountStatus()).isEqualTo(StaffAccountStatus.DEACTIVATED);
+            assertThat(deactivated.securityVersion()).isEqualTo(3);
+        });
+
+        assertThat(assignmentQuery.findActive(staffId)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from gym.staff_branch_assignments where id = ?", String.class, assignment.id()))
+                .isEqualTo("ENDED");
+        assertThat(jdbcTemplate.queryForObject(
+                "select security_version from gym.users where id = ?", Long.class, staffId))
+                .isEqualTo(3L);
+    }
+
+    @Test
+    void rolePromotionReauthenticatesAndAdvancesTargetSecurityVersion() {
+        String adminUsername = "identity-role-admin-" + UUID.randomUUID();
+        String adminPassword = "Role-admin-password-821!";
+        UUID adminId = insertUserWithPassword(adminUsername, adminPassword);
+        insertScope(adminId, StaffScopeType.ORGANIZATION);
+        UUID staffId = insertUser("identity-role-staff-" + UUID.randomUUID(), "RECEPTIONIST");
+        insertScope(staffId, StaffScopeType.BRANCH);
+        StaffBranchAssignmentDetails assignment = assignmentStore.assign(
+                new AssignStaffToBranchCommand(staffId, INITIAL_BRANCH_ID, "role promotion integration"),
+                adminId,
+                Instant.now());
+
+        withOrganizationAdministrator(adminUsername, () -> {
+            var updated = identityAdministrationService.changeRoleScope(
+                    new ChangeStaffRoleScopeCommand(
+                            staffId, java.util.Set.of(RoleCode.ADMIN), StaffScopeType.BRANCH,
+                            "authorized role promotion", 0),
+                    new AuthenticatedActor(adminId, adminUsername),
+                    adminPassword);
+            assertThat(updated.roles()).containsExactly(RoleCode.ADMIN);
+            assertThat(updated.securityVersion()).isEqualTo(1);
+        });
+
+        assertThat(jdbcTemplate.queryForObject("""
+                select r.role_code
+                  from gym.user_roles ur
+                  join gym.roles r on r.id = ur.role_id
+                 where ur.user_id = ?
+                """, String.class, staffId)).isEqualTo("ADMIN");
+        assertThat(jdbcTemplate.queryForObject(
+                "select security_version from gym.users where id = ?", Long.class, staffId))
+                .isEqualTo(1L);
+        assertThat(assignmentQuery.findActive(staffId))
+                .extracting(StaffBranchAssignmentDetails::id)
+                .containsExactly(assignment.id());
+    }
+
+    @Test
+    void concurrentAdministratorSuspensionsCannotRemoveEveryOrganizationAdministrator()
+            throws Exception {
+        String firstUsername = "identity-race-admin-a-" + UUID.randomUUID();
+        String secondUsername = "identity-race-admin-b-" + UUID.randomUUID();
+        String password = "Concurrent-admin-password-821!";
+        UUID firstId = insertUserWithPassword(firstUsername, password);
+        UUID secondId = insertUserWithPassword(secondUsername, password);
+        insertScope(firstId, StaffScopeType.ORGANIZATION);
+        insertScope(secondId, StaffScopeType.ORGANIZATION);
+        var firstActor = new AuthenticatedActor(firstId, firstUsername);
+        var secondActor = new AuthenticatedActor(secondId, secondUsername);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<Boolean> first = executor.submit(() -> suspendOtherAdministrator(
+                    firstUsername, firstActor, secondId, password, ready, start));
+            Future<Boolean> second = executor.submit(() -> suspendOtherAdministrator(
+                    secondUsername, secondActor, firstId, password, ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            assertThat(List.of(first.get(15, TimeUnit.SECONDS), second.get(15, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(true, false);
+        }
+
+        assertThat(authorizationQuery.countActiveOrganizationAdministrators()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.users where status = 'SUSPENDED'", Integer.class))
+                .isEqualTo(1);
+    }
+
+    private boolean suspendOtherAdministrator(
+            String actorUsername,
+            AuthenticatedActor actor,
+            UUID targetId,
+            String password,
+            CountDownLatch ready,
+            CountDownLatch start) {
+        try {
+            withOrganizationAdministrator(actorUsername, () -> {
+                ready.countDown();
+                await(start);
+                identityAdministrationService.changeStatus(
+                        new ChangeStaffIdentityStatusCommand(
+                                targetId, StaffIdentityStatus.SUSPENDED, "administrator lifecycle", 1),
+                        actor,
+                        password);
+            });
+            return true;
+        } catch (StaffBranchAuthorizationException
+                 | StaffIdentityAuthorizationException
+                 | StaffIdentityStateConflictException expectedLoser) {
+            return false;
+        }
+    }
+
+    private UUID insertUserWithPassword(String username, String password) {
+        UUID userId = insertUser(username, "ADMIN");
+        jdbcTemplate.update("""
+                update gym.users
+                   set password_hash = ?,
+                       security_version = security_version + 1,
+                       version = version + 1
+                 where id = ?
+                """, passwordEncoder.encode(password), userId);
+        return userId;
+    }
+
+    private static void withOrganizationAdministrator(String username, Runnable action) {
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(
+                username,
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))));
+        SecurityContextHolder.setContext(context);
+        try {
+            action.run();
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     private UUID insertUser(String username, String roleCode) {

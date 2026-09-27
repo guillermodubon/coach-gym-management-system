@@ -54,10 +54,13 @@ class AccessPaymentPolicySchemaMigrationContractTest {
                     .sorted(Comparator.naturalOrder())
                     .toList();
 
-           assertThat(versions).doesNotHaveDuplicates();
-assertThat(versions).contains(24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42);
-assertThat(versions).isSortedAccordingTo(Comparator.naturalOrder());
-assertThat(versions.get(versions.size() - 1)).isEqualTo(42);
+            assertThat(versions).doesNotHaveDuplicates();
+            assertThat(versions)
+                    .contains(24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42);
+            assertThat(versions)
+                    .isSortedAccordingTo(Comparator.naturalOrder());
+            assertThat(versions.get(versions.size() - 1))
+                    .isEqualTo(42);
         }
     }
 

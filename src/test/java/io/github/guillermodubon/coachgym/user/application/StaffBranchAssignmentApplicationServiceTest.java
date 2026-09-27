@@ -29,6 +29,7 @@ import io.github.guillermodubon.coachgym.user.StaffScopeDetails;
 import io.github.guillermodubon.coachgym.user.StaffScopeQuery;
 import io.github.guillermodubon.coachgym.user.StaffScopeStateConflictException;
 import io.github.guillermodubon.coachgym.user.StaffScopeType;
+import io.github.guillermodubon.coachgym.shared.security.CurrentPasswordVerifier;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -73,6 +74,8 @@ class StaffBranchAssignmentApplicationServiceTest {
     @Mock
     private StaffBranchAssignmentAdminQuery adminQuery;
     @Mock
+    private CurrentPasswordVerifier currentPasswordVerifier;
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private StaffBranchAssignmentApplicationService service;
@@ -87,6 +90,7 @@ class StaffBranchAssignmentApplicationServiceTest {
                 scopeStore,
                 assignmentStore,
                 adminQuery,
+                currentPasswordVerifier,
                 eventPublisher,
                 CLOCK);
     }
@@ -249,7 +253,8 @@ class StaffBranchAssignmentApplicationServiceTest {
 
         assertThatThrownBy(() -> service.changeScope(
                 new ChangeStaffScopeCommand(TARGET_ID, StaffScopeType.ORGANIZATION, "stale", 1),
-                ACTOR))
+                ACTOR,
+                "current-password"))
                 .isInstanceOf(StaffScopeVersionConflictException.class);
 
         verify(scopeStore, never()).update(any(), any(), any());
@@ -270,9 +275,11 @@ class StaffBranchAssignmentApplicationServiceTest {
         when(assignmentQuery.findActive(TARGET_ID))
                 .thenReturn(List.of(activeAssignment(0)));
         when(authorizationQuery.countActiveOrganizationAdministrators()).thenReturn(2L);
+        when(currentPasswordVerifier.verify(ACTOR_ID, ACTOR.username(), "current-password"))
+                .thenReturn(true);
         when(scopeStore.update(command, ACTOR_ID, NOW)).thenReturn(updated);
 
-        assertThat(service.changeScope(command, ACTOR)).isEqualTo(updated);
+        assertThat(service.changeScope(command, ACTOR, "current-password")).isEqualTo(updated);
 
         ArgumentCaptor<StaffScopeChanged> event = ArgumentCaptor.forClass(StaffScopeChanged.class);
         verify(eventPublisher).publishEvent(event.capture());
@@ -292,8 +299,10 @@ class StaffBranchAssignmentApplicationServiceTest {
                 .thenReturn(Optional.of(organizationAdmin(TARGET_ID)));
         when(assignmentQuery.findActive(TARGET_ID)).thenReturn(List.of(activeAssignment(0)));
         when(authorizationQuery.countActiveOrganizationAdministrators()).thenReturn(1L);
+        when(currentPasswordVerifier.verify(ACTOR_ID, ACTOR.username(), "current-password"))
+                .thenReturn(true);
 
-        assertThatThrownBy(() -> service.changeScope(command, ACTOR))
+        assertThatThrownBy(() -> service.changeScope(command, ACTOR, "current-password"))
                 .isInstanceOf(StaffScopeStateConflictException.class);
 
         verify(scopeStore, never()).update(any(), any(), any());
@@ -310,7 +319,9 @@ class StaffBranchAssignmentApplicationServiceTest {
                 .thenReturn(Optional.of(branchReceptionist(TARGET_ID, BRANCH_ID)));
 
         assertThat(service.changeScope(
-                new ChangeStaffScopeCommand(TARGET_ID, StaffScopeType.BRANCH, "no-op", 4), ACTOR))
+                new ChangeStaffScopeCommand(TARGET_ID, StaffScopeType.BRANCH, "no-op", 4),
+                ACTOR,
+                "current-password"))
                 .isEqualTo(current);
 
         verify(scopeStore, never()).update(any(), any(), any());

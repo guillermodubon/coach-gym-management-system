@@ -41,7 +41,7 @@ class QrAccessCheckInApiIntegrationTest extends AbstractAccessApiIntegrationTest
                 client, "ACTIVE", today.minusDays(2), today.plusDays(28));
         UUID credentialId = insertActiveCredential(client.id());
 
-        MockHttpSession session = loginAsAdmin();
+        MockHttpSession session = loginAsAdminWithActiveBranch();
         String response = mockMvc.perform(post("/api/v1/access/qr-check-in")
                         .with(csrf())
                         .session(session)
@@ -70,7 +70,7 @@ class QrAccessCheckInApiIntegrationTest extends AbstractAccessApiIntegrationTest
 
         mockMvc.perform(post("/api/v1/access/qr-check-in")
                         .with(csrf())
-                        .session(loginAsReceptionist())
+                        .session(loginAsReceptionistWithActiveBranch())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"payload\":\"%s\"}".formatted(PAYLOAD)))
                 .andExpect(status().isOk())
@@ -113,7 +113,7 @@ class QrAccessCheckInApiIntegrationTest extends AbstractAccessApiIntegrationTest
         ClientFixture client = createClient("ACTIVE");
         createMembership(client, "ACTIVE", today.minusDays(1), today.plusDays(30));
         insertActiveCredential(client.id());
-        MockHttpSession session = loginAsAdmin();
+        MockHttpSession session = loginAsAdminWithActiveBranch();
 
         mockMvc.perform(post("/api/v1/access/qr-check-in")
                         .with(csrf())
@@ -139,7 +139,7 @@ class QrAccessCheckInApiIntegrationTest extends AbstractAccessApiIntegrationTest
     void unknownCredentialIsRejectedWithSafeProblemDetail() throws Exception {
         mockMvc.perform(post("/api/v1/access/qr-check-in")
                         .with(csrf())
-                        .session(loginAsAdmin())
+                        .session(loginAsAdminWithActiveBranch())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"payload\":\"%s\"}".formatted(PAYLOAD)))
                 .andExpect(status().isNotFound())
@@ -166,7 +166,7 @@ class QrAccessCheckInApiIntegrationTest extends AbstractAccessApiIntegrationTest
 
         mockMvc.perform(post("/api/v1/access/qr-check-in")
                         .with(csrf())
-                        .session(loginAsAdmin())
+                        .session(loginAsAdminWithActiveBranch())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"payload\":\"%s\"}".formatted(PAYLOAD)))
                 .andExpect(status().isNotFound())

@@ -27,5 +27,12 @@ interface AccessRecordJpaRepository
             AccessResult result,
             Instant occurredAtFromInclusive);
 
+    Optional<AccessRecordJpaEntity>
+    findFirstByClientIdAndBranchIdNotAndResultAndCheckedInAtGreaterThanEqualOrderByCheckedInAtDescIdAsc(
+            UUID clientId,
+            UUID branchId,
+            AccessResult result,
+            Instant occurredAtFromInclusive);
+
     Optional<AccessRecordJpaEntity> findByIdAndBranchId(UUID id, UUID branchId);
 }

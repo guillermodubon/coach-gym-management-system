@@ -20,6 +20,7 @@ import java.util.concurrent.Future;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.concurrent.DelegatingSecurityContextCallable;
@@ -48,7 +49,8 @@ class QrAccessCheckInPersistenceIntegrationTest
     }
 
     @Test
-    void persistsAllowedQrAttemptThenRecordsDuplicateUsingServerHistory() {
+    void persistsAllowedQrAttemptThenRecordsDuplicateUsingServerHistory()
+            throws Exception {
         ClientFixture client = createClient("ACTIVE");
         createMembership(
                 client,
@@ -58,12 +60,16 @@ class QrAccessCheckInPersistenceIntegrationTest
         AccessCredentialQrPayload payload = AccessCredentialQrPayload.fromToken(TOKEN);
         var credential = issueCredential(client.id(), payload);
         AuthenticatedActor actor = actor();
+        MockHttpSession session = sessionWithActiveBranch(
+                actor.id(), initialBranchId());
 
-        AccessRecordDetails first = accessApplicationService.checkInQr(
-                new QrAccessCheckInCommand(payload), actor);
+        AccessRecordDetails first = withBranchSession(session, () ->
+                accessApplicationService.checkInQr(
+                        new QrAccessCheckInCommand(payload), actor));
         assertThat(countAccessAudits()).isZero();
-        AccessRecordDetails second = accessApplicationService.checkInQr(
-                new QrAccessCheckInCommand(payload), actor);
+        AccessRecordDetails second = withBranchSession(session, () ->
+                accessApplicationService.checkInQr(
+                        new QrAccessCheckInCommand(payload), actor));
 
         assertThat(first.result()).isEqualTo(AccessResult.ALLOWED);
         assertThat(second.result()).isEqualTo(AccessResult.DENIED);
@@ -111,15 +117,25 @@ class QrAccessCheckInPersistenceIntegrationTest
         AccessCredentialQrPayload payload = AccessCredentialQrPayload.fromToken(TOKEN);
         issueCredential(client.id(), payload);
         AuthenticatedActor actor = actor();
+        MockHttpSession firstSession = sessionWithActiveBranch(
+                actor.id(), initialBranchId());
+        MockHttpSession secondSession = sessionWithActiveBranch(
+                actor.id(), initialBranchId());
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
-            Callable<AccessRecordDetails> call = () -> accessApplicationService.checkInQr(
-                    new QrAccessCheckInCommand(payload), actor);
+            Callable<AccessRecordDetails> firstCall = () -> withBranchSession(
+                    firstSession,
+                    () -> accessApplicationService.checkInQr(
+                            new QrAccessCheckInCommand(payload), actor));
+            Callable<AccessRecordDetails> secondCall = () -> withBranchSession(
+                    secondSession,
+                    () -> accessApplicationService.checkInQr(
+                            new QrAccessCheckInCommand(payload), actor));
             Future<AccessRecordDetails> first = executor.submit(
-                    new DelegatingSecurityContextCallable<>(call));
+                    new DelegatingSecurityContextCallable<>(firstCall));
             Future<AccessRecordDetails> second = executor.submit(
-                    new DelegatingSecurityContextCallable<>(call));
+                    new DelegatingSecurityContextCallable<>(secondCall));
 
             assertThat(java.util.List.of(first.get(), second.get()))
                     .extracting(AccessRecordDetails::result)
@@ -133,7 +149,7 @@ class QrAccessCheckInPersistenceIntegrationTest
     }
 
     @Test
-    void revokedCredentialCannotCreateAnotherQrAttempt() {
+    void revokedCredentialCannotCreateAnotherQrAttempt() throws Exception {
         ClientFixture client = createClient("ACTIVE");
         createMembership(
                 client,
@@ -142,19 +158,25 @@ class QrAccessCheckInPersistenceIntegrationTest
                 LocalDate.now().plusDays(1));
         AccessCredentialQrPayload payload = AccessCredentialQrPayload.fromToken(TOKEN);
         var credential = issueCredential(client.id(), payload);
-        accessApplicationService.checkInQr(
-                new QrAccessCheckInCommand(payload), actor());
+        AuthenticatedActor actor = actor();
+        MockHttpSession session = sessionWithActiveBranch(
+                actor.id(), initialBranchId());
+        withBranchSession(session, () -> accessApplicationService.checkInQr(
+                new QrAccessCheckInCommand(payload), actor));
 
-        credentialStore.revoke(
-                credential.id(),
-                "Replaced",
-                userId(ADMIN_USERNAME),
-                Instant.now(),
-                credential.version());
+        withBranchSession(session, () -> {
+            credentialStore.revoke(
+                    credential.id(),
+                    "Replaced",
+                    userId(ADMIN_USERNAME),
+                    Instant.now(),
+                    credential.version());
+            return null;
+        });
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                accessApplicationService.checkInQr(
-                        new QrAccessCheckInCommand(payload), actor()))
+                withBranchSession(session, () -> accessApplicationService.checkInQr(
+                        new QrAccessCheckInCommand(payload), actor)))
                 .isInstanceOf(
                         io.github.guillermodubon.coachgym.access.application.QrAccessCredentialUnavailableException.class);
         assertThat(countAccessRows()).isEqualTo(1);

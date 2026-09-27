@@ -5,6 +5,7 @@ import io.github.guillermodubon.coachgym.access.AccessReasonCode;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.AccessResult;
 import io.github.guillermodubon.coachgym.access.domain.AccessCheckInContext;
+import io.github.guillermodubon.coachgym.access.domain.AccessDenialPrecedence;
 import io.github.guillermodubon.coachgym.access.domain.AccessEvaluation;
 import io.github.guillermodubon.coachgym.access.domain.AccessIdentifier;
 import io.github.guillermodubon.coachgym.access.domain.AccessIdentifierType;
@@ -19,14 +20,17 @@ import io.github.guillermodubon.coachgym.client.ClientAccessDetails;
 import io.github.guillermodubon.coachgym.client.ClientAccessQuery;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyQuery;
 import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicyDetails;
+import io.github.guillermodubon.coachgym.configuration.AccessPaymentPolicy;
+import io.github.guillermodubon.coachgym.configuration.BranchAccessPolicyQuery;
+import io.github.guillermodubon.coachgym.configuration.EffectiveBranchAccessPolicy;
 import io.github.guillermodubon.coachgym.membership.MembershipAccessDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipAccessQuery;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodBranchCoverageQuery;
 import io.github.guillermodubon.coachgym.payment.ConfirmedPaymentForAccessQuery;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.github.guillermodubon.coachgym.user.ActiveBranchContextUnavailableException;
 import io.github.guillermodubon.coachgym.user.BranchOperationContext;
 import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
-import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationException;
 import io.github.guillermodubon.coachgym.user.BranchResourceAuthorizationPolicy;
 import java.time.Clock;
 import java.time.Instant;
@@ -50,9 +54,9 @@ import org.springframework.transaction.annotation.Transactional;
  *       (uses the configured gym time zone, never bare UTC).</li>
  *   <li>Normalise the identifier via {@link AccessIdentifier#of(String)}.</li>
  *   <li>Resolve the client and membership through public module boundaries.</li>
- *   <li>Perform the ownership cross-check; throw {@link IllegalStateException}
- *       on mismatch (no record is written).</li>
- *   <li>Evaluate the deterministic policy.</li>
+ *   <li>Evaluate membership lifecycle, immutable period branch coverage,
+ *       anti-passback, and the current payment requirement in deterministic
+ *       precedence order.</li>
  *   <li>Persist the record ({@code saveAndFlush}).</li>
  *   <li>Publish {@link AccessAttemptRecorded} after durable persistence.</li>
  *   <li>Return the persisted projection.</li>
@@ -81,6 +85,8 @@ public class AccessApplicationService {
     private final AccessPaymentPolicyQuery accessPaymentPolicyQuery;
     private final ConfirmedPaymentForAccessQuery confirmedPaymentForAccessQuery;
     private final BranchOperationContextResolver branchContextResolver;
+    private final MembershipPeriodBranchCoverageQuery periodBranchCoverageQuery;
+    private final BranchAccessPolicyQuery branchAccessPolicyQuery;
 
     /** Constructor retained for focused unit tests and non-QR callers. */
     public AccessApplicationService(
@@ -101,6 +107,8 @@ public class AccessApplicationService {
                 Optional.empty(),
                 DISABLED_POLICY_QUERY,
                 NO_PAYMENT_QUERY,
+                null,
+                null,
                 null);
     }
 
@@ -123,6 +131,8 @@ public class AccessApplicationService {
                 duplicateScanPolicy,
                 DISABLED_POLICY_QUERY,
                 NO_PAYMENT_QUERY,
+                null,
+                null,
                 null);
     }
 
@@ -147,6 +157,36 @@ public class AccessApplicationService {
                 duplicateScanPolicy,
                 accessPaymentPolicyQuery,
                 confirmedPaymentForAccessQuery,
+                null,
+                null,
+                null);
+    }
+
+    public AccessApplicationService(
+            AccessRecordStore accessRecordStore,
+            ClientAccessQuery clientAccessQuery,
+            MembershipAccessQuery membershipAccessQuery,
+            AccessCredentialResolver accessCredentialResolver,
+            ApplicationEventPublisher eventPublisher,
+            Clock clock,
+            Optional<DuplicateScanPolicy> duplicateScanPolicy,
+            AccessPaymentPolicyQuery accessPaymentPolicyQuery,
+            ConfirmedPaymentForAccessQuery confirmedPaymentForAccessQuery,
+            BranchOperationContextResolver branchContextResolver,
+            MembershipPeriodBranchCoverageQuery periodBranchCoverageQuery) {
+
+        this(
+                accessRecordStore,
+                clientAccessQuery,
+                membershipAccessQuery,
+                accessCredentialResolver,
+                eventPublisher,
+                clock,
+                duplicateScanPolicy,
+                accessPaymentPolicyQuery,
+                confirmedPaymentForAccessQuery,
+                branchContextResolver,
+                periodBranchCoverageQuery,
                 null);
     }
 
@@ -161,7 +201,9 @@ public class AccessApplicationService {
             Optional<DuplicateScanPolicy> duplicateScanPolicy,
             AccessPaymentPolicyQuery accessPaymentPolicyQuery,
             ConfirmedPaymentForAccessQuery confirmedPaymentForAccessQuery,
-            BranchOperationContextResolver branchContextResolver) {
+            BranchOperationContextResolver branchContextResolver,
+            MembershipPeriodBranchCoverageQuery periodBranchCoverageQuery,
+            BranchAccessPolicyQuery branchAccessPolicyQuery) {
 
         this.accessRecordStore = accessRecordStore;
         this.clientAccessQuery = clientAccessQuery;
@@ -177,6 +219,8 @@ public class AccessApplicationService {
         this.confirmedPaymentForAccessQuery = Objects.requireNonNull(
                 confirmedPaymentForAccessQuery);
         this.branchContextResolver = branchContextResolver;
+        this.periodBranchCoverageQuery = periodBranchCoverageQuery;
+        this.branchAccessPolicyQuery = branchAccessPolicyQuery;
     }
 
     // ── Check-in ──────────────────────────────────────────────────────────────
@@ -189,7 +233,10 @@ public class AccessApplicationService {
 
         validateCommand(command);
         validateActor(actor);
-        UUID branchId = branchId(actor);
+        BranchOperationContext branchContext = branchOperationContext(actor);
+        UUID branchId = branchContext == null
+                ? null
+                : BranchResourceAuthorizationPolicy.requireActiveBranch(branchContext);
 
         // Step 1 & 2: single instant capture; operational date from gym zone.
         Instant occurredAt = clock.instant();
@@ -200,11 +247,16 @@ public class AccessApplicationService {
 
         // Steps 4 & 5: resolve and cross-check.
         AccessCheckInContext context = resolve(identifier, operationalDate);
-        authorizeClientBranch(context.clientId(), branchId, actor);
 
-        // Step 6: evaluate existing rules, then the optional payment policy.
-        AccessEvaluation evaluation = evaluateWithPaymentPolicy(
-                AccessPolicy.evaluate(context), context);
+        // Existing lifecycle, branch entitlement, anti-passback, and payment
+        // rules are composed in the ADR-approved order.
+        AccessEvaluation evaluation = evaluateCheckIn(
+                AccessPolicy.evaluate(context),
+                context,
+                branchId,
+                branchContext == null ? null : branchContext.organizationId(),
+                occurredAt,
+                null);
 
         // Step 7: persist.
         AccessRecordDetails record = branchContextResolver == null
@@ -272,7 +324,10 @@ public class AccessApplicationService {
 
         validateQrCommand(command);
         validateActor(actor);
-        UUID branchId = branchId(actor);
+        BranchOperationContext branchContext = branchOperationContext(actor);
+        UUID branchId = branchContext == null
+                ? null
+                : BranchResourceAuthorizationPolicy.requireActiveBranch(branchContext);
 
         Instant evaluatedAt = clock.instant();
         LocalDate operationalDate = LocalDate.now(clock);
@@ -284,9 +339,11 @@ public class AccessApplicationService {
         AccessIdentifier identifier = AccessIdentifier.qrCredential();
         AccessCheckInContext context = resolveQrClient(
                 credential.clientId(), identifier, operationalDate);
-        authorizeClientBranch(context.clientId(), branchId, actor);
         AccessEvaluation evaluation = evaluateWithPaymentPolicy(
-                AccessPolicy.evaluate(context), context);
+                evaluateBranchCoverage(AccessPolicy.evaluate(context), context, branchId),
+                context,
+                branchContext == null ? null : branchContext.organizationId(),
+                branchId);
 
         return new QrAccessCheckInResult(
                 credential.credentialId(),
@@ -318,7 +375,10 @@ public class AccessApplicationService {
 
         validateQrCommand(command);
         validateActor(actor);
-        UUID branchId = branchId(actor);
+        BranchOperationContext branchContext = branchOperationContext(actor);
+        UUID branchId = branchContext == null
+                ? null
+                : BranchResourceAuthorizationPolicy.requireActiveBranch(branchContext);
 
         DuplicateScanPolicy policy = duplicateScanPolicy.orElseThrow(
                 AccessDuplicateScanPolicyUnavailableException::new);
@@ -332,30 +392,13 @@ public class AccessApplicationService {
         AccessIdentifier identifier = AccessIdentifier.qrCredential();
         AccessCheckInContext context = resolveQrClient(
                 credential.clientId(), identifier, operationalDate);
-        authorizeClientBranch(context.clientId(), branchId, actor);
-        AccessEvaluation evaluation = AccessPolicy.evaluate(context);
-
-        Optional<AccessRecordDetails> previous = branchContextResolver == null
-                ? accessRecordStore.findMostRecentAllowedQrAttempt(
-                        credential.credentialId(),
-                        occurredAt.minus(policy.window()))
-                : accessRecordStore.findMostRecentAllowedQrAttempt(
-                        credential.credentialId(),
-                        occurredAt.minus(policy.window()),
-                        branchId);
-
-        if (policy.evaluate(
+        AccessEvaluation evaluation = evaluateCheckIn(
+                AccessPolicy.evaluate(context),
+                context,
+                branchId,
+                branchContext == null ? null : branchContext.organizationId(),
                 occurredAt,
-                previous.map(AccessRecordDetails::checkedInAt).orElse(null))
-                == DuplicateScanResult.DUPLICATE) {
-            evaluation = AccessEvaluation.denied(
-                    AccessReasonCode.DUPLICATE_CHECK_IN,
-                    "A recent QR check-in was already recorded.");
-        } else {
-            // Duplicate decisions remain ahead of the payment requirement so
-            // no financial lookup is made for an already-duplicate scan.
-            evaluation = evaluateWithPaymentPolicy(evaluation, context);
-        }
+                credential.credentialId());
 
         AccessRecordDetails record = branchContextResolver == null
                 ? accessRecordStore.persistQr(
@@ -407,6 +450,163 @@ public class AccessApplicationService {
     }
 
     /**
+     * Composes the non-financial check-in decisions in the precedence fixed by
+     * ADR-010. Duplicate detection is performed before coverage so a prior
+     * successful entry wins over a current lifecycle or entitlement denial.
+     */
+    private AccessEvaluation evaluateCheckIn(
+            AccessEvaluation membershipEvaluation,
+            AccessCheckInContext context,
+            UUID branchId,
+            UUID organizationId,
+            Instant occurredAt,
+            UUID qrCredentialId) {
+
+        if (isDuplicateCheckIn(context, branchId, occurredAt, qrCredentialId)) {
+            java.util.List<AccessReasonCode> candidates = new java.util.ArrayList<>();
+            candidates.add(AccessReasonCode.DUPLICATE_CHECK_IN);
+            if (membershipEvaluation.result() == AccessResult.DENIED) {
+                candidates.add(membershipEvaluation.reasonCode());
+            }
+            AccessReasonCode selectedReason = AccessDenialPrecedence
+                    .selectHighestPriority(candidates);
+            return denialFor(selectedReason);
+        }
+
+        AccessEvaluation branchEvaluation = evaluateBranchCoverage(
+                membershipEvaluation, context, branchId);
+        return evaluateWithPaymentPolicy(
+                branchEvaluation, context, organizationId, branchId);
+    }
+
+    private boolean isDuplicateCheckIn(
+            AccessCheckInContext context,
+            UUID branchId,
+            Instant occurredAt,
+            UUID qrCredentialId) {
+
+        boolean hasResolvedClient = context.clientId() != null;
+        if (branchId != null && hasResolvedClient) {
+            DuplicateScanPolicy policy = duplicateScanPolicy.orElseThrow(
+                    AccessDuplicateScanPolicyUnavailableException::new);
+            accessRecordStore.lockClientAccess(context.clientId());
+
+            Optional<AccessRecordDetails> previousAtAnotherBranch =
+                    accessRecordStore.findMostRecentAllowedAttemptAtDifferentBranch(
+                            context.clientId(),
+                            branchId,
+                            occurredAt.minus(policy.window()));
+            if (previousAtAnotherBranch.isPresent()
+                    && policy.evaluateAcrossBranches(
+                            context.clientId(),
+                            branchId,
+                            occurredAt,
+                            previousAtAnotherBranch.get().clientId(),
+                            previousAtAnotherBranch.get().branchId(),
+                            previousAtAnotherBranch.get().result(),
+                            previousAtAnotherBranch.get().checkedInAt())
+                            == DuplicateScanResult.DUPLICATE) {
+                return true;
+            }
+        }
+
+        if (qrCredentialId == null) {
+            return false;
+        }
+
+        DuplicateScanPolicy policy = duplicateScanPolicy.orElseThrow(
+                AccessDuplicateScanPolicyUnavailableException::new);
+        Instant occurredAtFromInclusive = occurredAt.minus(policy.window());
+        Optional<AccessRecordDetails> previousAtBranch = branchId == null
+                ? accessRecordStore.findMostRecentAllowedQrAttempt(
+                        qrCredentialId, occurredAtFromInclusive)
+                : accessRecordStore.findMostRecentAllowedQrAttempt(
+                        qrCredentialId, occurredAtFromInclusive, branchId);
+
+        return policy.evaluate(
+                occurredAt,
+                previousAtBranch.map(AccessRecordDetails::checkedInAt).orElse(null))
+                == DuplicateScanResult.DUPLICATE;
+    }
+
+    private AccessEvaluation evaluateBranchCoverage(
+            AccessEvaluation membershipEvaluation,
+            AccessCheckInContext context,
+            UUID branchId) {
+
+        if (membershipEvaluation.result() != AccessResult.ALLOWED
+                || branchId == null) {
+            return membershipEvaluation;
+        }
+        if (context.membershipPeriodId() == null) {
+            throw new IllegalStateException(
+                    "An allowed membership evaluation must identify its current period.");
+        }
+        if (periodBranchCoverageQuery == null) {
+            throw new AccessMembershipCoverageEvaluationException(
+                    "Membership branch entitlement could not be evaluated.");
+        }
+
+        final boolean covered;
+        try {
+            covered = periodBranchCoverageQuery.coversBranch(
+                    context.membershipPeriodId(), branchId);
+        } catch (RuntimeException exception) {
+            throw new AccessMembershipCoverageEvaluationException(
+                    "Membership branch entitlement could not be evaluated.", exception);
+        }
+        if (!covered) {
+            return AccessEvaluation.denied(
+                    AccessReasonCode.MEMBERSHIP_NOT_VALID_AT_BRANCH,
+                    "The membership is not valid at this branch.");
+        }
+        return membershipEvaluation;
+    }
+
+    private static AccessEvaluation denialFor(AccessReasonCode reasonCode) {
+        return switch (reasonCode) {
+            case DUPLICATE_CHECK_IN -> AccessEvaluation.denied(
+                    reasonCode,
+                    "A recent access entry was already recorded.");
+            case ACCESS_CREDENTIAL_INVALID -> AccessEvaluation.denied(
+                    reasonCode,
+                    "The QR access credential is unavailable.");
+            case IDENTIFIER_NOT_FOUND -> AccessEvaluation.denied(
+                    reasonCode,
+                    "The presented identifier could not be resolved.");
+            case CLIENT_INACTIVE -> AccessEvaluation.denied(
+                    reasonCode,
+                    "The client account is inactive.");
+            case MEMBERSHIP_NOT_FOUND -> AccessEvaluation.denied(
+                    reasonCode,
+                    "No current membership was found for this client.");
+            case MEMBERSHIP_CANCELLED -> AccessEvaluation.denied(
+                    reasonCode,
+                    "The membership has been cancelled.");
+            case MEMBERSHIP_FROZEN -> AccessEvaluation.denied(
+                    reasonCode,
+                    "The membership is currently frozen.");
+            case MEMBERSHIP_EXPIRED -> AccessEvaluation.denied(
+                    reasonCode,
+                    "The membership has expired.");
+            case MEMBERSHIP_PERIOD_EXPIRED -> AccessEvaluation.denied(
+                    reasonCode,
+                    "The current membership period has expired.");
+            case MEMBERSHIP_NOT_STARTED -> AccessEvaluation.denied(
+                    reasonCode,
+                    "The current membership period has not started yet.");
+            case MEMBERSHIP_NOT_VALID_AT_BRANCH -> AccessEvaluation.denied(
+                    reasonCode,
+                    "The membership is not valid at this branch.");
+            case PAYMENT_REQUIRED -> AccessEvaluation.denied(
+                    reasonCode,
+                    "A confirmed payment is required for access.");
+            case ACCESS_ALLOWED -> throw new IllegalArgumentException(
+                    "ACCESS_ALLOWED is not a denial reason.");
+        };
+    }
+
+    /**
      * Applies the persisted payment requirement only after the established
      * non-financial access rules have allowed the request.
      *
@@ -415,28 +615,51 @@ public class AccessApplicationService {
      */
     private AccessEvaluation evaluateWithPaymentPolicy(
             AccessEvaluation baseEvaluation,
-            AccessCheckInContext context) {
+            AccessCheckInContext context,
+            UUID organizationId,
+            UUID branchId) {
 
         if (baseEvaluation.result() != AccessResult.ALLOWED) {
             return baseEvaluation;
         }
 
-        AccessPaymentPolicyDetails details;
-        try {
-            details = accessPaymentPolicyQuery.findCurrent();
-        } catch (RuntimeException exception) {
-            throw new AccessPaymentPolicyEvaluationException(
-                    "Access payment policy could not be evaluated.",
-                    exception);
-        }
-        if (details == null) {
-            throw new AccessPaymentPolicyEvaluationException(
-                    "Access payment policy query returned no policy.");
+        AccessPaymentPolicy policy;
+        if (branchId != null) {
+            try {
+                if (branchAccessPolicyQuery == null || organizationId == null) {
+                    throw new IllegalStateException(
+                            "Branch access policy query is unavailable.");
+                }
+                EffectiveBranchAccessPolicy effective = branchAccessPolicyQuery
+                        .findForBranch(organizationId, branchId);
+                if (effective == null) {
+                    throw new IllegalStateException(
+                            "Branch access policy query returned no policy.");
+                }
+                policy = new AccessPaymentPolicy(
+                        effective.requireConfirmedPaymentForAccess());
+            } catch (RuntimeException exception) {
+                throw new AccessPaymentPolicyEvaluationException(
+                        "Access payment policy could not be evaluated.", exception);
+            }
+        } else {
+            AccessPaymentPolicyDetails details;
+            try {
+                details = accessPaymentPolicyQuery.findCurrent();
+            } catch (RuntimeException exception) {
+                throw new AccessPaymentPolicyEvaluationException(
+                        "Access payment policy could not be evaluated.", exception);
+            }
+            if (details == null) {
+                throw new AccessPaymentPolicyEvaluationException(
+                        "Access payment policy query returned no policy.");
+            }
+            policy = details.policy();
         }
 
         // A disabled requirement must preserve the pre-branch workflow and
         // avoid touching payment persistence altogether.
-        if (!details.policy().requireConfirmedPaymentForAccess()) {
+        if (!policy.requireConfirmedPaymentForAccess()) {
             return baseEvaluation;
         }
 
@@ -455,7 +678,7 @@ public class AccessApplicationService {
 
         return AccessPaymentPolicyEvaluator.evaluate(
                 baseEvaluation,
-                details.policy(),
+                policy,
                 hasConfirmedPayment);
     }
 
@@ -585,26 +808,22 @@ public class AccessApplicationService {
     }
 
     private UUID branchId(AuthenticatedActor actor) {
+        BranchOperationContext context = branchOperationContext(actor);
+        if (context == null) {
+            return null;
+        }
+        return BranchResourceAuthorizationPolicy.requireActiveBranch(context);
+    }
+
+    private BranchOperationContext branchOperationContext(AuthenticatedActor actor) {
         if (branchContextResolver == null) {
             return null;
         }
         BranchOperationContext context = branchContextResolver.resolveOperation(actor.id());
-        return BranchResourceAuthorizationPolicy.requireActiveBranch(context);
-    }
-
-    private void authorizeClientBranch(
-            UUID clientId,
-            UUID activeBranchId,
-            AuthenticatedActor actor) {
-        if (branchContextResolver == null || clientId == null || activeBranchId == null) {
-            return;
+        if (context == null || !actor.id().equals(context.userId())) {
+            throw new ActiveBranchContextUnavailableException();
         }
-        clientAccessQuery.findById(clientId).ifPresent(client -> {
-            if (client.homeBranchId() != null
-                    && !activeBranchId.equals(client.homeBranchId())) {
-                throw new BranchResourceAuthorizationException();
-            }
-        });
+        return context;
     }
 
     private boolean tryResolveByMembershipCode(

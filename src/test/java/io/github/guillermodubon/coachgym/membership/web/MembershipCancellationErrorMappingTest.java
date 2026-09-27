@@ -9,6 +9,7 @@ import io.github.guillermodubon.coachgym.membership.application.MembershipApplic
 import io.github.guillermodubon.coachgym.membership.application.MembershipCancellationApplicationService;
 import io.github.guillermodubon.coachgym.membership.application.MembershipCancellationStateConflictException;
 import io.github.guillermodubon.coachgym.membership.application.MembershipFreezeApplicationService;
+import io.github.guillermodubon.coachgym.membership.application.MembershipPeriodCoverageSummaryService;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,8 @@ class MembershipCancellationErrorMappingTest {
                         mock(
                                 MembershipFreezeApplicationService.class),
                         mock(
-                                MembershipCancellationApplicationService.class));
+                                MembershipCancellationApplicationService.class),
+                        mock(MembershipPeriodCoverageSummaryService.class));
     }
 
     @Test

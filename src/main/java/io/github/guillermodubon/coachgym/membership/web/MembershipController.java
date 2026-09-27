@@ -17,6 +17,8 @@ import io.github.guillermodubon.coachgym.membership.application.MembershipNotFou
 import io.github.guillermodubon.coachgym.membership.application.MembershipNotFrozenException;
 import io.github.guillermodubon.coachgym.membership.application.MembershipNotRenewableException;
 import io.github.guillermodubon.coachgym.membership.application.MembershipPlanNotAvailableException;
+import io.github.guillermodubon.coachgym.membership.application.MembershipPeriodCoverageSummaryService;
+import io.github.guillermodubon.coachgym.membership.application.MembershipPeriodCoverageSummaryUnavailableException;
 import io.github.guillermodubon.coachgym.membership.application.MembershipVersionConflictException;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipValidationException;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationException;
@@ -62,13 +64,18 @@ class MembershipController {
     private final MembershipCancellationApplicationService
             membershipCancellationApplicationService;
 
+    private final MembershipPeriodCoverageSummaryService
+            membershipPeriodCoverageSummaryService;
+
     MembershipController(
             MembershipApplicationService
                     membershipApplicationService,
             MembershipFreezeApplicationService
                     membershipFreezeApplicationService,
             MembershipCancellationApplicationService
-                    membershipCancellationApplicationService) {
+                    membershipCancellationApplicationService,
+            MembershipPeriodCoverageSummaryService
+                    membershipPeriodCoverageSummaryService) {
 
         this.membershipApplicationService =
                 membershipApplicationService;
@@ -78,6 +85,9 @@ class MembershipController {
 
         this.membershipCancellationApplicationService =
                 membershipCancellationApplicationService;
+
+        this.membershipPeriodCoverageSummaryService =
+                membershipPeriodCoverageSummaryService;
     }
 
     @PostMapping
@@ -96,7 +106,9 @@ class MembershipController {
                     eligible for the selected plan.
 
                     Administrators and receptionists can execute this
-                    operation.
+                    operation. The response includes the immutable
+                    purchased-period coverage scope and branch count,
+                    without exposing the covered branch identifiers.
                     """)
     @ApiResponse(
             responseCode = "201",
@@ -122,6 +134,9 @@ class MembershipController {
                     exists, plan is unavailable or promotion cannot
                     be applied
                     """)
+    @ApiResponse(
+            responseCode = "500",
+            description = "The immutable coverage summary for the new period is unavailable")
     ResponseEntity<MembershipResponse> create(
             @Valid
             @RequestBody
@@ -145,8 +160,7 @@ class MembershipController {
         return ResponseEntity
                 .created(location)
                 .body(
-                        MembershipResponse.from(
-                                membership));
+                        membershipResponse(membership));
     }
 
     @PostMapping("/{id}/renew")
@@ -176,7 +190,10 @@ class MembershipController {
                     version of the membership.
 
                     Administrators and receptionists can execute this
-                    operation.
+                    operation. The renewed period captures the plan's
+                    current coverage as an immutable entitlement snapshot.
+                    The response exposes only its scope and branch count,
+                    never branch identifiers.
                     """)
     @ApiResponse(
             responseCode = "200",
@@ -202,6 +219,9 @@ class MembershipController {
                     inactive client, unavailable plan or promotion
                     evaluation conflict
                     """)
+    @ApiResponse(
+            responseCode = "500",
+            description = "The immutable coverage summary for the renewed period is unavailable")
     MembershipResponse renew(
             @PathVariable
             UUID id,
@@ -210,7 +230,7 @@ class MembershipController {
             RenewMembershipRequest request,
             Authentication authentication) {
 
-        return MembershipResponse.from(
+        return membershipResponse(
                 membershipApplicationService.renew(
                         id,
                         request.toCommand(),
@@ -223,7 +243,9 @@ class MembershipController {
             description = """
                     Returns a membership and its current commercial
                     period, including historical plan and promotion
-                    snapshots.
+                    snapshots. The current period's branch entitlement is
+                    summarized by scope and count; covered branch IDs are
+                    not exposed.
 
                     Administrators and receptionists can execute this
                     operation.
@@ -240,13 +262,15 @@ class MembershipController {
     @ApiResponse(
             responseCode = "404",
             description = "Membership not found")
+    @ApiResponse(
+            responseCode = "500",
+            description = "The immutable coverage summary for the current period is unavailable")
     MembershipResponse findById(
             @PathVariable UUID id,
             Authentication authentication) {
 
-        return MembershipResponse.from(
-                membershipApplicationService
-                        .findById(id, actor(authentication)));
+        return membershipResponse(membershipApplicationService
+                .findById(id, actor(authentication)));
     }
 
     @PostMapping("/{id}/freeze")
@@ -282,6 +306,9 @@ class MembershipController {
             responseCode = "409",
             description =
                     "Membership version or state conflict")
+    @ApiResponse(
+            responseCode = "500",
+            description = "The immutable coverage summary for the current period is unavailable")
     MembershipResponse freeze(
             @PathVariable
             UUID id,
@@ -290,7 +317,7 @@ class MembershipController {
             FreezeMembershipRequest request,
             Authentication authentication) {
 
-        return MembershipResponse.from(
+        return membershipResponse(
                 membershipFreezeApplicationService.freeze(
                         id,
                         request.toCommand(),
@@ -332,6 +359,9 @@ class MembershipController {
             responseCode = "409",
             description =
                     "Membership version, state or client conflict")
+    @ApiResponse(
+            responseCode = "500",
+            description = "The immutable coverage summary for the current period is unavailable")
     MembershipResponse reactivate(
             @PathVariable
             UUID id,
@@ -340,7 +370,7 @@ class MembershipController {
             ReactivateMembershipRequest request,
             Authentication authentication) {
 
-        return MembershipResponse.from(
+        return membershipResponse(
                 membershipFreezeApplicationService.reactivate(
                         id,
                         request.toCommand(),
@@ -397,6 +427,9 @@ class MembershipController {
                 Membership version conflict, membership already
                 cancelled or cancellation state conflict
                 """)
+    @ApiResponse(
+            responseCode = "500",
+            description = "The immutable coverage summary for the current period is unavailable")
     MembershipResponse cancel(
             @PathVariable
             UUID id,
@@ -405,7 +438,7 @@ class MembershipController {
             CancelMembershipRequest request,
             Authentication authentication) {
 
-        return MembershipResponse.from(
+        return membershipResponse(
                 membershipCancellationApplicationService.cancel(
                         id,
                         request.toCommand(),
@@ -420,6 +453,24 @@ class MembershipController {
                         authentication.getPrincipal();
 
         return principal.authenticatedActor();
+    }
+
+    private MembershipResponse membershipResponse(MembershipDetails membership) {
+        var currentPeriod = membership.currentPeriod();
+        var coverage = currentPeriod == null
+                ? null
+                : membershipPeriodCoverageSummaryService.findRequired(
+                        currentPeriod.id());
+        return MembershipResponse.from(membership, coverage);
+    }
+
+    @ExceptionHandler(MembershipPeriodCoverageSummaryUnavailableException.class)
+    ResponseEntity<ProblemDetail> handleCoverageSummaryUnavailable(
+            MembershipPeriodCoverageSummaryUnavailableException exception) {
+        return problem(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "MEMBERSHIP_COVERAGE_SUMMARY_UNAVAILABLE",
+                "The membership period coverage summary could not be returned.");
     }
 
     @ExceptionHandler(

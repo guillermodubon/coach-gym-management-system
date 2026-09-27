@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.access.web;
 import io.github.guillermodubon.coachgym.access.AccessReasonCode;
 import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.AccessResult;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -21,7 +22,11 @@ public record AccessRecordResponse(
         UUID membershipId,
         String membershipCode,
         AccessResult result,
+
+        @Schema(description = "Stable, non-sensitive business decision code. A DENIED response is a recorded decision, not an HTTP authorization failure.")
         AccessReasonCode reasonCode,
+
+        @Schema(description = "Safe, server-generated explanation for the business result; never contains SQL, secrets, or internal exception details.")
         String reason,
         Instant checkedInAt,
         UUID processedByUserId,

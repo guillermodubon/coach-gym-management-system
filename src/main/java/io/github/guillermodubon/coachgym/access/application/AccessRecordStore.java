@@ -4,7 +4,6 @@ import io.github.guillermodubon.coachgym.access.AccessRecordDetails;
 import io.github.guillermodubon.coachgym.access.AccessReasonCode;
 import io.github.guillermodubon.coachgym.access.AccessResult;
 import java.time.Instant;
-import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -27,7 +26,7 @@ public interface AccessRecordStore {
      * @param membershipCode      nullable; null when no membership was found
      * @param membershipPeriodId  nullable; null when no membership was found
      * @param result              ALLOWED or DENIED
-     * @param reasonCode          one of the nine approved codes
+     * @param reasonCode          one of the approved persisted access reason codes
      * @param reason              human-readable reason text
      * @param occurredAt          the single captured instant
      * @param actorId             the authenticated processing user's identifier;
@@ -129,6 +128,21 @@ public interface AccessRecordStore {
      */
     Optional<AccessRecordDetails> findMostRecentAllowedQrAttempt(
             UUID credentialId,
+            Instant occurredAtFromInclusive);
+
+    /**
+     * Acquires the transaction-scoped serialization lock for one resolved
+     * client before querying cross-branch anti-passback history.
+     */
+    void lockClientAccess(UUID clientId);
+
+    /**
+     * Finds the latest allowed access for this client at any branch other
+     * than the current physical branch, within the supplied server-time range.
+     */
+    Optional<AccessRecordDetails> findMostRecentAllowedAttemptAtDifferentBranch(
+            UUID clientId,
+            UUID currentBranchId,
             Instant occurredAtFromInclusive);
 
     default Optional<AccessRecordDetails> findMostRecentAllowedQrAttempt(

@@ -10,11 +10,16 @@ import io.github.guillermodubon.coachgym.access.application.AccessRecordStore;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordDataAccessException;
 import io.github.guillermodubon.coachgym.access.application.AccessSortDirection;
 import jakarta.persistence.criteria.Predicate;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.jdbc.core.ConnectionCallback;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -27,10 +32,13 @@ import org.springframework.transaction.annotation.Transactional;
 class AccessPersistenceAdapter implements AccessRecordStore {
 
     private final AccessRecordJpaRepository accessRecordRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     AccessPersistenceAdapter(
-            AccessRecordJpaRepository accessRecordRepository) {
+            AccessRecordJpaRepository accessRecordRepository,
+            JdbcTemplate jdbcTemplate) {
         this.accessRecordRepository = accessRecordRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
@@ -223,6 +231,58 @@ class AccessPersistenceAdapter implements AccessRecordStore {
         } catch (DataAccessException exception) {
             throw new AccessRecordDataAccessException(
                     "Recent QR access attempts could not be read.", exception);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void lockClientAccess(UUID clientId) {
+        if (clientId == null) {
+            throw new IllegalArgumentException("Client identifier is required.");
+        }
+        try {
+            jdbcTemplate.execute((ConnectionCallback<Void>) connection -> {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "SELECT pg_advisory_xact_lock(" +
+                                "hashtextextended(CAST(? AS text), 0))")) {
+                    statement.setString(1, clientId.toString());
+                    try (ResultSet resultSet = statement.executeQuery()) {
+                        if (!resultSet.next()) {
+                            throw new SQLException(
+                                    "Client access serialization lock returned no row.");
+                        }
+                    }
+                }
+                return null;
+            });
+        } catch (DataAccessException exception) {
+            throw new AccessRecordDataAccessException(
+                    "Client access history could not be serialized.", exception);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<AccessRecordDetails> findMostRecentAllowedAttemptAtDifferentBranch(
+            UUID clientId,
+            UUID currentBranchId,
+            Instant occurredAtFromInclusive) {
+        if (clientId == null || currentBranchId == null
+                || occurredAtFromInclusive == null) {
+            throw new IllegalArgumentException(
+                    "Client, physical branch and duplicate boundary are required.");
+        }
+        try {
+            return accessRecordRepository
+                    .findFirstByClientIdAndBranchIdNotAndResultAndCheckedInAtGreaterThanEqualOrderByCheckedInAtDescIdAsc(
+                            clientId,
+                            currentBranchId,
+                            AccessResult.ALLOWED,
+                            occurredAtFromInclusive)
+                    .map(AccessRecordJpaEntity::toDetails);
+        } catch (DataAccessException exception) {
+            throw new AccessRecordDataAccessException(
+                    "Recent cross-branch access attempts could not be read.", exception);
         }
     }
 

@@ -187,6 +187,17 @@ class JdbcStaffBranchAssignmentPersistenceAdapter
             if (updated == 0) {
                 classifyScopeUpdate(command.targetUserId(), command.expectedVersion());
             }
+            int securityVersionUpdated = jdbcTemplate.update("""
+                    update gym.users
+                       set security_version = security_version + 1,
+                           version = version + 1
+                     where id = :targetUserId
+                       and status = 'ACTIVE'
+                    """, new MapSqlParameterSource("targetUserId", command.targetUserId()));
+            if (securityVersionUpdated != 1) {
+                throw new StaffBranchAssignmentStateConflictException(
+                        "Only active staff scope can be changed.");
+            }
             return findScope(command.targetUserId())
                     .orElseThrow(StaffScopeNotFoundException::new);
         } catch (StaffScopeNotFoundException | StaffScopeVersionConflictException exception) {
@@ -496,6 +507,90 @@ class JdbcStaffBranchAssignmentPersistenceAdapter
 
     @Override
     @Transactional
+    public int endAllActiveForUser(
+            UUID userId, UUID actorUserId, String reason, Instant occurredAt) {
+        requireId(userId, "userId");
+        requireId(actorUserId, "actorUserId");
+        if (reason == null || reason.isBlank() || reason.length() > 1_000) {
+            throw new IllegalArgumentException("A bounded assignment-end reason is required.");
+        }
+        requireInstant(occurredAt);
+        try {
+            return jdbcTemplate.update("""
+                    update gym.staff_branch_assignments
+                       set status = 'ENDED',
+                           ended_at = :occurredAt,
+                           ended_by_user_id = :actorUserId,
+                           end_reason = :reason,
+                           version = version + 1
+                     where user_id = :userId
+                       and status = 'ACTIVE'
+                    """, new MapSqlParameterSource()
+                    .addValue("userId", userId)
+                    .addValue("actorUserId", actorUserId)
+                    .addValue("occurredAt", offset(occurredAt))
+                    .addValue("reason", reason));
+        } catch (DataAccessException exception) {
+            throw new StaffBranchAssignmentDataAccessException(
+                    "Staff assignments could not be closed.", exception);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AuthorizedBranchSummary> findActiveInvitationBranches(
+            UUID organizationId, Set<UUID> branchIds) {
+        return invitationBranches(organizationId, branchIds, false);
+    }
+
+    @Override
+    @Transactional
+    public List<AuthorizedBranchSummary> lockActiveInvitationBranches(
+            UUID organizationId, Set<UUID> branchIds) {
+        return invitationBranches(organizationId, branchIds, true);
+    }
+
+    private List<AuthorizedBranchSummary> invitationBranches(
+            UUID organizationId, Set<UUID> branchIds, boolean lock) {
+        requireId(organizationId, "organizationId");
+        if (branchIds == null || branchIds.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("Invitation branch ids are required.");
+        }
+        if (branchIds.isEmpty()) {
+            return List.of();
+        }
+        String lockingClause = lock ? " for share of b, o" : "";
+        try {
+            return jdbcTemplate.query("""
+                    select b.id, b.organization_id, b.code, b.name,
+                           b.timezone, b.is_initial_branch
+                      from gym.gym_branches b
+                      join gym.organizations o on o.id = b.organization_id
+                     where o.id = :organizationId
+                       and o.is_canonical = true
+                       and o.status = 'ACTIVE'
+                       and b.status = 'ACTIVE'
+                       and b.id in (:branchIds)
+                     order by b.id
+                    """ + lockingClause,
+                    new MapSqlParameterSource()
+                            .addValue("organizationId", organizationId)
+                            .addValue("branchIds", branchIds),
+                    (rs, row) -> new AuthorizedBranchSummary(
+                            rs.getObject("id", UUID.class),
+                            rs.getObject("organization_id", UUID.class),
+                            rs.getString("code"),
+                            rs.getString("name"),
+                            rs.getString("timezone"),
+                            rs.getBoolean("is_initial_branch")));
+        } catch (DataAccessException exception) {
+            throw new StaffBranchAssignmentDataAccessException(
+                    "Invitation branch availability could not be verified.", exception);
+        }
+    }
+
+    @Override
+    @Transactional
     public boolean lockAuthorizedActiveBranchForOperation(
             UUID userId, UUID branchId, StaffScopeType scopeType) {
         requireId(userId, "userId");
@@ -651,6 +746,25 @@ class JdbcStaffBranchAssignmentPersistenceAdapter
                        and status = 'ACTIVE')
                 """, new MapSqlParameterSource()
                 .addValue("userId", userId).addValue("branchId", branchId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasActiveBranchAssignment(UUID userId) {
+        requireId(userId, "userId");
+        return exists("""
+                select exists (
+                    select 1
+                      from gym.staff_branch_assignments assignment
+                      join gym.gym_branches branch on branch.id = assignment.branch_id
+                      join gym.organizations organization
+                        on organization.id = branch.organization_id
+                     where assignment.user_id = :userId
+                       and assignment.status = 'ACTIVE'
+                       and branch.status = 'ACTIVE'
+                       and organization.status = 'ACTIVE'
+                       and organization.is_canonical = true)
+                """, new MapSqlParameterSource("userId", userId));
     }
 
     @Override

@@ -44,7 +44,8 @@ class MembershipRenewalErrorMappingTest {
                     new MembershipController(
                             membershipApplicationService,
                             membershipFreezeApplicationService,
-                            membershipCancellationApplicationService);
+                            membershipCancellationApplicationService,
+                            Mockito.mock(MembershipPeriodCoverageSummaryService.class));
         }
 
     @Test

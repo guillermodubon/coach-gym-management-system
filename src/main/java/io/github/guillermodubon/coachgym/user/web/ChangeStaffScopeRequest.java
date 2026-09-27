@@ -17,7 +17,8 @@ import java.util.UUID;
 record ChangeStaffScopeRequest(
         @NotNull StaffScopeType requestedScope,
         @NotBlank @Size(max = 1_000) String reason,
-        @Min(0) long expectedVersion) {
+        @Min(0) long expectedVersion,
+        @NotBlank @Size(max = 1_024) @Schema(writeOnly = true) String currentPassword) {
 
     ChangeStaffScopeCommand toCommand(UUID targetUserId) {
         return new ChangeStaffScopeCommand(targetUserId, requestedScope, reason, expectedVersion);
@@ -26,5 +27,14 @@ record ChangeStaffScopeRequest(
     @JsonAnySetter
     void rejectUnknownField(String name, Object value) {
         throw new IllegalArgumentException("Unsupported staff scope request field: " + name);
+    }
+
+    @Override
+    public String toString() {
+        return "ChangeStaffScopeRequest[requestedScope=" + requestedScope
+                + ", reasonPresent=" + (reason != null)
+                + ", expectedVersion=" + expectedVersion
+                + ", currentPasswordPresent=" + (currentPassword != null && !currentPassword.isBlank())
+                + ']';
     }
 }

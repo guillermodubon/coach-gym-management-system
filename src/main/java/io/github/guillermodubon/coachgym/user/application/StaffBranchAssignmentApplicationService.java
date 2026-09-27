@@ -19,6 +19,7 @@ import io.github.guillermodubon.coachgym.user.StaffScopeChanged;
 import io.github.guillermodubon.coachgym.user.StaffScopeDetails;
 import io.github.guillermodubon.coachgym.user.StaffScopeQuery;
 import io.github.guillermodubon.coachgym.user.StaffScopeValidationException;
+import io.github.guillermodubon.coachgym.shared.security.CurrentPasswordVerifier;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
@@ -42,6 +43,7 @@ public class StaffBranchAssignmentApplicationService {
     private final StaffScopeStore scopeStore;
     private final StaffBranchAssignmentStore assignmentStore;
     private final StaffBranchAssignmentAdminQuery adminQuery;
+    private final CurrentPasswordVerifier currentPasswordVerifier;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
@@ -53,6 +55,7 @@ public class StaffBranchAssignmentApplicationService {
             StaffScopeStore scopeStore,
             StaffBranchAssignmentStore assignmentStore,
             StaffBranchAssignmentAdminQuery adminQuery,
+            CurrentPasswordVerifier currentPasswordVerifier,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this.scopeQuery = Objects.requireNonNull(scopeQuery);
@@ -62,6 +65,7 @@ public class StaffBranchAssignmentApplicationService {
         this.scopeStore = Objects.requireNonNull(scopeStore);
         this.assignmentStore = Objects.requireNonNull(assignmentStore);
         this.adminQuery = Objects.requireNonNull(adminQuery);
+        this.currentPasswordVerifier = Objects.requireNonNull(currentPasswordVerifier);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.clock = Objects.requireNonNull(clock);
     }
@@ -133,13 +137,16 @@ public class StaffBranchAssignmentApplicationService {
     @PreAuthorize("hasRole('ADMIN')")
     public StaffScopeDetails changeScope(
             ChangeStaffScopeCommand command,
-            AuthenticatedActor actor) {
+            AuthenticatedActor actor,
+            String currentPassword) {
         Objects.requireNonNull(command, "Scope change command is required.");
         requireActor(actor);
+        StaffScopeAuthorizationPolicy.requireOrganizationAdministrator(requireActorScope(actor));
+        StaffScopeAuthorizationPolicy.requireNotSelf(actor.id(), command.targetUserId());
+        authorizationQuery.lockOrganizationAdministratorLifecycle();
+        authorizationQuery.lockStaffLifecycle(command.targetUserId());
         StaffAuthorizationContext actorContext = requireActorScope(actor);
         StaffScopeAuthorizationPolicy.requireOrganizationAdministrator(actorContext);
-        StaffScopeAuthorizationPolicy.requireNotSelf(actor.id(), command.targetUserId());
-
         StaffScopeDetails currentScope = scopeQuery.findScope(command.targetUserId())
                 .orElseThrow(StaffScopeNotFoundException::new);
         requireExpectedVersion(
@@ -150,7 +157,8 @@ public class StaffBranchAssignmentApplicationService {
             return currentScope;
         }
 
-        authorizationQuery.lockOrganizationAdministratorLifecycle();
+        requireReauthentication(actor, currentPassword);
+
         boolean targetWillHaveActiveAssignment = !assignmentQuery
                 .findActive(command.targetUserId()).isEmpty();
         long administratorCount = authorizationQuery.countActiveOrganizationAdministrators();
@@ -172,6 +180,13 @@ public class StaffBranchAssignmentApplicationService {
                 occurredAt,
                 true));
         return updated;
+    }
+
+    private void requireReauthentication(AuthenticatedActor actor, String currentPassword) {
+        if (!currentPasswordVerifier.verify(actor.id(), actor.username(), currentPassword)) {
+            throw new StaffBranchAuthorizationException(
+                    "Current password verification failed.");
+        }
     }
 
     /** Returns bounded assignment history to organization-scoped administrators. */

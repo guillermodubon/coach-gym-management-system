@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.plan.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.plan.DurationUnit;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanBranchCoverageScope;
 import io.github.guillermodubon.coachgym.plan.PlanDetails;
 import io.github.guillermodubon.coachgym.plan.domain.PlanDefinition;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
@@ -53,6 +54,10 @@ class MembershipPlanJpaEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "branch_coverage_scope", nullable = false, length = 24)
+    private MembershipPlanBranchCoverageScope branchCoverageScope;
+
     @Column(name = "created_by_user_id")
     private UUID createdByUserId;
 
@@ -80,6 +85,7 @@ class MembershipPlanJpaEntity {
         entity.id = UUID.randomUUID();
         entity.applyDefinition(definition);
         entity.active = true;
+        entity.branchCoverageScope = MembershipPlanBranchCoverageScope.SINGLE_BRANCH;
         entity.createdByUserId = actor.id();
         entity.updatedByUserId = actor.id();
         entity.createdAt = occurredAt;
@@ -98,6 +104,15 @@ class MembershipPlanJpaEntity {
 
     void changeActive(boolean active, AuthenticatedActor actor, Instant occurredAt) {
         this.active = active;
+        updatedByUserId = actor.id();
+        updatedAt = occurredAt;
+    }
+
+    void changeBranchCoverage(
+            MembershipPlanBranchCoverageScope scope,
+            AuthenticatedActor actor,
+            Instant occurredAt) {
+        branchCoverageScope = scope;
         updatedByUserId = actor.id();
         updatedAt = occurredAt;
     }
@@ -133,5 +148,9 @@ class MembershipPlanJpaEntity {
 
     boolean active() {
         return active;
+    }
+
+    UUID id() {
+        return id;
     }
 }

@@ -29,6 +29,9 @@ public interface StaffAssignmentAuthorizationQuery {
 
     boolean hasActiveBranchAssignment(UUID userId, UUID branchId);
 
+    /** Returns whether a retained assignment on an active branch supports reactivation. */
+    boolean hasActiveBranchAssignment(UUID userId);
+
     boolean hasAnotherActiveBranchAssignment(UUID userId, UUID excludingAssignmentId);
 
     boolean branchAdministratorControlsBranch(UUID actorUserId, UUID branchId);

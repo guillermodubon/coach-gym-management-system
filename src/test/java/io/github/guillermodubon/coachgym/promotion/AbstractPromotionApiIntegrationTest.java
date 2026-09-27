@@ -86,6 +86,14 @@ abstract class AbstractPromotionApiIntegrationTest {
 
     @BeforeEach
     protected void provisionReceptionist() {
+        jdbcTemplate.update("""
+                update gym.users
+                   set password_change_required = false,
+                       security_version = security_version + 1,
+                       version = version + 1
+                 where username = ?
+                   and password_change_required
+                """, ADMIN_USERNAME);
         jdbcTemplate.update(
                 "delete from gym.users where username = ?",
                 RECEPTIONIST_USERNAME);

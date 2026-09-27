@@ -25,6 +25,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -54,18 +55,28 @@ class AccessPersistenceAdapterTest {
             UUID.fromString(
                     "60000000-0000-0000-0000-000000000001");
 
+    private static final UUID BRANCH_ID =
+            UUID.fromString("70000000-0000-0000-0000-000000000001");
+
+    private static final UUID CURRENT_BRANCH_ID =
+            UUID.fromString("70000000-0000-0000-0000-000000000002");
+
     private static final Instant NOW =
             Instant.parse("2026-09-15T20:00:00Z");
 
     @Mock
     private AccessRecordJpaRepository accessRecordRepository;
 
+    @Mock
+    private JdbcTemplate jdbcTemplate;
+
     private AccessPersistenceAdapter adapter;
 
     @BeforeEach
     void setUp() {
         adapter = new AccessPersistenceAdapter(
-                accessRecordRepository);
+                accessRecordRepository,
+                jdbcTemplate);
     }
 
     @Test
@@ -178,6 +189,38 @@ class AccessPersistenceAdapterTest {
                 CREDENTIAL_ID, NOW.minusSeconds(30)))
                 .hasValueSatisfying(details -> assertThat(details.id())
                 .isEqualTo(entity.id()));
+    }
+
+    @Test
+    void returnsMostRecentAllowedAttemptAtAnotherPhysicalBranch() {
+        AccessRecordJpaEntity entity = AccessRecordJpaEntity.create(
+                "MEM-000001",
+                CLIENT_ID,
+                "CLI-000001",
+                MEMBERSHIP_ID,
+                "MEM-000001",
+                PERIOD_ID,
+                AccessResult.ALLOWED,
+                AccessReasonCode.ACCESS_ALLOWED,
+                "Membership is active and its current period is valid.",
+                NOW,
+                ACTOR_ID,
+                BRANCH_ID);
+        given(accessRecordRepository
+                .findFirstByClientIdAndBranchIdNotAndResultAndCheckedInAtGreaterThanEqualOrderByCheckedInAtDescIdAsc(
+                        CLIENT_ID,
+                        CURRENT_BRANCH_ID,
+                        AccessResult.ALLOWED,
+                        NOW.minusSeconds(30)))
+                .willReturn(Optional.of(entity));
+
+        assertThat(adapter.findMostRecentAllowedAttemptAtDifferentBranch(
+                CLIENT_ID, CURRENT_BRANCH_ID, NOW.minusSeconds(30)))
+                .hasValueSatisfying(details -> {
+                    assertThat(details.id()).isEqualTo(entity.id());
+                    assertThat(details.branchId()).isEqualTo(BRANCH_ID);
+                    assertThat(details.result()).isEqualTo(AccessResult.ALLOWED);
+                });
     }
 
     @Test

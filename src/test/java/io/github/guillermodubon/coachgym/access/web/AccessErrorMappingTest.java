@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 
 import io.github.guillermodubon.coachgym.access.application.AccessApplicationService;
 import io.github.guillermodubon.coachgym.access.application.AccessDuplicateScanPolicyUnavailableException;
+import io.github.guillermodubon.coachgym.access.application.AccessMembershipCoverageEvaluationException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordDataAccessException;
 import io.github.guillermodubon.coachgym.access.application.AccessRecordNotFoundException;
 import io.github.guillermodubon.coachgym.access.application.QrAccessCredentialUnavailableException;
@@ -119,6 +120,10 @@ class AccessErrorMappingTest {
                 new AccessDuplicateScanPolicyUnavailableException());
         ResponseEntity<ProblemDetail> storage = controller.handleAccessDataAccessFailure(
                 new AccessRecordDataAccessException("internal", new IllegalStateException()));
+        ResponseEntity<ProblemDetail> coverage =
+                controller.handleMembershipCoverageEvaluationFailure(
+                        new AccessMembershipCoverageEvaluationException(
+                                "database details", new IllegalStateException()));
 
         assertThat(policy.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(policy.getBody().getProperties())
@@ -126,5 +131,9 @@ class AccessErrorMappingTest {
         assertThat(storage.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
         assertThat(storage.getBody().getProperties())
                 .containsEntry("code", "ACCESS_DATA_ACCESS_FAILED");
+        assertThat(coverage.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(coverage.getBody().getProperties())
+                .containsEntry("code", "ACCESS_MEMBERSHIP_COVERAGE_EVALUATION_FAILED")
+                .doesNotContainValue("database details");
     }
 }

@@ -149,7 +149,9 @@ public abstract class AbstractIncidentApiIntegrationTest {
                 values (?,?,?,?,?,?,'ACTIVE')
                 on conflict (id) do update set
                     password_hash=excluded.password_hash,
-                    status='ACTIVE'
+                    status='ACTIVE',
+                    security_version=gym.users.security_version + 1,
+                    version=gym.users.version + 1
                 """, id, username, email, passwordEncoder.encode(password),
                 "Incident", "Staff");
         Integer existingScopeCount = jdbcTemplate.queryForObject(

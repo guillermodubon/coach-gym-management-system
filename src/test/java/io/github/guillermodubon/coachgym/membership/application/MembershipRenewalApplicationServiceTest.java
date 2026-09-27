@@ -6,6 +6,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -14,24 +16,33 @@ import io.github.guillermodubon.coachgym.client.ClientQuery;
 import io.github.guillermodubon.coachgym.client.ClientStatus;
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipPeriodDetails;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodBranchCoverageDetails;
 import io.github.guillermodubon.coachgym.membership.MembershipPeriodSource;
 import io.github.guillermodubon.coachgym.membership.MembershipRenewed;
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
+import io.github.guillermodubon.coachgym.membership.application.MembershipPeriodBranchCoverageStore;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipPricingSnapshot;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipRenewal;
 import io.github.guillermodubon.coachgym.membership.domain.MembershipValidationException;
 import io.github.guillermodubon.coachgym.plan.DurationUnit;
 import io.github.guillermodubon.coachgym.plan.PlanDetails;
 import io.github.guillermodubon.coachgym.plan.PlanQuery;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanBranchCoverageScope;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanSaleCoverage;
+import io.github.guillermodubon.coachgym.plan.MembershipPlanSaleCoverageQuery;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluationRequest;
 import io.github.guillermodubon.coachgym.promotion.PromotionEvaluator;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.BranchOperationContext;
+import io.github.guillermodubon.coachgym.user.BranchOperationContextResolver;
+import io.github.guillermodubon.coachgym.user.StaffScopeType;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,6 +79,12 @@ class MembershipRenewalApplicationServiceTest {
             UUID.fromString(
                     "a316a34d-ba9a-4483-956f-f88e77e39ac7");
 
+    private static final UUID ORGANIZATION_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000001");
+
+    private static final UUID BRANCH_ID =
+            UUID.fromString("7b0bf7d5-5184-43d2-8f9a-200000000002");
+
     private static final Instant NOW =
             Instant.parse(
                     "2026-10-01T14:00:00Z");
@@ -86,16 +103,25 @@ class MembershipRenewalApplicationServiceTest {
     private MembershipStore membershipStore;
 
     @Mock
+    private MembershipPeriodBranchCoverageStore periodCoverageStore;
+
+    @Mock
     private ClientQuery clientQuery;
 
     @Mock
     private PlanQuery planQuery;
 
     @Mock
+    private MembershipPlanSaleCoverageQuery planSaleCoverageQuery;
+
+    @Mock
     private PromotionEvaluator promotionEvaluator;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private BranchOperationContextResolver branchContextResolver;
 
     private MembershipApplicationService service;
 
@@ -104,11 +130,24 @@ class MembershipRenewalApplicationServiceTest {
         service =
                 new MembershipApplicationService(
                         membershipStore,
+                        periodCoverageStore,
                         clientQuery,
                         planQuery,
+                        planSaleCoverageQuery,
                         promotionEvaluator,
                         eventPublisher,
-                        CLOCK);
+                        CLOCK,
+                        branchContextResolver);
+        lenient().when(branchContextResolver.resolveOperation(ACTOR_ID))
+                .thenReturn(new BranchOperationContext(
+                        ACTOR_ID, ORGANIZATION_ID, StaffScopeType.ORGANIZATION,
+                        BRANCH_ID, Set.of(BRANCH_ID)));
+        lenient().when(planSaleCoverageQuery.findForSale(any(), eq(BRANCH_ID)))
+                .thenAnswer(invocation -> Optional.of(new MembershipPlanSaleCoverage(
+                        invocation.getArgument(0),
+                        MembershipPlanBranchCoverageScope.SINGLE_BRANCH,
+                        Set.of(BRANCH_ID),
+                        0)));
     }
 
     @Test
@@ -126,8 +165,10 @@ class MembershipRenewalApplicationServiceTest {
         when(membershipStore.findById(MEMBERSHIP_ID))
                 .thenReturn(
                         Optional.of(current));
+        when(membershipStore.findById(MEMBERSHIP_ID, BRANCH_ID))
+                .thenReturn(Optional.of(current));
 
-        when(clientQuery.findClientById(CLIENT_ID))
+        when(clientQuery.findClientById(CLIENT_ID, BRANCH_ID))
                 .thenReturn(
                         Optional.of(
                                 activeClient()));
@@ -266,8 +307,10 @@ class MembershipRenewalApplicationServiceTest {
         when(membershipStore.findById(MEMBERSHIP_ID))
                 .thenReturn(
                         Optional.of(current));
+        when(membershipStore.findById(MEMBERSHIP_ID, BRANCH_ID))
+                .thenReturn(Optional.of(current));
 
-        when(clientQuery.findClientById(CLIENT_ID))
+        when(clientQuery.findClientById(CLIENT_ID, BRANCH_ID))
                 .thenReturn(
                         Optional.of(
                                 activeClient()));
@@ -357,6 +400,8 @@ class MembershipRenewalApplicationServiceTest {
         when(membershipStore.findById(MEMBERSHIP_ID))
                 .thenReturn(
                         Optional.of(current));
+        when(membershipStore.findById(MEMBERSHIP_ID, BRANCH_ID))
+                .thenReturn(Optional.of(current));
 
         assertThatThrownBy(
                 () ->
@@ -535,7 +580,8 @@ class MembershipRenewalApplicationServiceTest {
                         effectiveEndsOn,
                         effectiveEndsOn,
                         NOW.minusSeconds(3_600),
-                        0);
+                        0,
+                        BRANCH_ID);
 
         return new MembershipDetails(
                 MEMBERSHIP_ID,
@@ -545,7 +591,8 @@ class MembershipRenewalApplicationServiceTest {
                 period,
                 NOW.minusSeconds(7_200),
                 NOW,
-                version);
+                version,
+                BRANCH_ID);
     }
 
     private static MembershipDetails renewedMembership(
@@ -562,7 +609,8 @@ class MembershipRenewalApplicationServiceTest {
                         renewal.dates().baseEndsOn(),
                         renewal.dates().effectiveEndsOn(),
                         NOW,
-                        0);
+                        0,
+                        BRANCH_ID);
 
         return new MembershipDetails(
                 MEMBERSHIP_ID,
@@ -572,7 +620,8 @@ class MembershipRenewalApplicationServiceTest {
                 period,
                 NOW.minusSeconds(7_200),
                 NOW,
-                resultingVersion);
+                resultingVersion,
+                BRANCH_ID);
     }
 
     private void assertRenewedEvent(
@@ -582,16 +631,18 @@ class MembershipRenewalApplicationServiceTest {
             LocalDate expectedStartsOn,
             LocalDate expectedEffectiveEndsOn) {
 
-        ArgumentCaptor<MembershipRenewed> eventCaptor =
-                ArgumentCaptor.forClass(
-                        MembershipRenewed.class);
+        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, times(2)).publishEvent(eventCaptor.capture());
+        MembershipRenewed event = eventCaptor.getAllValues().stream()
+                .filter(MembershipRenewed.class::isInstance)
+                .map(MembershipRenewed.class::cast)
+                .findFirst()
+                .orElseThrow();
 
-        verify(eventPublisher)
-                .publishEvent(
-                        eventCaptor.capture());
-
-        MembershipRenewed event =
-                eventCaptor.getValue();
+        ArgumentCaptor<MembershipPeriodBranchCoverageDetails> snapshotCaptor =
+                ArgumentCaptor.forClass(MembershipPeriodBranchCoverageDetails.class);
+        verify(periodCoverageStore).capture(snapshotCaptor.capture());
+        assertThat(snapshotCaptor.getValue().membershipPeriodId()).isEqualTo(RENEWAL_PERIOD_ID);
 
         assertThat(event.membershipId())
                 .isEqualTo(MEMBERSHIP_ID);

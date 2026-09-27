@@ -44,7 +44,8 @@ class StaffBranchAssignmentWebContractTest {
                 .doesNotContain("role", "status", "permissions");
         assertThat(Arrays.stream(ChangeStaffScopeRequest.class.getRecordComponents())
                 .map(component -> component.getName()))
-                .containsExactlyInAnyOrder("requestedScope", "reason", "expectedVersion")
+                .containsExactlyInAnyOrder(
+                        "requestedScope", "reason", "expectedVersion", "currentPassword")
                 .doesNotContain("role", "status", "permissions");
     }
 

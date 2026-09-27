@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.membership.web;
 
 import io.github.guillermodubon.coachgym.membership.MembershipDetails;
+import io.github.guillermodubon.coachgym.membership.MembershipPeriodCoverageSummary;
 import io.github.guillermodubon.coachgym.membership.MembershipStatus;
 import java.time.Instant;
 import java.util.UUID;
@@ -18,6 +19,12 @@ public record MembershipResponse(
 
     static MembershipResponse from(
             MembershipDetails membership) {
+        return from(membership, null);
+    }
+
+    static MembershipResponse from(
+            MembershipDetails membership,
+            MembershipPeriodCoverageSummary coverage) {
 
         return new MembershipResponse(
                 membership.id(),
@@ -25,7 +32,7 @@ public record MembershipResponse(
                 membership.clientId(),
                 membership.status(),
                 MembershipPeriodResponse.from(
-                        membership.currentPeriod()),
+                        membership.currentPeriod(), coverage),
                 membership.createdAt(),
                 membership.updatedAt(),
                 membership.version(),

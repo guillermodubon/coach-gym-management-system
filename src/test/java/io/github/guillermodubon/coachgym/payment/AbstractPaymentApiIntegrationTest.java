@@ -61,6 +61,14 @@ abstract class AbstractPaymentApiIntegrationTest {
 
     @BeforeEach
     void provisionStaff() {
+        jdbcTemplate.update("""
+                update gym.users
+                   set password_change_required = false,
+                       security_version = security_version + 1,
+                       version = version + 1
+                 where username = ?
+                   and password_change_required
+                """, ADMIN_USERNAME);
         provisionUser(RECEPTIONIST_USERNAME,
                 "payment-receptionist@coach-gym.local",
                 RECEPTIONIST_PASSWORD, "RECEPTIONIST");
@@ -287,7 +295,9 @@ abstract class AbstractPaymentApiIntegrationTest {
             userId = existingId;
             jdbcTemplate.update(
                     """
-                    update gym.users set email=?,password_hash=?,status='ACTIVE'
+                  update gym.users
+                     set email=?,password_hash=?,status='ACTIVE',
+                         security_version = security_version + 1
                     where id=?
                     """,
                     email, passwordEncoder.encode(password), userId);
