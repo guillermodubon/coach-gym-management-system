@@ -68,10 +68,12 @@ final class SmtpEmailSender implements EmailSender {
             }
             helper.setSubject(message.subject());
             helper.setText(message.plainTextBody(), message.htmlBody());
-            helper.addAttachment(
-                    message.attachment().filename(),
-                    new ByteArrayResource(message.attachment().bytes()),
-                    message.attachment().contentType());
+            if (message.attachment() != null) {
+                helper.addAttachment(
+                        message.attachment().filename(),
+                        new ByteArrayResource(message.attachment().bytes()),
+                        message.attachment().contentType());
+            }
             mailSender.send(mimeMessage);
             return EmailSendResult.sent();
         } catch (MailAuthenticationException exception) {
@@ -129,7 +131,7 @@ final class SmtpEmailSender implements EmailSender {
     }
 
     private static long estimatedSize(EmailMessage message) {
-        long attachmentBytes = message.attachment().sizeBytes();
+        long attachmentBytes = message.attachment() == null ? 0L : message.attachment().sizeBytes();
         long encodedAttachmentBytes = attachmentBytes > (Long.MAX_VALUE / 4) * 3
                 ? Long.MAX_VALUE
                 : ((attachmentBytes + 2) / 3) * 4;

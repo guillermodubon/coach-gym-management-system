@@ -18,4 +18,7 @@ public interface StaffBranchAssignmentStore {
             EndStaffBranchAssignmentCommand command,
             UUID actorUserId,
             Instant occurredAt);
+
+    /** Ends every currently active assignment for terminal account deactivation. */
+    int endAllActiveForUser(UUID userId, UUID actorUserId, String reason, Instant occurredAt);
 }

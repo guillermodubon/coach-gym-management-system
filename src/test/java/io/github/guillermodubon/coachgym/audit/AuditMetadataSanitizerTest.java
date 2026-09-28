@@ -42,6 +42,12 @@ class AuditMetadataSanitizerTest {
                 Map.entry("STAFF_PROFILE_PHOTO_UPDATED", "photoPresent"),
                 Map.entry("STAFF_PROFILE_PHOTO_REMOVED", "photoPresent"),
                 Map.entry("STAFF_PASSWORD_CHANGED", "reauthenticationRequired"),
+                Map.entry("STAFF_INVITATION_CREATED", "maskedRecipient"),
+                Map.entry("STAFF_INVITATION_ACCEPTED", "branchIds"),
+                Map.entry("STAFF_ACCOUNT_SUSPENDED", "reasonPresent"),
+                Map.entry("STAFF_ROLE_SCOPE_CHANGED", "newRoles"),
+                Map.entry("STAFF_PASSWORD_RECOVERY_COMPLETED", "userIdPresent"),
+                Map.entry("INITIAL_ADMIN_BOOTSTRAPPED", "userId"),
                 Map.entry("STAFF_SCOPE_CHANGED", "previousScope"),
                 Map.entry("STAFF_BRANCH_ASSIGNED", "branchId"),
                 Map.entry("STAFF_BRANCH_ASSIGNMENT_ENDED", "newStatus"),
@@ -237,6 +243,29 @@ class AuditMetadataSanitizerTest {
         assertThat(projection.values()).doesNotContainKeys(
                 "passwordHash", "storageKey");
         assertThat(projection.values().toString()).doesNotContain("never-return");
+        assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void sanitizesInvitationMetadataAndMasksRecipientWithoutRetainingTokenMaterial() {
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "STAFF_INVITATION_CREATED",
+                Map.of(
+                        "maskedRecipient", "invitee@example.test",
+                        "proposedRole", "RECEPTIONIST",
+                        "proposedScope", "BRANCH",
+                        "branchIds", List.of(UUID.randomUUID().toString()),
+                        "token", "raw-token-value",
+                        "email", "invitee@example.test",
+                        "passwordHash", "encoded-password"));
+
+        assertThat(projection.values())
+                .containsEntry("maskedRecipient", "i***@example.test")
+                .containsEntry("proposedRole", "RECEPTIONIST")
+                .containsKey("branchIds")
+                .doesNotContainKeys("email", "token", "passwordHash");
+        assertThat(projection.values().toString())
+                .doesNotContain("invitee@example.test", "raw-token-value", "encoded-password");
         assertThat(projection.metadataRedacted()).isTrue();
     }
 

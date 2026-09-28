@@ -24,6 +24,14 @@ import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
 import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
 import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
 import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
+import io.github.guillermodubon.coachgym.user.StaffInvitationCreated;
+import io.github.guillermodubon.coachgym.user.StaffInvitationResent;
+import io.github.guillermodubon.coachgym.user.StaffInvitationRevoked;
+import io.github.guillermodubon.coachgym.user.StaffInvitationAccepted;
+import io.github.guillermodubon.coachgym.user.StaffIdentityLifecycleChanged;
+import io.github.guillermodubon.coachgym.user.StaffRoleScopeChanged;
+import io.github.guillermodubon.coachgym.user.StaffPasswordReset;
+import io.github.guillermodubon.coachgym.user.StaffInitialAdministratorProvisioned;
 import io.github.guillermodubon.coachgym.user.StaffBranchAssigned;
 import io.github.guillermodubon.coachgym.user.StaffBranchAssignmentEnded;
 import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
@@ -1283,6 +1291,161 @@ class AuditEntryJpaEntity {
         entry.summary = "Staff password changed.";
         entry.metadata = Map.of(
                 "reauthenticationRequired", event.reauthenticationRequired());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffInvitationCreated event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Staff invitation event is required.");
+        }
+        AuditEntryJpaEntity entry = staffIdentityEntry(
+                event.invitedByUserId(), "staff", event.invitationId(), "STAFF_INVITATION",
+                "STAFF_INVITATION_CREATED", "Staff invitation created.", event.occurredAt());
+        entry.metadata = Map.of(
+                "invitationId", event.invitationId().toString(),
+                "organizationId", event.organizationId().toString(),
+                "invitedByUserId", event.invitedByUserId().toString(),
+                "maskedRecipient", event.maskedRecipient(),
+                "proposedRole", event.proposedRole().name(),
+                "proposedScope", event.proposedScope().name(),
+                "branchIds", event.proposedBranchIds().stream().sorted().map(UUID::toString).toList(),
+                "newStatus", "PENDING");
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffInvitationResent event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Staff invitation resend event is required.");
+        }
+        AuditEntryJpaEntity entry = staffIdentityEntry(
+                event.actorUserId(), "staff", event.invitationId(), "STAFF_INVITATION",
+                "STAFF_INVITATION_RESENT", "Staff invitation link rotated.", event.occurredAt());
+        entry.metadata = Map.of(
+                "invitationId", event.invitationId().toString(),
+                "organizationId", event.organizationId().toString(),
+                "actorUserId", event.actorUserId().toString(),
+                "newStatus", "PENDING",
+                "version", event.version());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffInvitationRevoked event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Staff invitation revocation event is required.");
+        }
+        AuditEntryJpaEntity entry = staffIdentityEntry(
+                event.actorUserId(), "staff", event.invitationId(), "STAFF_INVITATION",
+                "STAFF_INVITATION_REVOKED", "Staff invitation revoked.", event.occurredAt());
+        entry.metadata = Map.of(
+                "invitationId", event.invitationId().toString(),
+                "organizationId", event.organizationId().toString(),
+                "actorUserId", event.actorUserId().toString(),
+                "previousStatus", "PENDING",
+                "newStatus", "REVOKED",
+                "version", event.version());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffInvitationAccepted event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Staff invitation acceptance event is required.");
+        }
+        AuditEntryJpaEntity entry = staffIdentityEntry(
+                event.userId(), "staff", event.invitationId(), "STAFF_INVITATION",
+                "STAFF_INVITATION_ACCEPTED", "Staff invitation accepted.", event.occurredAt());
+        entry.metadata = Map.of(
+                "invitationId", event.invitationId().toString(),
+                "organizationId", event.organizationId().toString(),
+                "targetUserId", event.userId().toString(),
+                "invitedByUserId", event.invitedByUserId().toString(),
+                "role", event.role().name(),
+                "scope", event.scope().name(),
+                "branchIds", event.branchIds().stream().sorted().map(UUID::toString).toList(),
+                "previousStatus", "PENDING",
+                "newStatus", "ACCEPTED");
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffIdentityLifecycleChanged event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Staff account lifecycle event is required.");
+        }
+        String action = switch (event.newStatus()) {
+            case ACTIVE -> "STAFF_ACCOUNT_REACTIVATED";
+            case SUSPENDED -> "STAFF_ACCOUNT_SUSPENDED";
+            case DEACTIVATED -> "STAFF_ACCOUNT_DEACTIVATED";
+            case INVITED -> throw new IllegalArgumentException(
+                    "Invited identities do not have an account lifecycle event.");
+        };
+        AuditEntryJpaEntity entry = staffIdentityEntry(
+                event.actorUserId(), "staff", event.targetUserId(), "STAFF_ACCOUNT",
+                action, "Staff account lifecycle changed.", event.occurredAt());
+        entry.metadata = Map.of(
+                "targetUserId", event.targetUserId().toString(),
+                "previousStatus", event.previousStatus().name(),
+                "newStatus", event.newStatus().name(),
+                "reasonPresent", event.reasonPresent());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffRoleScopeChanged event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Staff role/scope event is required.");
+        }
+        AuditEntryJpaEntity entry = staffIdentityEntry(
+                event.actorUserId(), "staff", event.targetUserId(), "STAFF_ROLE_SCOPE",
+                "STAFF_ROLE_SCOPE_CHANGED", "Staff role and scope changed.", event.occurredAt());
+        entry.metadata = Map.of(
+                "targetUserId", event.targetUserId().toString(),
+                "previousRoles", event.previousRoles().stream().sorted().map(Enum::name).toList(),
+                "newRoles", event.newRoles().stream().sorted().map(Enum::name).toList(),
+                "previousScope", event.previousScope().name(),
+                "newScope", event.newScope().name(),
+                "reasonPresent", event.reasonPresent());
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffPasswordReset event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Staff password recovery event is required.");
+        }
+        AuditEntryJpaEntity entry = staffIdentityEntry(
+                event.userId(), "staff", event.userId(), "STAFF_ACCOUNT",
+                "STAFF_PASSWORD_RECOVERY_COMPLETED", "Staff password recovery completed.",
+                event.occurredAt());
+        entry.metadata = Map.of("userIdPresent", true);
+        return entry;
+    }
+
+    static AuditEntryJpaEntity from(StaffInitialAdministratorProvisioned event) {
+        if (event == null) {
+            throw new IllegalArgumentException("Initial administrator event is required.");
+        }
+        AuditEntryJpaEntity entry = staffIdentityEntry(
+                event.userId(), "system", event.userId(), "STAFF_ACCOUNT",
+                "INITIAL_ADMIN_BOOTSTRAPPED", "Initial administrator provisioned.",
+                event.occurredAt());
+        entry.metadata = Map.of("userId", event.userId().toString());
+        return entry;
+    }
+
+    private static AuditEntryJpaEntity staffIdentityEntry(
+            UUID actorUserId,
+            String actorIdentifier,
+            UUID resourceId,
+            String resourceType,
+            String actionCode,
+            String summary,
+            Instant occurredAt) {
+        AuditEntryJpaEntity entry = new AuditEntryJpaEntity();
+        entry.id = UUID.randomUUID();
+        entry.actorUserId = actorUserId;
+        entry.actorIdentifierSnapshot = actorIdentifier;
+        entry.actionCode = actionCode;
+        entry.resourceType = resourceType;
+        entry.resourceId = resourceId;
+        entry.summary = summary;
+        entry.occurredAt = occurredAt;
         return entry;
     }
 

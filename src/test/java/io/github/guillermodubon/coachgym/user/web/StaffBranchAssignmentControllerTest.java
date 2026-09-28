@@ -163,7 +163,7 @@ class StaffBranchAssignmentControllerTest {
     void assignmentEndAndScopeReadChangeUseTheirDedicatedContracts() throws Exception {
         when(service.end(any(), any())).thenReturn(endedAssignment());
         when(service.findScope(eq(TARGET_ID), any())).thenReturn(scope());
-        when(service.changeScope(any(), any())).thenReturn(scope());
+        when(service.changeScope(any(), any(), any())).thenReturn(scope());
 
         mockMvc.perform(post("/api/v1/staff/branch-assignments/" + ASSIGNMENT_ID + "/end")
                         .with(authenticatedAs("ADMIN"))
@@ -186,26 +186,26 @@ class StaffBranchAssignmentControllerTest {
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"requestedScope\":\"BRANCH\",\"reason\":\"rotation\","
-                                + "\"expectedVersion\":0}"))
+                                + "\"expectedVersion\":0,\"currentPassword\":\"current-password\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(TARGET_ID.toString()))
                 .andExpect(jsonPath("$.version").value(0));
 
         verify(service).end(any(), any());
         verify(service).findScope(eq(TARGET_ID), any());
-        verify(service).changeScope(any(), any());
+        verify(service).changeScope(any(), any(), any());
     }
 
     @Test
     void staleScopeMapsToStableProblemDetail() throws Exception {
-        when(service.changeScope(any(), any()))
+        when(service.changeScope(any(), any(), any()))
                 .thenThrow(new io.github.guillermodubon.coachgym.user.application.StaffScopeVersionConflictException(TARGET_ID));
 
         mockMvc.perform(put("/api/v1/staff/" + TARGET_ID + "/scope")
                         .with(authenticatedAs("ADMIN"))
                         .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"requestedScope\":\"BRANCH\",\"reason\":\"coverage\",\"expectedVersion\":0}"))
+                        .content("{\"requestedScope\":\"BRANCH\",\"reason\":\"coverage\",\"expectedVersion\":0,\"currentPassword\":\"current-password\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("STAFF_SCOPE_VERSION_CONFLICT"))
                 .andExpect(jsonPath("$.detail").value(

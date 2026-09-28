@@ -15,7 +15,7 @@ import org.springframework.mail.javamail.JavaMailSenderImpl;
 
 /** Infrastructure wiring for the provider-neutral composer and SMTP sender. */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({EmailProperties.class, ResendProperties.class})
+@EnableConfigurationProperties({EmailProperties.class, ResendProperties.class, IdentityEmailProperties.class})
 class EmailConfiguration {
 
     @Bean

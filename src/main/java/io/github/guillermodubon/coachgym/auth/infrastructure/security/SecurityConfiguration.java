@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.auth.infrastructure.security;
 
 import io.github.guillermodubon.coachgym.auth.SessionSecurityPolicy;
 import io.github.guillermodubon.coachgym.shared.web.CorrelationIdFilter;
+import io.github.guillermodubon.coachgym.user.AuthenticationUserQuery;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -77,6 +78,13 @@ class SecurityConfiguration {
     }
 
     @Bean
+    AccountSecurityFreshnessFilter accountSecurityFreshnessFilter(
+            AuthenticationUserQuery users,
+            ProblemDetailAccessDeniedHandler accessDeniedHandler) {
+        return new AccountSecurityFreshnessFilter(users, accessDeniedHandler);
+    }
+
+    @Bean
     LoginAttemptRateLimiter loginAttemptRateLimiter(
             LoginRateLimitProperties properties,
             Clock clock) {
@@ -136,6 +144,7 @@ class SecurityConfiguration {
             SessionSecurityPolicy sessionSecurityPolicy,
             SecurityHeadersProperties securityHeadersProperties,
             AbsoluteSessionTimeoutFilter absoluteSessionTimeoutFilter,
+            AccountSecurityFreshnessFilter accountSecurityFreshnessFilter,
             RequestBodyLimitFilter requestBodyLimitFilter,
             CorrelationIdFilter correlationIdFilter) throws Exception {
         CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
@@ -172,6 +181,7 @@ class SecurityConfiguration {
                 })
                 .addFilterBefore(correlationIdFilter, SecurityContextHolderFilter.class)
                 .addFilterAfter(absoluteSessionTimeoutFilter, SecurityContextHolderFilter.class)
+                .addFilterAfter(accountSecurityFreshnessFilter, AbsoluteSessionTimeoutFilter.class)
                 .addFilterBefore(requestBodyLimitFilter, SecurityContextHolderFilter.class)
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(authenticationEntryPoint)
@@ -192,6 +202,23 @@ class SecurityConfiguration {
                                 HttpMethod.POST,
                                 "/api/v1/payment-provider/stripe/webhook")
                         .permitAll()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/staff-invitations/inspect",
+                                "/api/v1/staff-invitations/accept",
+                                "/api/v1/auth/password-recovery-requests",
+                                "/api/v1/auth/password-recovery/complete")
+                        .permitAll()
+                        .requestMatchers("/api/v1/staff-invitations/**")
+                        .hasRole("ADMIN")
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/staff/*/suspend",
+                                "/api/v1/staff/*/reactivate",
+                                "/api/v1/staff/*/deactivate")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/staff/*/role-scope")
+                        .hasRole("ADMIN")
                         .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout")
                         .authenticated()
                         .requestMatchers("/api/v1/me/branch-context/**")

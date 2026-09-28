@@ -105,6 +105,14 @@ abstract class AbstractMembershipApiIntegrationTest {
 
     @BeforeEach
     void provisionAdditionalStaffAccounts() {
+        jdbcTemplate.update("""
+                update gym.users
+                   set password_change_required = false,
+                       security_version = security_version + 1,
+                       version = version + 1
+                 where username = ?
+                   and password_change_required
+                """, ADMIN_USERNAME);
         provisionUser(
                 RECEPTIONIST_USERNAME,
                 "membership-front-desk@coach-gym.local",
@@ -383,7 +391,8 @@ abstract class AbstractMembershipApiIntegrationTest {
                         password_hash = ?,
                         first_name = ?,
                         last_name = ?,
-                        status = 'ACTIVE'
+                        status = 'ACTIVE',
+                        security_version = security_version + 1
                     where id = ?
                     """,
                     email,

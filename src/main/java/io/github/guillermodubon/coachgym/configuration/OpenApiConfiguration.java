@@ -27,6 +27,16 @@ class OpenApiConfiguration {
                                 .description("""
                                         Administrative backend for Coach Gym.
 
+                                        This is a private internal system: public staff registration is not supported.
+                                        Staff accounts are provisioned only by the one-time initial administrator
+                                        bootstrap or by accepting an administrator-created invitation. Invitation
+                                        and password-recovery tokens are one-time, expire, and are never returned
+                                        by administrative endpoints. Public token flows accept credentials only
+                                        through their dedicated request bodies; they do not accept caller-selected
+                                        email, role, scope, branch assignments, status, permissions, or actor identity.
+                                        Password-recovery requests always use a generic acknowledgement to avoid
+                                        account enumeration. Identity email delivery is provider-neutral.
+
                                         Authentication uses a server-side HTTP
                                         session. Authenticated requests send the
                                         session cookie established by the login

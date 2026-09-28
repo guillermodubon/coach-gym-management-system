@@ -69,6 +69,25 @@ coach-gym:
     login-rate-limit:
       max-attempts: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS:10}
       window: ${LOGIN_RATE_LIMIT_WINDOW:PT1M}
+    identity-abuse:
+      max-invitation-creations-per-admin-per-hour: ${STAFF_INVITATION_CREATIONS_PER_ADMIN_PER_HOUR:20}
+      invitation-creation-window: ${STAFF_INVITATION_CREATION_WINDOW:PT1H}
+      max-invitation-deliveries-per-email-per-day: ${STAFF_INVITATION_DELIVERIES_PER_EMAIL_PER_DAY:3}
+      invitation-delivery-window: ${STAFF_INVITATION_DELIVERY_WINDOW:PT24H}
+      invitation-resend-cooldown: ${STAFF_INVITATION_RESEND_COOLDOWN:PT5M}
+      max-recovery-requests-per-email-per-hour: ${STAFF_RECOVERY_REQUESTS_PER_EMAIL_PER_HOUR:3}
+      recovery-email-request-window: ${STAFF_RECOVERY_EMAIL_REQUEST_WINDOW:PT1H}
+      max-recovery-requests-per-ip-per-15-minutes: ${STAFF_RECOVERY_REQUESTS_PER_IP_PER_15_MINUTES:10}
+      recovery-request-ip-window: ${STAFF_RECOVERY_REQUEST_IP_WINDOW:PT15M}
+      max-recovery-requests-globally-per-hour: ${STAFF_RECOVERY_REQUESTS_GLOBAL_PER_HOUR:100}
+      recovery-global-window: ${STAFF_RECOVERY_GLOBAL_WINDOW:PT1H}
+      max-token-failures-per-fingerprint: ${STAFF_IDENTITY_TOKEN_FAILURES_PER_FINGERPRINT:5}
+      token-fingerprint-failure-window: ${STAFF_IDENTITY_TOKEN_FAILURE_WINDOW:PT48H}
+      max-invitation-token-failures-per-ip-per-15-minutes: ${STAFF_INVITATION_TOKEN_FAILURES_PER_IP_PER_15_MINUTES:10}
+      max-recovery-token-failures-per-ip-per-15-minutes: ${STAFF_RECOVERY_TOKEN_FAILURES_PER_IP_PER_15_MINUTES:10}
+      token-ip-failure-window: ${STAFF_IDENTITY_TOKEN_IP_FAILURE_WINDOW:PT15M}
+      max-admin-reauthentication-failures-per-actor-per-15-minutes: ${STAFF_ADMIN_REAUTH_FAILURES_PER_ACTOR_PER_15_MINUTES:5}
+      admin-reauthentication-failure-window: ${STAFF_ADMIN_REAUTH_FAILURE_WINDOW:PT15M}
     request:
       max-json-body-bytes: ${MAX_JSON_BODY_BYTES:1048576}
       max-form-body-bytes: ${MAX_FORM_BODY_BYTES:65536}
@@ -98,6 +117,9 @@ coach-gym:
       endpoint: ${RESEND_ENDPOINT:https://api.resend.com/emails}
       connection-timeout: ${RESEND_CONNECTION_TIMEOUT:PT5S}
       request-timeout: ${RESEND_REQUEST_TIMEOUT:PT15S}
+  identity-email:
+    invitation-acceptance-url: ${STAFF_INVITATION_ACCEPTANCE_URL:http://localhost:5173/accept-invitation}
+    password-recovery-url: ${STAFF_PASSWORD_RECOVERY_URL:http://localhost:5173/recover-password}
   payment:
     stripe:
       enabled: ${STRIPE_ENABLED:false}

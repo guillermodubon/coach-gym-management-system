@@ -99,7 +99,8 @@ class AuthenticationController {
                         .toList(),
                 context.scopeType(),
                 activeBranch,
-                context.availableBranches());
+                context.availableBranches(),
+                principal.passwordChangeRequired());
     }
 
     @PostMapping("/logout")

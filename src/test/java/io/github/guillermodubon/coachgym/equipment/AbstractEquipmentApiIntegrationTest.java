@@ -60,7 +60,8 @@ abstract class AbstractEquipmentApiIntegrationTest {
         jdbcTemplate.update("""
                 insert into gym.users (id,username,email,password_hash,first_name,last_name,status)
                 values (?,?,?,?,?,?,'ACTIVE')
-                on conflict (id) do update set password_hash=excluded.password_hash, status='ACTIVE'
+                on conflict (id) do update set password_hash=excluded.password_hash,
+                    status='ACTIVE', security_version=gym.users.security_version + 1
                 """, id, username, email, passwordEncoder.encode(password), "Equipment", "Staff");
         Integer existingScopeCount = jdbcTemplate.queryForObject(
                 "select count(*) from gym.staff_scopes where user_id=?",

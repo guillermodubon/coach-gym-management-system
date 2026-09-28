@@ -8,7 +8,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import io.github.guillermodubon.coachgym.user.application.InitialAdminProvisioner;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -47,6 +54,11 @@ class AuthenticationApiIntegrationTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private InitialAdminProvisioner initialAdminProvisioner;
+
+    private boolean restoreBootstrapAfterPasswordChange;
+
     @DynamicPropertySource
     static void configureBootstrapAdministrator(DynamicPropertyRegistry registry) {
         registry.add("coach-gym.bootstrap.admin.enabled", () -> true);
@@ -55,6 +67,21 @@ class AuthenticationApiIntegrationTest {
         registry.add("coach-gym.bootstrap.admin.password", () -> ADMIN_PASSWORD);
         registry.add("coach-gym.bootstrap.admin.first-name", () -> "Coach");
         registry.add("coach-gym.bootstrap.admin.last-name", () -> "Administrator");
+    }
+
+    @AfterEach
+    void restoreBootstrapCredentialsAfterFirstPasswordChangeTest() {
+        if (restoreBootstrapAfterPasswordChange) {
+            jdbcTemplate.update("""
+                    update gym.users
+                       set password_hash = ?,
+                           password_change_required = true,
+                           security_version = security_version + 1,
+                           version = version + 1
+                     where username = ?
+                    """, passwordEncoder.encode(ADMIN_PASSWORD), ADMIN_USERNAME);
+            restoreBootstrapAfterPasswordChange = false;
+        }
     }
 
     @Test
@@ -70,6 +97,9 @@ class AuthenticationApiIntegrationTest {
                         + "join gym.users u on u.id = ur.user_id where u.username = ? and r.role_code = 'ADMIN'",
                 Integer.class,
                 ADMIN_USERNAME)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select password_change_required from gym.users where username = ?",
+                Boolean.class, ADMIN_USERNAME)).isTrue();
     }
 
     @Test
@@ -101,6 +131,71 @@ class AuthenticationApiIntegrationTest {
                 .andExpect(jsonPath("$.organizationScope").value("ORGANIZATION"))
                 .andExpect(jsonPath("$.activeBranch.code").value("PRINCIPAL"))
                 .andExpect(jsonPath("$.availableBranches[0].code").value("PRINCIPAL"));
+    }
+
+    @Test
+    void bootstrapRequiresAFirstPasswordChangeAndInvalidatesTheOldSession() throws Exception {
+        restoreBootstrapAfterPasswordChange = true;
+        String replacementPassword = "A-different-strong-password-942!";
+        MvcResult loginResult = login(ADMIN_USERNAME, ADMIN_PASSWORD);
+        MockHttpSession session = (MockHttpSession) loginResult.getRequest().getSession(false);
+
+        mockMvc.perform(get("/api/v1/auth/me").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.passwordChangeRequired").value(true));
+        mockMvc.perform(get("/api/v1/organizations").session(session))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(post("/api/v1/me/profile/password")
+                        .with(csrf())
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"" + ADMIN_PASSWORD
+                                + "\",\"newPassword\":\"" + replacementPassword
+                                + "\",\"newPasswordConfirmation\":\"" + replacementPassword + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reauthenticationRequired").value(true));
+
+        assertThat(jdbcTemplate.queryForObject(
+                "select password_change_required from gym.users where username = ?",
+                Boolean.class, ADMIN_USERNAME)).isFalse();
+        mockMvc.perform(get("/api/v1/auth/me").session(session))
+                .andExpect(status().isUnauthorized());
+        assertThat(session.isInvalid()).isTrue();
+
+        MvcResult reauthenticated = login(ADMIN_USERNAME, replacementPassword);
+        MockHttpSession newSession = (MockHttpSession) reauthenticated.getRequest().getSession(false);
+        mockMvc.perform(get("/api/v1/auth/me").session(newSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.passwordChangeRequired").value(false));
+    }
+
+    @Test
+    void concurrentEmptyRegistryBootstrapsCreateOnlyOneAdministrator() throws Exception {
+        jdbcTemplate.execute("truncate table gym.users cascade");
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+            Future<?> first = executor.submit(() -> runConcurrentBootstrap(ready, start));
+            Future<?> second = executor.submit(() -> runConcurrentBootstrap(ready, start));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            first.get(15, TimeUnit.SECONDS);
+            second.get(15, TimeUnit.SECONDS);
+        }
+
+        assertThat(jdbcTemplate.queryForObject("select count(*) from gym.users", Integer.class))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.user_roles ur join gym.roles r on r.id = ur.role_id "
+                        + "where r.role_code = 'ADMIN'", Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select password_change_required from gym.users where username = ?",
+                Boolean.class, ADMIN_USERNAME)).isTrue();
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.staff_scopes where scope_type = 'ORGANIZATION'",
+                Integer.class)).isEqualTo(1);
     }
 
     @Test
@@ -153,6 +248,23 @@ class AuthenticationApiIntegrationTest {
                         .content(loginBody(identifier, password)))
                 .andExpect(status().isNoContent())
                 .andReturn();
+    }
+
+    private void runConcurrentBootstrap(CountDownLatch ready, CountDownLatch start) {
+        ready.countDown();
+        await(start);
+        initialAdminProvisioner.provision();
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Bootstrap concurrency test timed out.");
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Bootstrap concurrency test was interrupted.", exception);
+        }
     }
 
     private static String loginBody(String identifier, String password) {

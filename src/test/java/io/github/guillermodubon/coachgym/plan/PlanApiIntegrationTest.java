@@ -104,6 +104,14 @@ class PlanApiIntegrationTest {
 
     @BeforeEach
     void provisionReceptionist() {
+        jdbcTemplate.update("""
+                update gym.users
+                   set password_change_required = false,
+                       security_version = security_version + 1,
+                       version = version + 1
+                 where username = ?
+                   and password_change_required
+                """, ADMIN_USERNAME);
         List<UUID> existingIds = jdbcTemplate.queryForList(
                 "select id from gym.users where username = ?",
                 UUID.class,
@@ -118,8 +126,9 @@ class PlanApiIntegrationTest {
         } else {
             jdbcTemplate.update("""
                     update gym.users
-                    set email = ?, password_hash = ?, first_name = ?, last_name = ?, status = 'ACTIVE'
-                    where id = ?
+                       set email = ?, password_hash = ?, first_name = ?, last_name = ?,
+                           status = 'ACTIVE', security_version = security_version + 1
+                     where id = ?
                     """, "front-desk@coach-gym.local",
                     passwordEncoder.encode(RECEPTIONIST_PASSWORD), "Front", "Desk", userId);
         }

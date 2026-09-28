@@ -104,4 +104,24 @@ class AuditCsvMetadataFormatterTest {
                 "{\"_redacted\":true,\"coverageScope\":\"SELECTED_BRANCHES\","
                         + "\"coveredBranchCount\":3,\"sourcePlanVersion\":5}");
     }
+
+    @Test
+    void invitationIdentityMetadataRemainsMaskedAndCredentialFreeInCsvProjection() {
+        String privateEmail = "private-invitee@example.test";
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "STAFF_INVITATION_CREATED",
+                Map.of(
+                        "maskedRecipient", privateEmail,
+                        "proposedRole", "RECEPTIONIST",
+                        "proposedScope", "BRANCH",
+                        "branchIds", List.of(UUID.randomUUID().toString()),
+                        "token", "raw-invitation-token",
+                        "password", "raw-password"));
+
+        String csvMetadata = formatter.format(projection);
+
+        assertThat(csvMetadata)
+                .contains("p***@example.test", "RECEPTIONIST", "BRANCH", "branchIds")
+                .doesNotContain(privateEmail, "raw-invitation-token", "raw-password");
+    }
 }

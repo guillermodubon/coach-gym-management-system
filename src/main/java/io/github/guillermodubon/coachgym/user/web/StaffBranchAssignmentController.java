@@ -166,7 +166,8 @@ class StaffBranchAssignmentController {
     @Operation(
             summary = "Change staff organizational scope",
             description = "Organization-scoped ADMIN only. Requires an expected scope version, "
-                    + "bounded reason and CSRF. Self-modification, unsupported role/scope "
+                    + "bounded reason, current-password reauthentication and CSRF. "
+                    + "Self-modification, unsupported role/scope "
                     + "combinations and last-ADMIN lockout are rejected.")
     @ApiResponse(responseCode = "200", description = "Scope changed")
     @ApiResponse(responseCode = "400", description = "Invalid scope request")
@@ -179,7 +180,8 @@ class StaffBranchAssignmentController {
             @Valid @RequestBody ChangeStaffScopeRequest request,
             Authentication authentication) {
         ChangeStaffScopeCommand command = request.toCommand(userId);
-        return StaffScopeResponse.from(service.changeScope(command, actor(authentication)));
+        return StaffScopeResponse.from(service.changeScope(
+                command, actor(authentication), request.currentPassword()));
     }
 
     private static AuthenticatedActor actor(Authentication authentication) {

@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -52,6 +53,18 @@ class ClientApiIntegrationTest {
         registry.add("coach-gym.bootstrap.admin.password", () -> ADMIN_PASSWORD);
         registry.add("coach-gym.bootstrap.admin.first-name", () -> "Coach");
         registry.add("coach-gym.bootstrap.admin.last-name", () -> "Administrator");
+    }
+
+    @BeforeEach
+    void markBootstrapAccountReadyForProtectedClientOperations() {
+        jdbcTemplate.update("""
+                update gym.users
+                   set password_change_required = false,
+                       security_version = security_version + 1,
+                       version = version + 1
+                 where username = ?
+                   and password_change_required
+                """, ADMIN_USERNAME);
     }
 
     @Test

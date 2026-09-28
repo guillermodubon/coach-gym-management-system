@@ -95,9 +95,10 @@ class PaymentBranchOwnershipSchemaMigrationContractTest {
                     .toList();
 
             assertThat(versions).doesNotHaveDuplicates();
-            assertThat(versions).contains(32, 33, 34, 35, 36, 37);
-            assertThat(versions).isSortedAccordingTo(Comparator.naturalOrder());
-            assertThat(versions.get(versions.size() - 1)).isEqualTo(37);
+assertThat(versions).doesNotHaveDuplicates();
+assertThat(versions).contains(32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42);
+assertThat(versions).isSortedAccordingTo(Comparator.naturalOrder());
+assertThat(versions.get(versions.size() - 1)).isEqualTo(42);
         }
     }
 

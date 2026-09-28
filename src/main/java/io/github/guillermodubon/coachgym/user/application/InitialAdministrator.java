@@ -9,4 +9,14 @@ public record InitialAdministrator(
         String encodedPassword,
         String firstName,
         String lastName) {
+
+    @Override
+    public String toString() {
+        return "InitialAdministrator[usernamePresent=" + (username != null && !username.isBlank())
+                + ", emailPresent=" + (email != null && !email.isBlank())
+                + ", encodedPasswordPresent=" + (encodedPassword != null && !encodedPassword.isBlank())
+                + ", firstNamePresent=" + (firstName != null && !firstName.isBlank())
+                + ", lastNamePresent=" + (lastName != null && !lastName.isBlank())
+                + ']';
+    }
 }

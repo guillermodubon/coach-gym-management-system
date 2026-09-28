@@ -36,6 +36,14 @@ import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
 import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
 import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
 import io.github.guillermodubon.coachgym.user.StaffPasswordChanged;
+import io.github.guillermodubon.coachgym.user.StaffInvitationCreated;
+import io.github.guillermodubon.coachgym.user.StaffInvitationResent;
+import io.github.guillermodubon.coachgym.user.StaffInvitationRevoked;
+import io.github.guillermodubon.coachgym.user.StaffInvitationAccepted;
+import io.github.guillermodubon.coachgym.user.StaffIdentityLifecycleChanged;
+import io.github.guillermodubon.coachgym.user.StaffRoleScopeChanged;
+import io.github.guillermodubon.coachgym.user.StaffPasswordReset;
+import io.github.guillermodubon.coachgym.user.StaffInitialAdministratorProvisioned;
 import io.github.guillermodubon.coachgym.user.StaffBranchAssigned;
 import io.github.guillermodubon.coachgym.user.StaffBranchAssignmentEnded;
 import io.github.guillermodubon.coachgym.user.StaffProfilePhotoChanged;
@@ -96,6 +104,22 @@ public interface AuditEntryStore {
     void recordStaffProfilePhotoChanged(StaffProfilePhotoChanged event);
 
     void recordStaffPasswordChanged(StaffPasswordChanged event);
+
+    void recordStaffInvitationCreated(StaffInvitationCreated event);
+
+    void recordStaffInvitationResent(StaffInvitationResent event);
+
+    void recordStaffInvitationRevoked(StaffInvitationRevoked event);
+
+    void recordStaffInvitationAccepted(StaffInvitationAccepted event);
+
+    void recordStaffIdentityLifecycleChanged(StaffIdentityLifecycleChanged event);
+
+    void recordStaffRoleScopeChanged(StaffRoleScopeChanged event);
+
+    void recordStaffPasswordReset(StaffPasswordReset event);
+
+    void recordInitialAdministratorProvisioned(StaffInitialAdministratorProvisioned event);
 
     void recordStaffBranchAssigned(StaffBranchAssigned event);
 

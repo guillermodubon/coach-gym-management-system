@@ -115,6 +115,17 @@ class EmailDeliveryPublicContractTest {
     }
 
     @Test
+    void permitsProviderNeutralMessagesWithoutAnAttachment() {
+        EmailMessage message = new EmailMessage(
+                "staff@example.test", "sender@example.test", "Coach Gym", null,
+                "Invitation", "Accept the invitation", "<p>Accept the invitation</p>", null);
+
+        assertThat(message.attachment()).isNull();
+        assertThat(message.toString()).contains("attachmentPresent=false")
+                .doesNotContain("staff@example.test");
+    }
+
+    @Test
     void deliveryDetailsEnforceLifecycleMetadataAndMaskRecipient() {
         EmailDeliveryDetails pending = pending();
 

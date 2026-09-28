@@ -2,6 +2,8 @@ package io.github.guillermodubon.coachgym.user.infrastructure.persistence;
 
 import io.github.guillermodubon.coachgym.user.AuthenticatedUser;
 import io.github.guillermodubon.coachgym.user.RoleCode;
+import io.github.guillermodubon.coachgym.user.StaffAccountSecurityState;
+import io.github.guillermodubon.coachgym.user.StaffAccountStatus;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -49,6 +51,12 @@ class UserAccountEntity {
     @Column(nullable = false)
     private long version;
 
+    @Column(name = "security_version", nullable = false)
+    private long securityVersion;
+
+    @Column(name = "password_change_required", nullable = false)
+    private boolean passwordChangeRequired;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<UserRoleAssignmentEntity> roleAssignments = new LinkedHashSet<>();
 
@@ -69,6 +77,7 @@ class UserAccountEntity {
         this.firstName = firstName;
         this.lastName = lastName;
         this.status = UserStatus.ACTIVE;
+        this.passwordChangeRequired = true;
     }
 
     static UserAccountEntity initialAdministrator(
@@ -98,6 +107,20 @@ class UserAccountEntity {
                 .map(UserRoleAssignmentEntity::role)
                 .map(RoleEntity::roleCode)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        return new AuthenticatedUser(id, username, passwordHash, firstName + " " + lastName, roles);
+        return new AuthenticatedUser(
+                id,
+                username,
+                passwordHash,
+                firstName + " " + lastName,
+                roles,
+                securityVersion,
+                passwordChangeRequired);
+    }
+
+    StaffAccountSecurityState securityState() {
+        return new StaffAccountSecurityState(
+                StaffAccountStatus.valueOf(status.name()),
+                securityVersion,
+                passwordChangeRequired);
     }
 }

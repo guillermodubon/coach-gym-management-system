@@ -468,7 +468,8 @@ abstract class AbstractAccessApiIntegrationTest {
                     (id,username,email,password_hash,first_name,last_name,status)
                 values (?,?,?,?,?,?,'ACTIVE')
                 on conflict (id) do update set password_hash=excluded.password_hash,
-                    status='ACTIVE'
+                    status='ACTIVE',
+                    security_version=gym.users.security_version + 1
                 """, id, username, email, passwordEncoder.encode(password),
                 "Access", "Staff");
         jdbcTemplate.update("""

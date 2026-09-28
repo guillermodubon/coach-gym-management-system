@@ -57,6 +57,25 @@ class SmtpEmailSenderTest {
     }
 
     @Test
+    void sendsInvitationWithoutAddingAnAttachment() throws Exception {
+        JavaMailSender delegate = mock(JavaMailSender.class);
+        MimeMessage mime = new MimeMessage(Session.getInstance(new Properties()));
+        when(delegate.createMimeMessage()).thenReturn(mime);
+        EmailMessage invitation = new EmailMessage(
+                "staff@example.test", "no-reply@coach-gym.local", "Coach Gym", null,
+                "Staff invitation", "Accept using the private link", "<p>Accept invitation</p>", null);
+
+        assertThat(new SmtpEmailSender(delegate, properties(true)).send(invitation).result())
+                .isEqualTo(EmailAttemptResult.SENT);
+        verify(delegate).send(mime);
+        mime.saveChanges();
+        assertThat(mime.getContent()).isInstanceOf(Multipart.class);
+        Multipart mixed = (Multipart) mime.getContent();
+        assertThat(mixed.getCount()).isEqualTo(1);
+        assertThat(mime.getContent().toString()).doesNotContain("receipt.pdf");
+    }
+
+    @Test
     void mapsDisabledOversizedAuthenticationTimeoutAndRejectionSafely() throws Exception {
         JavaMailSender delegate = mock(JavaMailSender.class);
         SmtpEmailSender disabled = new SmtpEmailSender(delegate, properties(false));
