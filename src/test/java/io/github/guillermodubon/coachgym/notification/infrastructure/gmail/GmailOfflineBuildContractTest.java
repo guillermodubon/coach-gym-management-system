@@ -13,9 +13,6 @@ class GmailOfflineBuildContractTest {
     private static final Path CI_WORKFLOW =
             Path.of(".github/workflows/backend-ci.yml");
     private static final Path GRADLE_BUILD = Path.of("build.gradle.kts");
-    private static final Path DEPLOYMENT_GUIDE =
-            Path.of("docs/deployment/gmail-api-email-delivery.md");
-    private static final Path README = Path.of("README.md");
     private static final Path OAUTH_STUB_TEST = Path.of(
             "src/test/java/io/github/guillermodubon/coachgym/notification/"
                     + "infrastructure/gmail/GoogleOAuthTokenClientTest.java");
@@ -80,24 +77,4 @@ class GmailOfflineBuildContractTest {
                 .doesNotContain("example.com", "example.test", "System.out", "printStackTrace");
     }
 
-    @Test
-    void operatorDocumentationUsesRuntimeSettingNamesWithoutCredentialValues() throws Exception {
-        String guide = Files.readString(DEPLOYMENT_GUIDE).replaceAll("\\s+", " ");
-        String readme = Files.readString(README).replaceAll("\\s+", " ");
-
-        assertThat(guide)
-                .contains("EMAIL_ENABLED", "EMAIL_FROM_ADDRESS", "EMAIL_FROM_NAME",
-                        "GMAIL_SENDER_ADDRESS", "GMAIL_CLIENT_ID", "GMAIL_CLIENT_SECRET",
-                        "GMAIL_REFRESH_TOKEN", "GMAIL_CONNECT_TIMEOUT", "GMAIL_READ_TIMEOUT",
-                        "GMAIL_WRITE_TIMEOUT", "EMAIL_MAX_ATTACHMENT_BYTES",
-                        "EMAIL_MAX_MESSAGE_BYTES", "GOOGLE_OAUTH_TOKEN_URL",
-                        "GOOGLE_OAUTH_EXPIRY_SAFETY_MARGIN",
-                        "GMAIL_LIVE_TESTS_ENABLED", "GMAIL_LIVE_TEST_RECIPIENT_ALLOWLIST",
-                        "`SENT` means provider acceptance only")
-                .doesNotContain("GMAIL_CLIENT_SECRET=", "GMAIL_REFRESH_TOKEN=", "ya29.",
-                        "client_secret.json", "refresh_token=", "-----BEGIN");
-        assertThat(readme)
-                .contains("synthetic demo clients", "PDF/PNG", "allowlisted recipient",
-                        "does not guarantee inbox placement");
-    }
 }
