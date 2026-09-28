@@ -20,8 +20,7 @@ class DatabaseMigrationContractTest {
             Pattern.compile("V(\\d+)__.*\\.sql");
 
     @Test
-@Test
-void migrationChainHasUniqueContiguousVersionsThroughV42() throws Exception {
+    void migrationChainHasUniqueContiguousVersionsThroughV42() throws Exception {
         try (Stream<Path> files = Files.list(MIGRATIONS)) {
             var versions = files
                     .filter(path -> VERSIONED_MIGRATION.matcher(
@@ -38,9 +37,7 @@ void migrationChainHasUniqueContiguousVersionsThroughV42() throws Exception {
             assertThat(versions).doesNotHaveDuplicates();
             assertThat(versions)
                     .containsExactlyElementsOf(
-java.util.stream.IntStream.rangeClosed(1, 42)
-        .boxed()
-        .toList()
+                            java.util.stream.IntStream.rangeClosed(1, 42)
                                     .boxed()
                                     .toList());
         }
