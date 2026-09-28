@@ -124,5 +124,4 @@ class AuditCsvMetadataFormatterTest {
                 .contains("p***@example.test", "RECEPTIONIST", "BRANCH", "branchIds")
                 .doesNotContain(privateEmail, "raw-invitation-token", "raw-password");
     }
-    }
 }
