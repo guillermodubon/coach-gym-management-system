@@ -41,8 +41,10 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Tag(
         name = "Transactional Email Deliveries",
         description = "ADMIN and RECEPTIONIST only: provider-neutral transactional delivery requests, history, attempts, "
-                + "and bounded retries. Mailpit is local/demo infrastructure only; external SMTP "
-                + "delivery is not guaranteed exactly once and this API does not support bulk email.")
+                + "and bounded retries. Recipients and canonical attachments are resolved by the server; "
+                + "there is no arbitrary-recipient or arbitrary-content relay. SENT records provider acceptance, "
+                + "not inbox placement or exactly-once delivery. Uncertain outcomes are not automatically resent; "
+                + "this API does not expose message bodies or support bulk email.")
 @SecurityRequirement(name = "sessionCookie")
 class EmailDeliveryController {
 
@@ -175,6 +177,7 @@ class EmailDeliveryController {
     @Operation(
             summary = "Retry a failed email delivery",
             description = "ADMIN and RECEPTIONIST may retry only a persisted FAILED delivery using server-owned snapshots. "
+                    + "Only definitive provider failures are retryable; an uncertain/ambiguous outcome is not. "
                     + "The expected version and a valid CSRF token are required; retries are bounded.")
     @ApiResponse(responseCode = "200", description = "Delivery retry completed",
             content = @Content(schema = @Schema(implementation = EmailDeliveryResponse.class)))

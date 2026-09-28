@@ -34,7 +34,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Coordinates transactional email delivery without holding a database
- * transaction across SMTP I/O.
+ * transaction across provider I/O.
  *
  * <p>Persistence adapters provide transaction A (durable {@code PENDING}), a
  * short database-owned attempt lease, and transaction B (attempt plus
@@ -351,15 +351,14 @@ public class TransactionalEmailDeliveryApplicationService {
         try {
             EmailSendResult result = sender.send(message);
             return result == null
-                    ? EmailSendResult.failed(
-                            EmailDeliveryFailureCode.UNEXPECTED_FAILURE,
-                            "The email could not be delivered.")
+                    ? EmailSendResult.ambiguous(
+                            "The email transport outcome could not be confirmed.")
                     : result;
         } catch (RuntimeException exception) {
-            // Provider and transport details never cross into persistence.
-            return EmailSendResult.failed(
-                    EmailDeliveryFailureCode.UNEXPECTED_FAILURE,
-                    "The email could not be delivered.");
+            // An escaped transport failure may happen after provider acceptance.
+            // Keep details private and prevent a potentially duplicating retry.
+            return EmailSendResult.ambiguous(
+                    "The email transport outcome could not be confirmed.");
         }
     }
 
