@@ -51,18 +51,18 @@ class AuditQueryPublicContractTest {
                         "MEMBERSHIP_PLAN_BRANCH_COVERAGE_CHANGED");
         assertThat(AuditQueryPolicy.allowedActionCodes())
                 .contains("BRANCH_ACCESS_PAYMENT_POLICY_CHANGED");
-        assertThat(AuditQueryPolicy.allowedResourceTypes())
-                .contains("STAFF_PROFILE", "STAFF_INVITATION", "STAFF_ACCOUNT", "STAFF_ROLE_SCOPE");
-        assertThat(AuditQueryPolicy.allowedResourceTypes())
-                .contains("MEMBERSHIP_PERIOD");
-        assertThat(AuditQueryPolicy.allowedActionCodes())
-                .contains("MEMBERSHIP_PERIOD_COVERAGE_CAPTURED");
-        assertThat(AuditQueryPolicy.allowedActionCodes()).contains(
-                "STAFF_INVITATION_CREATED", "STAFF_INVITATION_RESENT",
-                "STAFF_INVITATION_REVOKED", "STAFF_INVITATION_ACCEPTED",
-                "STAFF_ACCOUNT_SUSPENDED", "STAFF_ACCOUNT_REACTIVATED",
-                "STAFF_ACCOUNT_DEACTIVATED", "STAFF_ROLE_SCOPE_CHANGED",
-                "STAFF_PASSWORD_RECOVERY_COMPLETED", "INITIAL_ADMIN_BOOTSTRAPPED");
+assertThat(AuditQueryPolicy.allowedResourceTypes())
+        .contains("STAFF_PROFILE", "STAFF_INVITATION", "STAFF_ACCOUNT", "STAFF_ROLE_SCOPE");
+assertThat(AuditQueryPolicy.allowedResourceTypes())
+        .contains("MEMBERSHIP_PERIOD");
+assertThat(AuditQueryPolicy.allowedActionCodes())
+        .contains("MEMBERSHIP_PERIOD_COVERAGE_CAPTURED");
+assertThat(AuditQueryPolicy.allowedActionCodes()).contains(
+        "STAFF_INVITATION_CREATED", "STAFF_INVITATION_RESENT",
+        "STAFF_INVITATION_REVOKED", "STAFF_INVITATION_ACCEPTED",
+        "STAFF_ACCOUNT_SUSPENDED", "STAFF_ACCOUNT_REACTIVATED",
+        "STAFF_ACCOUNT_DEACTIVATED", "STAFF_ROLE_SCOPE_CHANGED",
+        "STAFF_PASSWORD_RECOVERY_COMPLETED", "INITIAL_ADMIN_BOOTSTRAPPED");
     }
 
     @Test

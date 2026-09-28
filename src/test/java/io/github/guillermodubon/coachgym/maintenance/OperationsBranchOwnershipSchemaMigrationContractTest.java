@@ -83,8 +83,9 @@ class OperationsBranchOwnershipSchemaMigrationContractTest {
                     .toList();
 
             assertThat(versions).doesNotHaveDuplicates();
-            assertThat(versions).contains(34, 35, 36, 37, 38, 39, 40, 41, 42);
-            assertThat(versions.get(versions.size() - 1)).isEqualTo(42);
+assertThat(versions).doesNotHaveDuplicates();
+assertThat(versions).contains(34, 35, 36, 37, 38, 39, 40, 41, 42);
+assertThat(versions.get(versions.size() - 1)).isEqualTo(42);
         }
     }
 

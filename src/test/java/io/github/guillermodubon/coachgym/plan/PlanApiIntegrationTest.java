@@ -104,14 +104,14 @@ class PlanApiIntegrationTest {
 
     @BeforeEach
     void provisionReceptionist() {
-        jdbcTemplate.update("""
-                update gym.users
-                   set password_change_required = false,
-                       security_version = security_version + 1,
-                       version = version + 1
-                 where username = ?
-                   and password_change_required
-                """, ADMIN_USERNAME);
+jdbcTemplate.update("""
+        update gym.users
+           set password_change_required = false,
+               security_version = security_version + 1,
+               version = version + 1
+         where username = ?
+           and password_change_required
+        """, ADMIN_USERNAME);
         List<UUID> existingIds = jdbcTemplate.queryForList(
                 "select id from gym.users where username = ?",
                 UUID.class,
@@ -126,8 +126,10 @@ class PlanApiIntegrationTest {
         } else {
             jdbcTemplate.update("""
                     update gym.users
-                    set email = ?, password_hash = ?, first_name = ?, last_name = ?,
-                        status = 'ACTIVE', security_version = security_version + 1
+update gym.users
+set email = ?, password_hash = ?, first_name = ?, last_name = ?,
+    status = 'ACTIVE', security_version = security_version + 1
+where id = ?
                     where id = ?
                     """, "front-desk@coach-gym.local",
                     passwordEncoder.encode(RECEPTIONIST_PASSWORD), "Front", "Desk", userId);
@@ -135,6 +137,7 @@ class PlanApiIntegrationTest {
         jdbcTemplate.update("""
                 insert into gym.user_roles (user_id, role_id)
                 select ?, id from gym.roles where role_code = 'RECEPTIONIST'
+                on conflict (user_id, role_id) do nothing
                 on conflict (user_id, role_id) do nothing
                 """, userId);
         jdbcTemplate.update("""
@@ -145,6 +148,7 @@ class PlanApiIntegrationTest {
                 where gym.staff_scopes.scope_type <> 'BRANCH'
                 """, userId);
         jdbcTemplate.update("""
+                insert into gym.staff_branch_assignments
                 insert into gym.staff_branch_assignments
                     (id, user_id, branch_id, status, assigned_at, version)
                 values (?, ?, ?, 'ACTIVE', current_timestamp, 0)
