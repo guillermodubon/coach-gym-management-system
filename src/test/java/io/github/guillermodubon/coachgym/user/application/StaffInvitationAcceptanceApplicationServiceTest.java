@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
@@ -77,10 +78,12 @@ class StaffInvitationAcceptanceApplicationServiceTest {
     void internalRetryHookDelegatesOnlyTheCanonicalInvitationIdentifier() {
         StaffAccountActivationDeliveryService delivery =
                 mock(StaffAccountActivationDeliveryService.class);
+        StaffInvitationAcceptanceTransactionService transactions =
+                mock(StaffInvitationAcceptanceTransactionService.class);
         when(delivery.attemptIfDue(INVITATION_ID)).thenReturn(true);
         StaffInvitationAcceptanceApplicationService service =
                 new StaffInvitationAcceptanceApplicationService(
-                        mock(StaffInvitationAcceptanceTransactionService.class),
+                        transactions,
                         mock(ApplicationEventPublisher.class),
                         delivery,
                         mock(StaffIdentityAbuseService.class));
@@ -88,6 +91,8 @@ class StaffInvitationAcceptanceApplicationServiceTest {
         assertThat(service.retryActivationNotice(INVITATION_ID)).isTrue();
 
         org.mockito.Mockito.verify(delivery).attemptIfDue(INVITATION_ID);
+        org.mockito.Mockito.verify(transactions, never()).accept(
+                org.mockito.ArgumentMatchers.any(AcceptStaffInvitationCommand.class));
     }
 
     @Test

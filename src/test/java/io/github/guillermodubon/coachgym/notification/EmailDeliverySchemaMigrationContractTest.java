@@ -88,6 +88,19 @@ class EmailDeliverySchemaMigrationContractTest {
     }
 
     @Test
+    void existingSchemaAlreadySupportsProviderIdAndAmbiguousOutcomeWithoutGmailMigration()
+            throws Exception {
+        String sql = normalized();
+
+        assertThat(sql)
+                .contains("provider_message_id varchar(200)")
+                .contains("result in ('sent', 'failed', 'ambiguous')")
+                .contains("'ambiguous_transport_outcome'")
+                .contains("result = 'ambiguous'")
+                .doesNotContain("gmail_refresh_token", "gmail_access_token", "message_body");
+    }
+
+    @Test
     void migrationUsesOneAvailableUniqueVersion() throws Exception {
         try (Stream<Path> files = Files.list(MIGRATION.getParent())) {
             var versions = files

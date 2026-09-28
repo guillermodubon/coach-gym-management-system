@@ -46,9 +46,27 @@ class EmailDeliveryOpenApiIntegrationTest extends AbstractNotificationApiIntegra
                         .exists())
                 .andExpect(jsonPath("$.components.schemas.EmailDeliveryResponse.properties.recipientSnapshot")
                         .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.EmailDeliveryResponse.properties.body")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.EmailDeliveryResponse.properties.htmlBody")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.EmailDeliveryResponse.properties.plainTextBody")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.EmailDeliveryResponse.properties.token")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.RequestEmailRequest.properties.recipient")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.components.schemas.RequestEmailRequest.properties.body")
+                        .doesNotExist())
                 .andExpect(jsonPath("$.components.schemas.EmailDeliveryAttemptResponse.properties.providerMessageId")
                         .doesNotExist())
                 .andExpect(content().string(not(containsString("ROLE_MAINTENANCE"))))
-                .andExpect(content().string(containsString("not guaranteed exactly once")));
+                .andExpect(jsonPath("$.components.schemas.EmailDeliveryResponse.properties.status.description",
+                        containsString("provider accepted the request")))
+                .andExpect(content().string(containsString("not inbox placement")))
+                .andExpect(content().string(containsString("not automatically resent")))
+                .andExpect(content().string(not(containsString("gmail.googleapis.com"))))
+                .andExpect(content().string(not(containsString("oauth2.googleapis.com"))))
+                .andExpect(content().string(not(containsString("refresh-token"))));
     }
 }

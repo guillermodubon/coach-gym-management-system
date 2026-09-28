@@ -10,6 +10,7 @@ import io.github.guillermodubon.coachgym.notification.application.EmailSender;
 import io.github.guillermodubon.coachgym.notification.application.RequestAccessCredentialEmailCommand;
 import io.github.guillermodubon.coachgym.notification.application.RequestPaymentReceiptEmailCommand;
 import io.github.guillermodubon.coachgym.notification.application.RetryEmailDeliveryCommand;
+import io.github.guillermodubon.coachgym.notification.infrastructure.gmail.GmailApiProperties;
 import java.lang.reflect.RecordComponent;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,7 +46,7 @@ class EmailDeliveryArchitectureContractTest {
     }
 
     @Test
-    void providerTypesRemainConfinedToSmtpInfrastructure()
+    void providerTypesRemainConfinedToTransportInfrastructure()
             throws Exception {
         Path moduleRoot = Path.of(
                 "src/main/java/io/github/guillermodubon/coachgym/notification");
@@ -57,7 +58,7 @@ class EmailDeliveryArchitectureContractTest {
                     .toList();
         }
         assertThat(providerFiles).allSatisfy(path -> assertThat(path.toString().replace('\\', '/'))
-                .contains("notification/infrastructure/smtp/"));
+                .matches(".*notification/infrastructure/gmail/.*"));
     }
 
     @Test
@@ -77,27 +78,85 @@ class EmailDeliveryArchitectureContractTest {
     }
 
     @Test
-    void composeDefinesStableMailpitServiceAndLocalPorts() throws Exception {
+    void publicContractsDoNotExposeGmailSdkTypes() {
+        List<Class<?>> contracts = List.of(
+                EmailSender.class,
+                EmailMessage.class,
+                EmailAttachment.class,
+                EmailSendResult.class,
+                EmailDeliveryLifecycleEvent.class);
+        contracts.forEach(type -> {
+            assertThat(type.getName().toLowerCase(Locale.ROOT))
+                    .doesNotContain("com.google.api", "com.google.auth", "gmail.v1");
+            for (var field : type.getDeclaredFields()) {
+                assertThat(field.getType().getName().toLowerCase(Locale.ROOT))
+                        .doesNotContain("com.google.api", "com.google.auth", "gmail.v1");
+            }
+            for (var method : type.getDeclaredMethods()) {
+                assertThat(method.getReturnType().getName().toLowerCase(Locale.ROOT))
+                        .doesNotContain("com.google.api", "com.google.auth", "gmail.v1");
+                for (Class<?> parameter : method.getParameterTypes()) {
+                    assertThat(parameter.getName().toLowerCase(Locale.ROOT))
+                            .doesNotContain("com.google.api", "com.google.auth", "gmail.v1");
+                }
+            }
+        });
+    }
+
+    @Test
+    void oauthImplementationAndConfigurationRemainInsideGmailInfrastructure() {
+        assertThat(GmailApiProperties.class.getPackageName())
+                .isEqualTo("io.github.guillermodubon.coachgym.notification.infrastructure.gmail");
+        List<Class<?>> applicationContracts = List.of(
+                EmailSender.class,
+                EmailMessage.class,
+                EmailAttachment.class,
+                EmailSendResult.class,
+                EmailDeliveryLifecycleEvent.class);
+        applicationContracts.forEach(contract -> {
+            assertThat(contract.getPackageName()).doesNotContain("infrastructure");
+            assertThat(contract.getName().toLowerCase(Locale.ROOT))
+                    .doesNotContain("googleoauth", "oauthaccesstoken", "gmailapi");
+        });
+    }
+
+    @Test
+    void removedProviderServicesDependenciesAndConfigurationStayAbsent() throws Exception {
         String compose = Files.readString(Path.of("compose.yaml")).toLowerCase(Locale.ROOT);
         assertThat(compose)
-                .contains("mailpit:")
-                .contains("axllent/mailpit:v1.21.8")
-                .contains("1025:1025")
-                .contains("8025:8025")
-                .contains("healthcheck:");
+                .doesNotContain("mailpit", "1025:1025", "8025:8025");
+
         String application = Files.readString(Path.of("src/main/resources/application.yml"))
                 .toLowerCase(Locale.ROOT);
         assertThat(application)
-                .contains("smtp-host: ${smtp_host:localhost}")
-                .contains("smtp-port: ${smtp_port:1025}")
-                .contains("enabled: ${email_enabled:false}");
+                .contains("enabled: ${email_enabled:false}", "gmail:")
+                .doesNotContain("email_provider", "smtp_", "smtp-host", "smtp-port",
+                        "smtp-password", "resend_api_key", "resend_base_url",
+                        "resend:", "mailpit");
+
         String local = Files.readString(Path.of("src/main/resources/application-local.yml"))
                 .toLowerCase(Locale.ROOT);
         assertThat(local)
                 .contains("on-profile: local")
-                .contains("smtp-host: ${smtp_host:localhost}")
-                .contains("smtp-port: ${smtp_port:1025}")
-                .contains("enabled: ${email_enabled:true}");
+                .contains("enabled: ${email_enabled:false}")
+                .doesNotContain("smtp", "resend", "mailpit");
+
+        String supabase = Files.readString(Path.of("src/main/resources/application-supabase.yml"))
+                .toLowerCase(Locale.ROOT);
+        assertThat(supabase).doesNotContain("email_provider", "smtp", "resend", "mailpit");
+
+        String gradle = Files.readString(Path.of("build.gradle.kts")).toLowerCase(Locale.ROOT);
+        assertThat(gradle)
+                .contains("jakarta.mail:jakarta.mail-api", "org.eclipse.angus:angus-mail:2.0.5",
+                        "org.eclipse.angus:angus-activation:2.0.3")
+                .doesNotContain("spring-boot-starter-mail", "spring-boot-mail");
+
+        Path infrastructure = Path.of(
+                "src/main/java/io/github/guillermodubon/coachgym/notification/infrastructure");
+        try (var paths = Files.walk(infrastructure)) {
+            assertThat(paths.map(path -> path.toString().replace('\\', '/')).toList())
+                    .noneMatch(path -> path.contains("/smtp/") || path.contains("/resend/"));
+        }
     }
 
     @Test
