@@ -5,11 +5,11 @@ import io.github.guillermodubon.coachgym.reporting.DashboardNotificationDetails;
 import io.github.guillermodubon.coachgym.reporting.MembershipDashboardDetails;
 import io.github.guillermodubon.coachgym.reporting.OperationalDashboardDetails;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.StaffAuthorizationContext;
+import io.github.guillermodubon.coachgym.user.StaffScopeQuery;
 import java.time.Clock;
 import java.util.Objects;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +26,7 @@ public class DashboardApplicationService {
     private final IncidentDashboardQuery incidentQuery;
     private final MaintenanceDashboardQuery maintenanceQuery;
     private final DashboardNotificationQuery notificationQuery;
+    private final StaffScopeQuery staffScopeQuery;
     private final Clock clock;
 
     public DashboardApplicationService(
@@ -38,6 +39,7 @@ public class DashboardApplicationService {
             IncidentDashboardQuery incidentQuery,
             MaintenanceDashboardQuery maintenanceQuery,
             DashboardNotificationQuery notificationQuery,
+            StaffScopeQuery staffScopeQuery,
             Clock clock) {
         this.periodResolver = Objects.requireNonNull(periodResolver);
         this.settingsQuery = Objects.requireNonNull(settingsQuery);
@@ -48,15 +50,16 @@ public class DashboardApplicationService {
         this.incidentQuery = Objects.requireNonNull(incidentQuery);
         this.maintenanceQuery = Objects.requireNonNull(maintenanceQuery);
         this.notificationQuery = Objects.requireNonNull(notificationQuery);
+        this.staffScopeQuery = Objects.requireNonNull(staffScopeQuery);
         this.clock = Objects.requireNonNull(clock);
     }
 
     @Transactional(readOnly = true)
-    @PreAuthorize("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+    @PreAuthorize("hasRole('ADMIN')")
     public OperationalDashboardDetails getDashboard(
             DashboardQuery query,
             AuthenticatedActor actor) {
-        Objects.requireNonNull(actor, "Authenticated actor is required.");
+        requireOrganizationAdmin(actor);
 
         DashboardPeriod period = periodResolver.resolve(query);
         DashboardSettings settings = settingsQuery.load();
@@ -65,11 +68,6 @@ public class DashboardApplicationService {
         AccessDashboardDetails access = accessQuery.summarizeToday(period);
         DashboardNotificationDetails notifications =
                 notificationQuery.summarize(actor.id());
-
-        if (!isAdministrator()) {
-            return OperationalDashboardDetails.forReceptionist(
-                    clock.instant(), period.dates(), memberships, access, notifications);
-        }
 
         return OperationalDashboardDetails.forAdministrator(
                 clock.instant(),
@@ -83,19 +81,21 @@ public class DashboardApplicationService {
                 notifications);
     }
 
-    private static boolean isAdministrator() {
-        Authentication authentication =
-                SecurityContextHolder.getContext()
-                        .getAuthentication();
-
-        if (authentication == null) {
-            return false;
+    private void requireOrganizationAdmin(AuthenticatedActor actor) {
+        if (actor == null || actor.id() == null) {
+            throw new ReportingAccessDeniedException();
         }
-
-        return authentication.getAuthorities()
-                .stream()
-                .anyMatch(authority ->
-                        "ROLE_ADMIN".equals(
-                                authority.getAuthority()));
+        StaffAuthorizationContext authorization;
+        try {
+            authorization = staffScopeQuery.findAuthorizationContext(actor.id()).orElse(null);
+        } catch (RuntimeException exception) {
+            throw new DashboardDataAccessException(
+                    "Operational dashboard authorization could not be resolved.", exception);
+        }
+        if (authorization == null
+                || !actor.id().equals(authorization.userId())
+                || !authorization.organizationAdmin()) {
+            throw new ReportingAccessDeniedException();
+        }
     }
 }

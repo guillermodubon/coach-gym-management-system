@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.reporting.web;
 
 import io.github.guillermodubon.coachgym.reporting.application.DashboardCurrencyConflictException;
 import io.github.guillermodubon.coachgym.reporting.application.DashboardDataAccessException;
+import io.github.guillermodubon.coachgym.reporting.application.ReportingAccessDeniedException;
 import io.github.guillermodubon.coachgym.reporting.application.ReportingValidationException;
 import java.net.URI;
 import org.springframework.http.HttpStatus;
@@ -11,6 +12,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice(assignableTypes = DashboardController.class)
 class DashboardProblemHandler {
+
+    @ExceptionHandler(ReportingAccessDeniedException.class)
+    ProblemDetail accessDenied() {
+        return problem(HttpStatus.FORBIDDEN, "REPORTING_ACCESS_DENIED",
+                "Reporting access denied",
+                "Reporting data is not available for the requested actor or scope.");
+    }
 
     @ExceptionHandler(ReportingValidationException.class)
     ProblemDetail validation(ReportingValidationException exception) {

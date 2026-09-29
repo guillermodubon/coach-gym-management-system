@@ -27,16 +27,9 @@ class DashboardRoleProjectionApiIntegrationTest
     }
 
     @Test
-    void receptionistReceivesOnlyAuthorizedSections() throws Exception {
+    void legacyDashboardDoesNotExposeUnscopedReceptionistAggregates() throws Exception {
         mockMvc.perform(get("/api/v1/reporting/dashboard")
                         .session(loginAsReceptionist()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.memberships").isMap())
-                .andExpect(jsonPath("$.access").isMap())
-                .andExpect(jsonPath("$.notifications").isMap())
-                .andExpect(jsonPath("$.payments").value((Object) null))
-                .andExpect(jsonPath("$.equipment").value((Object) null))
-                .andExpect(jsonPath("$.incidents").value((Object) null))
-                .andExpect(jsonPath("$.maintenance").value((Object) null));
+                .andExpect(status().isForbidden());
     }
 }

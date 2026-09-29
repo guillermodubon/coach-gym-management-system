@@ -19,7 +19,7 @@ class DashboardMethodSecurityContractTest {
         PreAuthorize authorization = method.getAnnotation(PreAuthorize.class);
         assertThat(authorization).isNotNull();
         assertThat(authorization.value())
-                .isEqualTo("hasAnyRole('ADMIN', 'RECEPTIONIST')")
+                .isEqualTo("hasRole('ADMIN')")
                 .doesNotContain("MAINTENANCE");
 
         Transactional transactional = method.getAnnotation(Transactional.class);

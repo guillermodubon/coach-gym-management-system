@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.reporting;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.RecordComponent;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -41,7 +42,39 @@ class ReportingArchitectureContractTest {
                 EquipmentDashboardDetails.class,
                 IncidentDashboardDetails.class,
                 MaintenanceDashboardDetails.class,
-                DashboardNotificationDetails.class))
+                DashboardNotificationDetails.class,
+                BranchReportingSelection.class,
+                ReportingRange.class,
+                ReportingContext.class,
+                FinancialCurrencySummary.class,
+                FinancialSummary.class))
                 .allSatisfy(type -> assertThat(type.isRecord()).isTrue());
+    }
+
+    @Test
+    void newPublicContractsDoNotExposeFrameworkOrPersistenceTypes() {
+        for (Class<?> contract : List.of(
+                BranchReportingSelection.class,
+                ReportingRange.class,
+                ReportingContext.class,
+                FinancialCurrencySummary.class,
+                FinancialSummary.class)) {
+            for (RecordComponent component : contract.getRecordComponents()) {
+                assertThat(component.getType().getName())
+                        .doesNotContain("org.springframework", "jakarta.persistence",
+                                "org.hibernate", "java.sql", "javax.sql",
+                                ".infrastructure", "JdbcTemplate", "JpaRepository");
+            }
+        }
+    }
+
+    @Test
+    void financialContractIsNotAnAccountingLedgerOrPaymentAttemptProjection() {
+        assertThat(List.of(FinancialSummary.class, FinancialCurrencySummary.class)
+                .stream()
+                .flatMap(type -> java.util.Arrays.stream(type.getRecordComponents()))
+                .map(RecordComponent::getName))
+                .doesNotContain("journal", "ledger", "paymentAttempt", "correctionHistory",
+                        "providerTransactionId");
     }
 }
