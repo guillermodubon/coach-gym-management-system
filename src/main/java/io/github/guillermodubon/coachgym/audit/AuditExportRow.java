@@ -15,6 +15,7 @@ public record AuditExportRow(
         String resourceCode,
         String summary,
         UUID correlationId,
+        UUID branchId,
         AuditMetadataProjection metadata) {
 
     public AuditExportRow {
@@ -43,6 +44,24 @@ public record AuditExportRow(
         metadata = details.metadata();
     }
 
+    /** Compatibility constructor for rows without an explicitly projected branch identifier. */
+    public AuditExportRow(
+            UUID entryId,
+            Instant occurredAt,
+            UUID actorUserId,
+            String actorIdentifier,
+            String actionCode,
+            String resourceType,
+            UUID resourceId,
+            String resourceCode,
+            String summary,
+            UUID correlationId,
+            AuditMetadataProjection metadata) {
+        this(entryId, occurredAt, actorUserId, actorIdentifier, actionCode,
+                resourceType, resourceId, resourceCode, summary, correlationId,
+                null, metadata);
+    }
+
     public AuditExportRow(AuditEntryDetails details) {
         this(
                 details.id(),
@@ -55,6 +74,23 @@ public record AuditExportRow(
                 details.resourceCodeSnapshot(),
                 details.summary(),
                 details.correlationId(),
+                null,
+                details.metadata());
+    }
+
+    public AuditExportRow(AuditEntryDetails details, UUID branchId) {
+        this(
+                details.id(),
+                details.occurredAt(),
+                details.actorUserId(),
+                details.actorIdentifierSnapshot(),
+                details.actionCode(),
+                details.resourceType(),
+                details.resourceId(),
+                details.resourceCodeSnapshot(),
+                details.summary(),
+                details.correlationId(),
+                branchId,
                 details.metadata());
     }
 }

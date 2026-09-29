@@ -76,6 +76,7 @@ class AuditCsvMetadataFormatterTest {
                                 + ",admin.user,CLIENT_REGISTERED,CLIENT,"
                                 + RESOURCE_ID
                                 + ",CLI-001,\"Client, registered\nwith note\",,"
+                                + ","
                                 + "\"{\"\"status\"\":\"\"ACTIVE\"\"}\"\r\n")
                 .doesNotContain("metadata_json", "password", "token", "secret");
     }

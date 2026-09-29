@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -80,7 +81,8 @@ class AuditExportPublicContractTest {
         assertThat(query.sortDirection()).isEqualTo(AuditSortDirection.DESC);
         assertThat(query.getClass().getRecordComponents())
                 .extracting(RecordComponent::getName)
-                .doesNotContain("page", "size", "metadata", "column", "result");
+                .doesNotContain("page", "size", "metadata", "column")
+                .contains("result", "branchIds");
 
         assertThatThrownBy(() -> AuditExportQuery.from(
                 null, null, "UNKNOWN_ACTION", null, null, null, null,
@@ -101,6 +103,7 @@ class AuditExportPublicContractTest {
                 "resource_code",
                 "summary",
                 "correlation_id",
+                "branch_id",
                 "metadata");
         assertThatThrownBy(() -> AuditExportColumn.ordered().add(AuditExportColumn.ENTRY_ID))
                 .isInstanceOf(UnsupportedOperationException.class);
@@ -129,6 +132,30 @@ class AuditExportPublicContractTest {
                 .isInstanceOf(AuditQueryValidationException.class);
         assertThatThrownBy(() -> new AuditExportResult(0, null))
                 .isInstanceOf(AuditExportValidationException.class);
+    }
+
+    @Test
+    void exportFiltersNormalizeResultAndDefensivelyCopyBoundedBranchIds() {
+        UUID branchId = UUID.randomUUID();
+        AuditExportQuery query = AuditExportQuery.from(
+                null, null, null, null, " denied ", null, null, null,
+                Set.of(branchId), FROM, FROM.plusSeconds(1), null, null);
+
+        assertThat(query.result()).isEqualTo("DENIED");
+        assertThat(query.branchIds()).containsExactly(branchId);
+        assertThatThrownBy(() -> query.branchIds().add(UUID.randomUUID()))
+                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> AuditExportQuery.from(
+                null, null, null, null, "UNKNOWN", null, null, null,
+                Set.of(branchId), FROM, FROM, null, null))
+                .isInstanceOf(AuditQueryValidationException.class);
+        assertThatThrownBy(() -> AuditExportQuery.from(
+                null, null, null, null, null, null, null, null,
+                java.util.stream.IntStream.range(0, 101)
+                        .mapToObj(ignored -> UUID.randomUUID())
+                        .collect(java.util.stream.Collectors.toSet()),
+                FROM, FROM, null, null))
+                .isInstanceOf(AuditQueryValidationException.class);
     }
 
     @Test

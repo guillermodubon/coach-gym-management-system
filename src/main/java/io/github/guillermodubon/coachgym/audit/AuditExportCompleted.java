@@ -7,7 +7,8 @@ import java.util.UUID;
 /**
  * Privacy-safe event emitted after a bounded CSV export has been streamed.
  *
- * <p>The event carries filter names, never filter values or exported rows. It
+ * <p>The event carries names of applied filters and the explicitly authorized
+ * branch scope IDs. It never carries other filter values or exported rows. It
  * is handled by the audit module itself in a new transaction, so recording
  * this event cannot publish another export event.</p>
  */
@@ -20,6 +21,7 @@ public record AuditExportCompleted(
         String filterSummary,
         AuditSortField sortField,
         AuditSortDirection sortDirection,
+        AuditVisibilityScope visibilityScope,
         long rowCount,
         int maximumRows,
         String format,
@@ -50,6 +52,7 @@ public record AuditExportCompleted(
         }
         Objects.requireNonNull(sortField, "Export sort field is required.");
         Objects.requireNonNull(sortDirection, "Export sort direction is required.");
+        Objects.requireNonNull(visibilityScope, "Export visibility scope is required.");
         if (rowCount < 0 || maximumRows < 1 || rowCount > maximumRows) {
             throw new IllegalArgumentException("Export row count is invalid.");
         }
@@ -57,5 +60,24 @@ public record AuditExportCompleted(
             throw new IllegalArgumentException("Only CSV export is supported.");
         }
         Objects.requireNonNull(occurredAt, "Export occurrence time is required.");
+    }
+
+    /** Compatibility constructor for organization-wide export events. */
+    public AuditExportCompleted(
+            UUID exportId,
+            UUID actorUserId,
+            String actorIdentifier,
+            Instant occurredFrom,
+            Instant occurredUntil,
+            String filterSummary,
+            AuditSortField sortField,
+            AuditSortDirection sortDirection,
+            long rowCount,
+            int maximumRows,
+            String format,
+            Instant occurredAt) {
+        this(exportId, actorUserId, actorIdentifier, occurredFrom, occurredUntil,
+                filterSummary, sortField, sortDirection, AuditVisibilityScope.organization(),
+                rowCount, maximumRows, format, occurredAt);
     }
 }

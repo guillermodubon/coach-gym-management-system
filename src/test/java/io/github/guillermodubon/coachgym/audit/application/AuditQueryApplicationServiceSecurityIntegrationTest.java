@@ -43,7 +43,7 @@ class AuditQueryApplicationServiceSecurityIntegrationTest
     @Test
     @WithMockUser(roles = "ADMIN")
     void adminCanListAuditEntriesThroughTheApplicationService() {
-        AuditEntryPage page = auditQueryService.findAll(null);
+        AuditEntryPage page = auditQueryService.findAll(null, adminId);
 
         assertThat(page.items())
                 .extracting(item -> item.id())
@@ -54,7 +54,7 @@ class AuditQueryApplicationServiceSecurityIntegrationTest
     @Test
     @WithMockUser(roles = "ADMIN")
     void adminCanRetrieveSanitizedAuditDetailsThroughTheApplicationService() {
-        var details = auditQueryService.findById(entryId);
+        var details = auditQueryService.findById(entryId, adminId);
 
         assertThat(details.id()).isEqualTo(entryId);
         assertThat(details.metadata().values()).isEmpty();
@@ -64,7 +64,7 @@ class AuditQueryApplicationServiceSecurityIntegrationTest
     @Test
     @WithMockUser(roles = "RECEPTIONIST")
     void receptionistIsDeniedBeforeTheAuditQueryRuns() {
-        assertThatThrownBy(() -> auditQueryService.findAll(null))
+        assertThatThrownBy(() -> auditQueryService.findAll(null, receptionistId))
                 .isInstanceOf(AccessDeniedException.class);
     }
 }

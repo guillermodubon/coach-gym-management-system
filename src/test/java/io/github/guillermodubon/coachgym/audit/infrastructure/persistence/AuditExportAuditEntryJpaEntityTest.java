@@ -6,6 +6,7 @@ import io.github.guillermodubon.coachgym.audit.AuditExportCompleted;
 import io.github.guillermodubon.coachgym.audit.AuditSortDirection;
 import io.github.guillermodubon.coachgym.audit.AuditSortField;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,8 @@ class AuditExportAuditEntryJpaEntityTest {
                 "filtersPresent", "actionCode,occurredFrom,occurredUntil",
                 "sortField", "OCCURRED_AT",
                 "sortDirection", "DESC",
+                "visibilityScope", "ORGANIZATION",
+                "branchIds", List.of(),
                 "rowCount", 3L,
                 "maximumRows", 10_000,
                 "format", "CSV"));

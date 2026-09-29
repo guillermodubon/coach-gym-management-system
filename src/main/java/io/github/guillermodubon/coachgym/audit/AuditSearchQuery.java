@@ -1,7 +1,10 @@
 package io.github.guillermodubon.coachgym.audit;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Locale;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 /**
@@ -13,18 +16,21 @@ import java.util.UUID;
  * pair may span at most {@link AuditQueryPolicy#MAX_DATE_RANGE}; a single
  * bound is allowed for the established operational-query convention.</p>
  *
- * <p>The current {@code audit_entries} schema has no result column. Outcomes
- * are represented by the allowlisted action code and safe metadata, so this
- * contract deliberately has no result or arbitrary metadata-key filter.</p>
+ * <p>Result filters are limited to the persisted safe {@code result} values
+ * ({@code ALLOWED}, {@code DENIED}); there is no arbitrary metadata-key
+ * filter. Branch IDs are filters only and require independent authorization
+ * before query execution.</p>
  */
 public record AuditSearchQuery(
         UUID actorUserId,
         String actorIdentifier,
         String actionCode,
         String resourceType,
+        String result,
         UUID resourceId,
         String resourceCode,
         UUID correlationId,
+        Set<UUID> branchIds,
         Instant occurredFrom,
         Instant occurredUntil,
         int page,
@@ -36,6 +42,8 @@ public record AuditSearchQuery(
         actorIdentifier = normalizeActor(actorIdentifier);
         actionCode = normalizeAndValidateAction(actionCode);
         resourceType = normalizeAndValidateResource(resourceType);
+        result = normalizeAndValidateResult(result);
+        branchIds = normalizeBranchIds(branchIds);
         resourceCode = normalizeOptional(resourceCode);
 
         if (resourceCode != null && resourceCode.length() > 64) {
@@ -78,6 +86,26 @@ public record AuditSearchQuery(
                 : direction;
     }
 
+    /** Compatibility constructor for existing callers without result or branch filters. */
+    public AuditSearchQuery(
+            UUID actorUserId,
+            String actorIdentifier,
+            String actionCode,
+            String resourceType,
+            UUID resourceId,
+            String resourceCode,
+            UUID correlationId,
+            Instant occurredFrom,
+            Instant occurredUntil,
+            int page,
+            int size,
+            AuditSortField sortField,
+            AuditSortDirection direction) {
+        this(actorUserId, actorIdentifier, actionCode, resourceType, null,
+                resourceId, resourceCode, correlationId, Set.of(), occurredFrom,
+                occurredUntil, page, size, sortField, direction);
+    }
+
     /** Returns the deterministic default query. */
     public static AuditSearchQuery defaults() {
         return new AuditSearchQuery(
@@ -111,9 +139,11 @@ public record AuditSearchQuery(
                 actorIdentifier,
                 actionCode,
                 resourceType,
+                null,
                 resourceId,
                 resourceCode,
                 correlationId,
+                Set.of(),
                 occurredFrom,
                 occurredUntil,
                 page,
@@ -123,9 +153,7 @@ public record AuditSearchQuery(
     }
 
     /**
-     * Compatibility overload for callers that still send a result filter.
-     * The schema has no result column, therefore every non-blank result value
-     * is rejected instead of being silently ignored.
+     * Parses a result filter while retaining the existing query shape.
      */
     public static AuditSearchQuery from(
             UUID actorUserId,
@@ -142,24 +170,57 @@ public record AuditSearchQuery(
             int size,
             String sort,
             String direction) {
-        if (normalizeOptional(result) != null) {
-            throw new AuditQueryValidationException(
-                    "Result filtering is not supported by the audit schema.");
-        }
         return from(
                 actorUserId,
                 actorIdentifier,
                 actionCode,
                 resourceType,
+                result,
                 resourceId,
                 resourceCode,
                 correlationId,
+                Set.of(),
                 occurredFrom,
                 occurredUntil,
                 page,
                 size,
                 sort,
                 direction);
+    }
+
+    /** Parses all supported filters, including the caller's branch selection. */
+    public static AuditSearchQuery from(
+            UUID actorUserId,
+            String actorIdentifier,
+            String actionCode,
+            String resourceType,
+            String result,
+            UUID resourceId,
+            String resourceCode,
+            UUID correlationId,
+            Set<UUID> branchIds,
+            Instant occurredFrom,
+            Instant occurredUntil,
+            int page,
+            int size,
+            String sort,
+            String direction) {
+        return new AuditSearchQuery(
+                actorUserId,
+                actorIdentifier,
+                actionCode,
+                resourceType,
+                result,
+                resourceId,
+                resourceCode,
+                correlationId,
+                branchIds,
+                occurredFrom,
+                occurredUntil,
+                page,
+                size,
+                parseSort(sort),
+                parseDirection(direction));
     }
 
     /** Alias matching other module query contracts. */
@@ -188,6 +249,28 @@ public record AuditSearchQuery(
                     "Unsupported audit resource-type filter.");
         }
         return normalized;
+    }
+
+    private static String normalizeAndValidateResult(String value) {
+        String normalized = normalizeCode(value);
+        if (normalized != null && !AuditQueryPolicy.isAllowedResult(normalized)) {
+            throw new AuditQueryValidationException(
+                    "Unsupported audit result filter.");
+        }
+        return normalized;
+    }
+
+    private static Set<UUID> normalizeBranchIds(Set<UUID> values) {
+        if (values == null) {
+            throw new AuditQueryValidationException(
+                    "Audit branch filters are required.");
+        }
+        if (values.stream().anyMatch(java.util.Objects::isNull)
+                || values.size() > AuditQueryPolicy.MAX_BRANCH_IDS) {
+            throw new AuditQueryValidationException(
+                    "Audit branch filters are invalid.");
+        }
+        return Collections.unmodifiableSet(new TreeSet<>(values));
     }
 
     private static String normalizeCode(String value) {

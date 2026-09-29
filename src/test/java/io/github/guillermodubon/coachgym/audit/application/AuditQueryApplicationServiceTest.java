@@ -13,35 +13,45 @@ import io.github.guillermodubon.coachgym.audit.AuditEntrySummary;
 import io.github.guillermodubon.coachgym.audit.AuditMetadataProjection;
 import io.github.guillermodubon.coachgym.audit.AuditQueryValidationException;
 import io.github.guillermodubon.coachgym.audit.AuditSearchQuery;
+import io.github.guillermodubon.coachgym.audit.AuditVisibilityScope;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.transaction.annotation.Transactional;
 
 @ExtendWith(MockitoExtension.class)
 class AuditQueryApplicationServiceTest {
 
     private static final UUID ENTRY_ID = UUID.randomUUID();
+    private static final UUID ACTOR_ID = UUID.randomUUID();
 
     @Mock
     private AuditEntryQuery auditEntryQuery;
 
+    @Mock
+    private AuditQueryAuthorization authorization;
+
     @Test
     void nullListQueryUsesTheBoundedDefaultAndDelegatesOnce() {
         AuditEntryPage expected = AuditEntryPage.of(List.of(), 0, 25, 0);
-        when(auditEntryQuery.findAll(AuditSearchQuery.defaults()))
+        when(auditEntryQuery.findAll(
+                AuditSearchQuery.defaults(), AuditVisibilityScope.organization()))
                 .thenReturn(expected);
         AuditQueryApplicationService service = service();
 
-        assertThat(service.findAll(null)).isSameAs(expected);
+        assertThat(service.findAll(null, ACTOR_ID)).isSameAs(expected);
 
-        verify(auditEntryQuery).findAll(AuditSearchQuery.defaults());
+        verify(auditEntryQuery).findAll(
+                AuditSearchQuery.defaults(), AuditVisibilityScope.organization());
         verifyNoMoreInteractions(auditEntryQuery);
     }
 
@@ -62,11 +72,27 @@ class AuditQueryApplicationServiceTest {
                 "OCCURRED_AT",
                 "ASC");
         AuditEntryPage expected = AuditEntryPage.of(List.of(), 1, 10, 0);
-        when(auditEntryQuery.findAll(query)).thenReturn(expected);
+        when(auditEntryQuery.findAll(
+                query, AuditVisibilityScope.organization())).thenReturn(expected);
 
-        assertThat(service().findAll(query)).isSameAs(expected);
+        assertThat(service().findAll(query, ACTOR_ID)).isSameAs(expected);
 
-        verify(auditEntryQuery).findAll(query);
+        verify(auditEntryQuery).findAll(query, AuditVisibilityScope.organization());
+        verifyNoMoreInteractions(auditEntryQuery);
+    }
+
+    @Test
+    void unauthorizedBranchFilterIsRejectedBeforeTheAuditQueryPortRuns() {
+        UUID requestedBranch = UUID.randomUUID();
+        AuditSearchQuery query = AuditSearchQuery.from(
+                null, null, null, null, null, null, null, null,
+                Set.of(requestedBranch), null, null, 0, 25, null, null);
+        when(authorization.authorizeQuery(ACTOR_ID, Set.of(requestedBranch)))
+                .thenThrow(new AccessDeniedException("Audit history is not available."));
+
+        assertThatThrownBy(() -> service().findAll(query, ACTOR_ID))
+                .isInstanceOf(AccessDeniedException.class);
+
         verifyNoMoreInteractions(auditEntryQuery);
     }
 
@@ -78,19 +104,22 @@ class AuditQueryApplicationServiceTest {
                 new AuditMetadataProjection(
                         java.util.Map.of("clientId", UUID.randomUUID()),
                         true));
-        when(auditEntryQuery.findById(ENTRY_ID)).thenReturn(Optional.of(expected));
+        when(auditEntryQuery.findById(
+                ENTRY_ID, AuditVisibilityScope.organization()))
+                .thenReturn(Optional.of(expected));
 
-        assertThat(service().findById(ENTRY_ID)).isSameAs(expected);
+        assertThat(service().findById(ENTRY_ID, ACTOR_ID)).isSameAs(expected);
 
-        verify(auditEntryQuery).findById(ENTRY_ID);
+        verify(auditEntryQuery).findById(ENTRY_ID, AuditVisibilityScope.organization());
         verifyNoMoreInteractions(auditEntryQuery);
     }
 
     @Test
     void absentDetailBecomesSafeNotFoundException() {
-        when(auditEntryQuery.findById(ENTRY_ID)).thenReturn(Optional.empty());
+        when(auditEntryQuery.findById(
+                ENTRY_ID, AuditVisibilityScope.organization())).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service().findById(ENTRY_ID))
+        assertThatThrownBy(() -> service().findById(ENTRY_ID, ACTOR_ID))
                 .isInstanceOf(AuditEntryNotFoundException.class)
                 .hasMessage("Audit entry was not found.")
                 .satisfies(error -> assertThat(
@@ -102,7 +131,7 @@ class AuditQueryApplicationServiceTest {
     void nullDetailIdFailsBeforeTouchingTheQueryPort() {
         AuditQueryApplicationService service = service();
 
-        assertThatThrownBy(() -> service.findById(null))
+        assertThatThrownBy(() -> service.findById(null, ACTOR_ID))
                 .isInstanceOf(AuditQueryValidationException.class)
                 .hasMessage("Audit entry id must be provided.");
 
@@ -113,10 +142,11 @@ class AuditQueryApplicationServiceTest {
     void dataAccessFailureIsPropagatedWithoutChangingItsSafeContract() {
         AuditQueryDataAccessException failure = new AuditQueryDataAccessException(
                 "Audit entries could not be read.", new IllegalStateException("hidden"));
-        when(auditEntryQuery.findAll(AuditSearchQuery.defaults()))
+        when(auditEntryQuery.findAll(
+                AuditSearchQuery.defaults(), AuditVisibilityScope.organization()))
                 .thenThrow(failure);
 
-        assertThatThrownBy(() -> service().findAll(null))
+        assertThatThrownBy(() -> service().findAll(null, ACTOR_ID))
                 .isSameAs(failure)
                 .hasMessage("Audit entries could not be read.");
     }
@@ -125,9 +155,10 @@ class AuditQueryApplicationServiceTest {
     void detailDataAccessFailureIsPropagatedWithoutExposingItsCause() {
         AuditQueryDataAccessException failure = new AuditQueryDataAccessException(
                 "Audit entries could not be read.", new IllegalStateException("sql"));
-        when(auditEntryQuery.findById(ENTRY_ID)).thenThrow(failure);
+        when(auditEntryQuery.findById(
+                ENTRY_ID, AuditVisibilityScope.organization())).thenThrow(failure);
 
-        assertThatThrownBy(() -> service().findById(ENTRY_ID))
+        assertThatThrownBy(() -> service().findById(ENTRY_ID, ACTOR_ID))
                 .isSameAs(failure)
                 .hasMessage("Audit entries could not be read.");
     }
@@ -136,9 +167,9 @@ class AuditQueryApplicationServiceTest {
     void queryMethodsAreAdminOnlyAndReadOnly() throws Exception {
         for (var method : new java.lang.reflect.Method[] {
             AuditQueryApplicationService.class.getMethod(
-                    "findAll", AuditSearchQuery.class),
+                    "findAll", AuditSearchQuery.class, UUID.class),
             AuditQueryApplicationService.class.getMethod(
-                    "findById", UUID.class)
+                    "findById", UUID.class, UUID.class)
         }) {
             assertThat(method.getAnnotation(PreAuthorize.class).value())
                     .isEqualTo("hasRole('ADMIN')");
@@ -148,7 +179,11 @@ class AuditQueryApplicationServiceTest {
     }
 
     private AuditQueryApplicationService service() {
-        return new AuditQueryApplicationService(auditEntryQuery);
+        Mockito.lenient().when(authorization.authorizeQuery(ACTOR_ID, Set.of()))
+                .thenReturn(AuditVisibilityScope.organization());
+        Mockito.lenient().when(authorization.authorizeDetail(ACTOR_ID))
+                .thenReturn(AuditVisibilityScope.organization());
+        return new AuditQueryApplicationService(auditEntryQuery, authorization);
     }
 
     private static AuditEntrySummary summary() {

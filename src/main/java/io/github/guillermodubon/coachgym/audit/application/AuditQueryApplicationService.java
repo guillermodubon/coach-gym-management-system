@@ -11,32 +11,43 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** ADMIN-only, read-only use cases for the audit history query capability. */
+/** Read-only use cases for scope-authorized audit history queries. */
 @Service
 public class AuditQueryApplicationService {
 
     private final AuditEntryQuery auditEntryQuery;
+    private final AuditQueryAuthorization authorization;
 
-    public AuditQueryApplicationService(AuditEntryQuery auditEntryQuery) {
+    public AuditQueryApplicationService(
+            AuditEntryQuery auditEntryQuery,
+            AuditQueryAuthorization authorization) {
         this.auditEntryQuery = Objects.requireNonNull(
                 auditEntryQuery,
                 "Audit entry query is required.");
+        this.authorization = Objects.requireNonNull(
+                authorization,
+                "Audit query authorization is required.");
     }
 
-    /** Returns a bounded newest-first page for a validated audit query. */
+    /** Returns a bounded page after resolving branch filters against persisted authority. */
     @Transactional(readOnly = true)
     @PreAuthorize("hasRole('ADMIN')")
-    public AuditEntryPage findAll(AuditSearchQuery query) {
-        return auditEntryQuery.findAll(
-                query == null ? AuditSearchQuery.defaults() : query);
+    public AuditEntryPage findAll(AuditSearchQuery query, UUID actorUserId) {
+        AuditSearchQuery validated = query == null
+                ? AuditSearchQuery.defaults()
+                : query;
+        var visibilityScope = authorization.authorizeQuery(
+                actorUserId, validated.branchIds());
+        return auditEntryQuery.findAll(validated, visibilityScope);
     }
 
-    /** Returns sanitized details for one entry or raises a safe not-found error. */
+    /** Reauthorizes visibility independently for one detail request. */
     @Transactional(readOnly = true)
     @PreAuthorize("hasRole('ADMIN')")
-    public AuditEntryDetails findById(UUID auditEntryId) {
+    public AuditEntryDetails findById(UUID auditEntryId, UUID actorUserId) {
         requireId(auditEntryId);
-        return auditEntryQuery.findById(auditEntryId)
+        var visibilityScope = authorization.authorizeDetail(actorUserId);
+        return auditEntryQuery.findById(auditEntryId, visibilityScope)
                 .orElseThrow(() -> new AuditEntryNotFoundException(auditEntryId));
     }
 

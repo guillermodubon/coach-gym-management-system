@@ -10,6 +10,7 @@ import io.github.guillermodubon.coachgym.audit.AuditExportSink;
 import io.github.guillermodubon.coachgym.audit.AuditExportStreamException;
 import io.github.guillermodubon.coachgym.audit.AuditExportValidationException;
 import io.github.guillermodubon.coachgym.audit.AuditEntryQuery;
+import io.github.guillermodubon.coachgym.audit.AuditVisibilityScope;
 import io.github.guillermodubon.coachgym.audit.infrastructure.csv.AuditCsvHeaderWriter;
 import io.github.guillermodubon.coachgym.audit.infrastructure.csv.AuditCsvRowWriter;
 import java.io.IOException;
@@ -26,9 +27,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
-/** ADMIN-only orchestration for bounded, streaming audit CSV exports. */
+/** Scope-authorized orchestration for bounded, streaming audit CSV exports. */
 @Service
 public class AuditExportApplicationService {
 
@@ -39,6 +41,7 @@ public class AuditExportApplicationService {
                     .withZone(ZoneOffset.UTC);
 
     private final AuditEntryQuery auditEntryQuery;
+    private final AuditQueryAuthorization authorization;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
     private final AuditExportPolicy policy;
@@ -47,19 +50,24 @@ public class AuditExportApplicationService {
     @Autowired
     public AuditExportApplicationService(
             AuditEntryQuery auditEntryQuery,
+            AuditQueryAuthorization authorization,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
-        this(auditEntryQuery, eventPublisher, clock, AuditExportPolicy.defaults());
+        this(auditEntryQuery, authorization, eventPublisher, clock,
+                AuditExportPolicy.defaults());
     }
 
     /** Constructor with an explicit policy for bounded configuration and tests. */
     public AuditExportApplicationService(
             AuditEntryQuery auditEntryQuery,
+            AuditQueryAuthorization authorization,
             ApplicationEventPublisher eventPublisher,
             Clock clock,
             AuditExportPolicy policy) {
         this.auditEntryQuery = Objects.requireNonNull(
                 auditEntryQuery, "Audit entry query is required.");
+        this.authorization = Objects.requireNonNull(
+                authorization, "Audit query authorization is required.");
         this.eventPublisher = Objects.requireNonNull(
                 eventPublisher, "Event publisher is required.");
         this.clock = Objects.requireNonNull(clock, "Clock is required.");
@@ -70,15 +78,16 @@ public class AuditExportApplicationService {
      * Streams sanitized rows to the caller-owned sink and returns safe download metadata.
      * The success audit is published only after the sink has consumed every row.
      */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     @PreAuthorize("hasRole('ADMIN')")
     public AuditExportResult export(
             AuditExportQuery query,
             AuditExportActor actor,
             AuditExportSink sink) {
 
+        AuditVisibilityScope visibilityScope = authorize(query, actor);
         validateInputs(query, actor, sink);
-        return streamValidated(query, actor, sink);
+        return streamValidated(query, actor, visibilityScope, sink);
     }
 
     /**
@@ -86,12 +95,13 @@ public class AuditExportApplicationService {
      * block. It never buffers bytes and does not make the CSV writer a public
      * module contract.
      */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     @PreAuthorize("hasRole('ADMIN')")
     public AuditExportResult exportCsv(
             AuditExportQuery query,
             AuditExportActor actor,
             Writer writer) {
+        AuditVisibilityScope visibilityScope = authorize(query, actor);
         if (writer == null) {
             throw new AuditExportValidationException("Export writer is required.");
         }
@@ -99,7 +109,7 @@ public class AuditExportApplicationService {
         AuditCsvRowWriter rowWriter = new AuditCsvRowWriter();
         validateInputs(query, actor, row -> { });
         boolean[] headerWritten = {false};
-        AuditExportResult result = streamValidated(query, actor, row -> {
+        AuditExportResult result = streamValidated(query, actor, visibilityScope, row -> {
             try {
                 if (!headerWritten[0]) {
                     headerWriter.write(writer);
@@ -133,19 +143,23 @@ public class AuditExportApplicationService {
      */
     @PreAuthorize("hasRole('ADMIN')")
     @Transactional(readOnly = true)
-    public void validate(AuditExportQuery query) {
+    public void validate(AuditExportQuery query, UUID actorUserId) {
         requireQuery(query);
         query.validate(policy);
+        authorization.authorizeQuery(actorUserId, query.branchIds());
     }
 
-    /** Returns a server-generated, header-safe filename for a new download. */
+    /** Returns a filename only after current persisted scope authorizes the query. */
     @PreAuthorize("hasRole('ADMIN')")
-    public String newFilename() {
+    public String newFilename(AuditExportQuery query, UUID actorUserId) {
+        requireQuery(query);
+        query.validate(policy);
+        authorization.authorizeQuery(actorUserId, query.branchIds());
         return filename(clock.instant());
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public AuditExportResult exportCsv(
             AuditExportQuery query,
             UUID actorUserId,
@@ -160,13 +174,15 @@ public class AuditExportApplicationService {
     private AuditExportResult streamValidated(
             AuditExportQuery query,
             AuditExportActor actor,
+            AuditVisibilityScope visibilityScope,
             AuditExportSink sink) {
-        return streamValidated(query, actor, sink, null);
+        return streamValidated(query, actor, visibilityScope, sink, null);
     }
 
     private AuditExportResult streamValidated(
             AuditExportQuery query,
             AuditExportActor actor,
+            AuditVisibilityScope visibilityScope,
             AuditExportSink sink,
             Runnable beforeAudit) {
         query.validate(policy);
@@ -183,7 +199,7 @@ public class AuditExportApplicationService {
             rowsExported[0]++;
         };
 
-        auditEntryQuery.streamExport(query, policy, guardedSink);
+        auditEntryQuery.streamExport(query, policy, visibilityScope, guardedSink);
         if (beforeAudit != null) {
             beforeAudit.run();
         }
@@ -199,6 +215,7 @@ public class AuditExportApplicationService {
                     filterSummary(query),
                     query.sort(),
                     query.sortDirection(),
+                    visibilityScope,
                     rowsExported[0],
                     policy.maxRows(),
                     AuditExportCompleted.FORMAT_CSV,
@@ -228,8 +245,19 @@ public class AuditExportApplicationService {
         query.validate(policy);
     }
 
+    private AuditVisibilityScope authorize(
+            AuditExportQuery query,
+            AuditExportActor actor) {
+        requireQuery(query);
+        if (actor == null) {
+            throw new AuditExportValidationException("Export actor is required.");
+        }
+        query.validate(policy);
+        return authorization.authorizeQuery(actor.userId(), query.branchIds());
+    }
+
     /** Convenience overload for callers that already hold the minimal actor fields. */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     @PreAuthorize("hasRole('ADMIN')")
     public AuditExportResult export(
             AuditExportQuery query,
@@ -264,6 +292,9 @@ public class AuditExportApplicationService {
         if (query.resourceType() != null) {
             filters.add("resourceType");
         }
+        if (query.result() != null) {
+            filters.add("result");
+        }
         if (query.resourceId() != null) {
             filters.add("resourceId");
         }
@@ -272,6 +303,9 @@ public class AuditExportApplicationService {
         }
         if (query.correlationId() != null) {
             filters.add("correlationId");
+        }
+        if (!query.branchIds().isEmpty()) {
+            filters.add("branchIds");
         }
         filters.add("occurredFrom");
         filters.add("occurredUntil");

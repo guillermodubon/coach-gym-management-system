@@ -38,7 +38,8 @@ public final class AuditMetadataSanitizer {
             return AuditMetadataProjection.empty();
         }
 
-        SanitizationContext context = new SanitizationContext();
+        SanitizationContext context = new SanitizationContext(
+                AuditExportCompleted.ACTION_CODE.equals(actionCode));
         try {
             Set<String> allowlist = AuditMetadataPolicy.allowedKeysForAction(actionCode);
             Map<String, Object> sanitized = sanitizeMap(
@@ -134,7 +135,10 @@ public final class AuditMetadataSanitizer {
                 context.redacted = true;
                 return Omitted.VALUE;
             }
-            int limit = Math.min(list.size(), MAX_ENTRIES);
+            int maximumListEntries = context.auditExport && "branchIds".equals(key)
+                    ? AuditQueryPolicy.MAX_BRANCH_IDS
+                    : MAX_ENTRIES;
+            int limit = Math.min(list.size(), maximumListEntries);
             if (list.size() > limit) {
                 context.redacted = true;
             }
@@ -229,8 +233,13 @@ public final class AuditMetadataSanitizer {
     }
 
     private static final class SanitizationContext {
+        private final boolean auditExport;
         private int entries;
         private int characters;
         private boolean redacted;
+
+        private SanitizationContext(boolean auditExport) {
+            this.auditExport = auditExport;
+        }
     }
 }

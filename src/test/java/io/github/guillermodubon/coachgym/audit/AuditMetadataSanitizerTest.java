@@ -44,6 +44,7 @@ class AuditMetadataSanitizerTest {
                 Map.entry("STAFF_PASSWORD_CHANGED", "reauthenticationRequired"),
                 Map.entry("STAFF_INVITATION_CREATED", "maskedRecipient"),
                 Map.entry("STAFF_INVITATION_ACCEPTED", "branchIds"),
+                Map.entry("AUDIT_ENTRIES_EXPORTED", "visibilityScope"),
                 Map.entry("STAFF_ACCOUNT_SUSPENDED", "reasonPresent"),
                 Map.entry("STAFF_ROLE_SCOPE_CHANGED", "newRoles"),
                 Map.entry("STAFF_PASSWORD_RECOVERY_COMPLETED", "userIdPresent"),
@@ -86,6 +87,45 @@ class AuditMetadataSanitizerTest {
         assertThat(projection.values())
                 .doesNotContainKeys("unknownOperationalValue", "providerSecret");
         assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void auditExportMetadataAllowsOnlyScopeAndBoundedOperationalFacts() {
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                "AUDIT_ENTRIES_EXPORTED",
+                Map.of(
+                        "visibilityScope", "BRANCH",
+                        "branchIds", List.of(UUID.randomUUID().toString()),
+                        "occurredFrom", OCCURRED_AT.toString(),
+                        "occurredUntil", OCCURRED_AT.plusSeconds(60).toString(),
+                        "filtersPresent", "branchIds,occurredFrom,occurredUntil",
+                        "rowCount", 4L,
+                        "metadata_json", "exported data",
+                        "token", "secret-token"));
+
+        assertThat(projection.values())
+                .containsKeys("visibilityScope", "branchIds", "occurredFrom",
+                        "occurredUntil", "filtersPresent", "rowCount")
+                .doesNotContainKeys("metadata_json", "token");
+        assertThat(projection.metadataRedacted()).isTrue();
+    }
+
+    @Test
+    void auditExportPreservesTheCompleteBoundedAuthorizedBranchSet() {
+        List<String> branchIds = java.util.stream.IntStream.range(
+                        0, AuditQueryPolicy.MAX_BRANCH_IDS)
+                .mapToObj(index -> UUID.nameUUIDFromBytes(
+                        ("audit-export-branch-" + index)
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8))
+                        .toString())
+                .toList();
+
+        AuditMetadataProjection projection = new AuditMetadataSanitizer().sanitize(
+                AuditExportCompleted.ACTION_CODE,
+                Map.of("branchIds", branchIds));
+
+        assertThat(projection.values()).containsEntry("branchIds", branchIds);
+        assertThat(projection.metadataRedacted()).isFalse();
     }
 
     @Test
