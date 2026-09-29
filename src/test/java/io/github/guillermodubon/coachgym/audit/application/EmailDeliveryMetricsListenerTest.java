@@ -6,6 +6,7 @@ import io.github.guillermodubon.coachgym.notification.EmailDeliveryFailureCode;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryLifecycleEvent;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryStatus;
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryType;
+import io.micrometer.core.instrument.Tag;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Instant;
 import java.util.UUID;
@@ -45,5 +46,12 @@ class EmailDeliveryMetricsListenerTest {
                 .allSatisfy(meter -> assertThat(meter.getId().getTags())
                         .noneMatch(tag -> tag.getValue().contains(ID.toString())
                                 || tag.getValue().contains("example.com")));
+        assertThat(registry.getMeters()).allSatisfy(meter -> {
+            assertThat(meter.getId().getTags())
+                    .extracting(Tag::getKey)
+                    .containsExactlyInAnyOrder("type", "result", "retry", "failure_code");
+            assertThat(meter.getId().getTag("type"))
+                    .isIn("PAYMENT_RECEIPT", "ACCESS_CREDENTIAL");
+        });
     }
 }

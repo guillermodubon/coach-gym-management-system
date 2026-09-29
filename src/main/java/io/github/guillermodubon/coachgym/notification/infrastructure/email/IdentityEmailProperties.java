@@ -1,4 +1,4 @@
-package io.github.guillermodubon.coachgym.notification.infrastructure.smtp;
+package io.github.guillermodubon.coachgym.notification.infrastructure.email;
 
 import jakarta.validation.constraints.AssertTrue;
 import java.net.URI;

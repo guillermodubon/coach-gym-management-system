@@ -94,6 +94,20 @@ class EmailDeliveryLifecyclePolicyTest {
     }
 
     @Test
+    void ambiguousProviderAcceptanceIsNotEligibleForManualRetry() {
+        EmailDeliveryDetails ambiguous = delivery(
+                EmailDeliveryStatus.FAILED,
+                1,
+                0,
+                EmailDeliveryFailureCode.AMBIGUOUS_TRANSPORT_OUTCOME,
+                "The email transport outcome could not be confirmed.");
+
+        assertThat(POLICY.isRetryEligible(ambiguous)).isFalse();
+        assertThatThrownBy(() -> POLICY.requireRetryAllowed(ambiguous, 0))
+                .isInstanceOf(EmailDeliveryStateConflictException.class);
+    }
+
+    @Test
     void commandsAndPortsDoNotAcceptActorRecipientOrAttachmentOverrides() {
         assertThat(RequestPaymentReceiptEmailCommand.class.getRecordComponents())
                 .hasSize(1);

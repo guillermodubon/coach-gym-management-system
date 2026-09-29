@@ -3,7 +3,7 @@ package io.github.guillermodubon.coachgym.notification.infrastructure.identity;
 import io.github.guillermodubon.coachgym.notification.EmailMessage;
 import io.github.guillermodubon.coachgym.notification.EmailSendResult;
 import io.github.guillermodubon.coachgym.notification.application.EmailSender;
-import io.github.guillermodubon.coachgym.notification.infrastructure.smtp.EmailProperties;
+import io.github.guillermodubon.coachgym.notification.infrastructure.email.EmailProperties;
 import io.github.guillermodubon.coachgym.shared.identityemail.IdentityEmailDeliveryStatus;
 import io.github.guillermodubon.coachgym.shared.identityemail.StaffAccountActivatedEmail;
 import io.github.guillermodubon.coachgym.shared.identityemail.StaffAccountActivatedEmailSender;

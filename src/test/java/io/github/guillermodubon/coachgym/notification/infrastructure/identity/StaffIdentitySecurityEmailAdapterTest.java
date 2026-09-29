@@ -10,7 +10,7 @@ import io.github.guillermodubon.coachgym.notification.EmailDeliveryFailureCode;
 import io.github.guillermodubon.coachgym.notification.EmailMessage;
 import io.github.guillermodubon.coachgym.notification.EmailSendResult;
 import io.github.guillermodubon.coachgym.notification.application.EmailSender;
-import io.github.guillermodubon.coachgym.notification.infrastructure.smtp.EmailProperties;
+import io.github.guillermodubon.coachgym.notification.infrastructure.email.EmailProperties;
 import io.github.guillermodubon.coachgym.shared.identityemail.IdentityEmailDeliveryStatus;
 import io.github.guillermodubon.coachgym.shared.identityemail.IdentitySecurityNoticeType;
 import io.github.guillermodubon.coachgym.shared.identityemail.StaffIdentitySecurityEmail;
@@ -84,8 +84,6 @@ class StaffIdentitySecurityEmailAdapterTest {
     private static EmailProperties properties() {
         return new EmailProperties(
                 false, "Coach Gym", "v1", "no-reply@example.test", "Coach Gym", null,
-                "localhost", 25, null, null, false, false,
-                Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(1),
-                100_000, 100_000, 200, 254);
+                100_000, 200, 3, Duration.ofMinutes(15));
     }
 }

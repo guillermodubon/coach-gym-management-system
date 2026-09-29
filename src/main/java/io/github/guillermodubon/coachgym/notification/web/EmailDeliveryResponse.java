@@ -21,6 +21,7 @@ record EmailDeliveryResponse(
         String attachmentFilename,
         String attachmentContentType,
         long attachmentSizeBytes,
+        @Schema(description = "SENT means the configured email provider accepted the request; it does not guarantee inbox placement. An uncertain outcome is recorded as FAILED with AMBIGUOUS_TRANSPORT_OUTCOME and is not automatically retryable.")
         EmailDeliveryStatus status,
         int attemptCount,
         EmailDeliveryFailureCode lastFailureCode,

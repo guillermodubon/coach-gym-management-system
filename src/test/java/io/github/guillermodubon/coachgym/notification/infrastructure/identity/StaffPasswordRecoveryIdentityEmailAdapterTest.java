@@ -9,8 +9,8 @@ import static org.mockito.Mockito.when;
 import io.github.guillermodubon.coachgym.notification.EmailMessage;
 import io.github.guillermodubon.coachgym.notification.EmailSendResult;
 import io.github.guillermodubon.coachgym.notification.application.EmailSender;
-import io.github.guillermodubon.coachgym.notification.infrastructure.smtp.EmailProperties;
-import io.github.guillermodubon.coachgym.notification.infrastructure.smtp.IdentityEmailProperties;
+import io.github.guillermodubon.coachgym.notification.infrastructure.email.EmailProperties;
+import io.github.guillermodubon.coachgym.notification.infrastructure.email.IdentityEmailProperties;
 import io.github.guillermodubon.coachgym.shared.identityemail.StaffPasswordRecoveryEmail;
 import java.time.Duration;
 import java.time.Instant;
@@ -67,9 +67,7 @@ class StaffPasswordRecoveryIdentityEmailAdapterTest {
     }
 
     private static EmailProperties emailProperties() {
-        return new EmailProperties(true, "smtp", "Coach Gym", "v1", "no-reply@example.test", "Coach Gym",
-                null, "localhost", 1025, null, null, false, false,
-                Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(10),
-                12 * 1024 * 1024, 10 * 1024 * 1024, 200, 254, 3, Duration.ofMinutes(15));
+        return new EmailProperties(true, "Coach Gym", "v1", "no-reply@example.test", "Coach Gym",
+                null, 10 * 1024 * 1024, 200, 3, Duration.ofMinutes(15));
     }
 }

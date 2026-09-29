@@ -26,7 +26,9 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
     implementation("org.springframework.boot:spring-boot-starter-flyway")
-    implementation("org.springframework.boot:spring-boot-starter-mail")
+    implementation("jakarta.mail:jakarta.mail-api")
+    implementation("org.eclipse.angus:angus-mail:2.0.5")
+    implementation("org.eclipse.angus:angus-activation:2.0.3")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
@@ -56,6 +58,17 @@ dependencies {
     testImplementation("com.tngtech.archunit:archunit-junit5:1.4.2")
 }
 
+val gmailIntegrationTestSourceSet = sourceSets.create("gmailIntegrationTest") {
+    java.srcDir("src/gmailIntegrationTest/java")
+    compileClasspath += sourceSets.main.get().output
+    runtimeClasspath += output + compileClasspath
+}
+
+configurations[gmailIntegrationTestSourceSet.implementationConfigurationName]
+    .extendsFrom(configurations.testImplementation.get())
+configurations[gmailIntegrationTestSourceSet.runtimeOnlyConfigurationName]
+    .extendsFrom(configurations.testRuntimeOnly.get())
+
 dependencyManagement {
     imports {
         mavenBom("org.springframework.modulith:spring-modulith-bom:${property("springModulithVersion")}")
@@ -69,4 +82,17 @@ tasks.withType<Test> {
     // complete suite without multiplying concurrent JVM footprints in CI.
     maxHeapSize = "1g"
     maxParallelForks = 1
+}
+
+tasks.register<Test>("gmailIntegrationTest") {
+    group = "verification"
+    description = "Sends two synthetic messages to the explicitly allowlisted Gmail test recipient."
+    testClassesDirs = gmailIntegrationTestSourceSet.output.classesDirs
+    classpath = gmailIntegrationTestSourceSet.runtimeClasspath
+    useJUnitPlatform()
+    shouldRunAfter(tasks.test)
+    onlyIf("Set GMAIL_LIVE_TESTS_ENABLED=true to explicitly opt in") {
+        providers.environmentVariable("GMAIL_LIVE_TESTS_ENABLED")
+            .orNull?.equals("true", ignoreCase = true) == true
+    }
 }

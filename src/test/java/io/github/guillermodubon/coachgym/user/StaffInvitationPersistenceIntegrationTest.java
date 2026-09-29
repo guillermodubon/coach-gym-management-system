@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -214,11 +215,22 @@ class StaffInvitationPersistenceIntegrationTest {
                   from information_schema.columns
                  where table_schema = 'gym'
                    and table_name = 'staff_account_activation_deliveries'
-                   and column_name ~* '(email|recipient|body|token|password|secret)'
+                   and column_name ~* '(email|recipient|body|token|password|secret|mime|attachment|oauth|provider_response|session)'
+                """, String.class);
+        List<String> columns = jdbcTemplate.queryForList("""
+                select column_name
+                  from information_schema.columns
+                 where table_schema = 'gym'
+                   and table_name = 'staff_account_activation_deliveries'
+                 order by ordinal_position
                 """, String.class);
 
         assertThat(applied).isEqualTo(1);
         assertThat(sensitiveColumns).isEmpty();
+        assertThat(columns).containsExactly(
+                "id", "invitation_id", "status", "attempt_count", "last_attempt_at",
+                "lease_expires_at", "next_attempt_at", "sent_at", "last_failure_code",
+                "created_at", "updated_at", "version");
     }
 
     @Test
@@ -639,14 +651,19 @@ class StaffInvitationPersistenceIntegrationTest {
         UUID actorId = createOrganizationAdministrator();
         String email = "activation-retry-" + UUID.randomUUID() + "@example.test";
         String rawToken = tokenGenerator.generate();
+        Integer deliveriesBefore = jdbcTemplate.queryForObject(
+                "select count(*) from gym.email_deliveries", Integer.class);
+        Integer attemptsBefore = jdbcTemplate.queryForObject(
+                "select count(*) from gym.email_delivery_attempts", Integer.class);
         StaffInvitationRecord invitation = createInvitation(
-                actorId, email, RoleCode.ADMIN, StaffScopeType.ORGANIZATION, Set.of(), rawToken);
+                actorId, email, RoleCode.RECEPTIONIST, StaffScopeType.BRANCH,
+                Set.of(ACTIVE_BRANCH_ID), rawToken);
         String password = "retry-valid-password-123";
 
         var accepted = acceptanceService.accept(new AcceptStaffInvitationCommand(
                 rawToken, password, password, "Activation", "Retry"));
         var persisted = jdbcTemplate.queryForMap("""
-                select status, attempt_count, last_failure_code
+                select status, attempt_count, last_failure_code, version
                   from gym.staff_account_activation_deliveries
                  where invitation_id = ?
                 """, invitation.invitationId());
@@ -655,14 +672,43 @@ class StaffInvitationPersistenceIntegrationTest {
                   from information_schema.columns
                  where table_schema = 'gym'
                    and table_name = 'staff_account_activation_deliveries'
-                   and column_name ~* '(email|recipient|body|token|password|secret)'
+                   and column_name ~* '(email|recipient|body|token|password|secret|mime|attachment|oauth|provider_response|session)'
                 """, String.class);
+        String activationMetadata = jdbcTemplate.queryForObject("""
+                select to_jsonb(delivery)::text
+                  from gym.staff_account_activation_deliveries delivery
+                 where invitation_id = ?
+                """, String.class, invitation.invitationId());
 
         assertThat(accepted.userId()).isNotNull();
         assertThat(persisted.get("status")).isEqualTo("FAILED");
         assertThat(persisted.get("attempt_count")).isEqualTo(1);
         assertThat(persisted.get("last_failure_code")).isEqualTo("DELIVERY_FAILED");
+        assertThat(persisted.get("version")).isEqualTo(2L);
         assertThat(sensitiveColumns).isEmpty();
+        assertThat(activationMetadata).doesNotContain(email, rawToken, password);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.email_deliveries", Integer.class))
+                .isEqualTo(deliveriesBefore);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.email_delivery_attempts", Integer.class))
+                .isEqualTo(attemptsBefore);
+        assertThat(invitations.findById(invitation.invitationId()))
+                .get().extracting(StaffInvitationRecord::status)
+                .isEqualTo(StaffInvitationStatus.ACCEPTED);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.users where id = ?", Integer.class, accepted.userId()))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from gym.users where id = ?", String.class, accepted.userId()))
+                .isEqualTo("ACTIVE");
+        assertThat(staffProfileQuery.findByUserId(accepted.userId())).isPresent();
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.staff_scopes where user_id = ?", Integer.class,
+                accepted.userId())).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.staff_branch_assignments where user_id = ?",
+                Integer.class, accepted.userId())).isEqualTo(1);
 
         Instant retryAt = Instant.now().plusSeconds(300).truncatedTo(ChronoUnit.MICROS);
         StaffAccountActivationDeliveryClaim claim = activationDeliveries
@@ -679,10 +725,92 @@ class StaffInvitationPersistenceIntegrationTest {
                 retryAt.plusSeconds(1),
                 retryAt.plusSeconds(61));
 
-        assertThat(jdbcTemplate.queryForObject("""
-                select attempt_count from gym.staff_account_activation_deliveries
+        var afterRetry = jdbcTemplate.queryForMap("""
+                select status, attempt_count, version
+                  from gym.staff_account_activation_deliveries
                  where invitation_id = ?
-                """, Integer.class, invitation.invitationId())).isEqualTo(2);
+                """, invitation.invitationId());
+        assertThat(afterRetry.get("status")).isEqualTo("FAILED");
+        assertThat(afterRetry.get("attempt_count")).isEqualTo(2);
+        assertThat(afterRetry.get("version")).isEqualTo(4L);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.email_deliveries", Integer.class))
+                .isEqualTo(deliveriesBefore);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.email_delivery_attempts", Integer.class))
+                .isEqualTo(attemptsBefore);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.users where id = ?", Integer.class, accepted.userId()))
+                .isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from gym.users where id = ?", String.class, accepted.userId()))
+                .isEqualTo("ACTIVE");
+        assertThat(staffProfileQuery.findByUserId(accepted.userId())).isPresent();
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.staff_scopes where user_id = ?", Integer.class,
+                accepted.userId())).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.staff_branch_assignments where user_id = ?",
+                Integer.class, accepted.userId())).isEqualTo(1);
+        assertThatThrownBy(() -> acceptanceService.accept(new AcceptStaffInvitationCommand(
+                rawToken, password, password, "Activation", "Retry")))
+                .isInstanceOf(StaffIdentityStateConflictException.class);
+        assertThatThrownBy(() -> activationDeliveries.complete(
+                claim.deliveryId(), claim.attemptNumber(),
+                io.github.guillermodubon.coachgym.shared.identityemail.IdentityEmailDeliveryStatus.FAILED,
+                retryAt.plusSeconds(2), retryAt.plusSeconds(62)))
+                .isInstanceOf(StaffIdentityDataAccessException.class);
+        assertThat(jdbcTemplate.queryForObject("""
+                select version from gym.staff_account_activation_deliveries
+                 where invitation_id = ?
+                """, Long.class, invitation.invitationId())).isEqualTo(4L);
+    }
+
+    @Test
+    void activationDeliveryClaimIsExclusiveAndAdvancesOptimisticVersion() throws Exception {
+        UUID actorId = createOrganizationAdministrator();
+        String rawToken = tokenGenerator.generate();
+        StaffInvitationRecord invitation = createInvitation(
+                actorId,
+                "activation-concurrent-" + UUID.randomUUID() + "@example.test",
+                RoleCode.ADMIN,
+                StaffScopeType.ORGANIZATION,
+                Set.of(),
+                rawToken);
+        String password = "concurrent-valid-password-123";
+        acceptanceService.accept(new AcceptStaffInvitationCommand(
+                rawToken, password, password, "Concurrent", "Activation"));
+
+        Instant claimedAt = Instant.now().plusSeconds(300).truncatedTo(ChronoUnit.MICROS);
+        List<Optional<StaffAccountActivationDeliveryClaim>> claims = runConcurrently(
+                () -> activationDeliveries.claim(
+                        invitation.invitationId(), claimedAt, claimedAt.plus(Duration.ofMinutes(2))),
+                () -> activationDeliveries.claim(
+                        invitation.invitationId(), claimedAt, claimedAt.plus(Duration.ofMinutes(2))));
+
+        assertThat(claims).filteredOn(Optional::isPresent).hasSize(1);
+        StaffAccountActivationDeliveryClaim claim = claims.stream()
+                .flatMap(Optional::stream)
+                .findFirst()
+                .orElseThrow();
+        assertThat(claim.attemptNumber()).isEqualTo(2);
+        var persisted = jdbcTemplate.queryForMap("""
+                select status, attempt_count, version
+                  from gym.staff_account_activation_deliveries
+                 where invitation_id = ?
+                """, invitation.invitationId());
+        assertThat(persisted.get("status")).isEqualTo("SENDING");
+        assertThat(persisted.get("attempt_count")).isEqualTo(2);
+        assertThat(persisted.get("version")).isEqualTo(3L);
+
+        activationDeliveries.complete(
+                claim.deliveryId(), claim.attemptNumber(),
+                io.github.guillermodubon.coachgym.shared.identityemail.IdentityEmailDeliveryStatus.SENT,
+                claimedAt.plusSeconds(1), null);
+        assertThat(jdbcTemplate.queryForObject("""
+                select version from gym.staff_account_activation_deliveries
+                 where invitation_id = ?
+                """, Long.class, invitation.invitationId())).isEqualTo(4L);
     }
 
     @Test

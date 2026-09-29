@@ -1,4 +1,4 @@
-package io.github.guillermodubon.coachgym.notification.infrastructure.smtp;
+package io.github.guillermodubon.coachgym.notification.infrastructure.email;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -92,9 +92,8 @@ class EmailTemplateComposerTest {
     @Test
     void truncatesLongSubjectsAndRejectsUnsupportedTemplateVersions() {
         EmailProperties shortSubject = new EmailProperties(true, "C".repeat(200), "v1",
-                "no-reply@coach-gym.local", "Coach Gym", null, "localhost", 1025, null, null,
-                false, false, Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(10),
-                12 * 1024 * 1024, 10 * 1024 * 1024, 40, 254);
+                "no-reply@coach-gym.local", "Coach Gym", null,
+                10 * 1024 * 1024, 40, 3, Duration.ofMinutes(15));
         var source = source(EmailDeliveryType.PAYMENT_RECEIPT,
                 new EmailDeliveryTemplateData(null, null, null, "REC-001", null, null,
                         null, null, null, null, null, null, false),
@@ -103,9 +102,8 @@ class EmailTemplateComposerTest {
                 .hasSize(40);
 
         EmailProperties unsupported = new EmailProperties(true, "Coach Gym", "v2",
-                "no-reply@coach-gym.local", "Coach Gym", null, "localhost", 1025, null, null,
-                false, false, Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(10),
-                12 * 1024 * 1024, 10 * 1024 * 1024, 200, 254);
+                "no-reply@coach-gym.local", "Coach Gym", null,
+                10 * 1024 * 1024, 200, 3, Duration.ofMinutes(15));
         assertThatThrownBy(() -> new EmailTemplateComposer(unsupported).compose(source))
                 .isInstanceOf(EmailCompositionException.class);
     }
@@ -119,8 +117,6 @@ class EmailTemplateComposerTest {
 
     private static EmailProperties properties() {
         return new EmailProperties(true, "Coach Gym", "v1", "no-reply@coach-gym.local",
-                "Coach Gym", null, "localhost", 1025, null, null, false, false,
-                Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(10),
-                12 * 1024 * 1024, 10 * 1024 * 1024, 200, 254);
+                "Coach Gym", null, 10 * 1024 * 1024, 200, 3, Duration.ofMinutes(15));
     }
 }

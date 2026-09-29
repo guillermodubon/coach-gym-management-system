@@ -1,4 +1,4 @@
-package io.github.guillermodubon.coachgym.notification.infrastructure.smtp;
+package io.github.guillermodubon.coachgym.notification.infrastructure.email;
 
 import io.github.guillermodubon.coachgym.notification.EmailDeliveryFailureCode;
 import io.github.guillermodubon.coachgym.notification.EmailMessage;

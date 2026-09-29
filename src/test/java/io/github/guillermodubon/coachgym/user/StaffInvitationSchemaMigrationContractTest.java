@@ -100,7 +100,11 @@ class StaffInvitationSchemaMigrationContractTest {
                 .contains("on delete restrict")
                 .contains("idx_staff_account_activation_delivery_retry")
                 .contains("trg_staff_account_activation_delivery_validate_mutation")
-                .doesNotContain("email_body", "password_hash", "raw_token", "token_fingerprint");
+                .doesNotContain(
+                        "email_body", "message_body", "mime_payload", "attachment_bytes",
+                        "password_hash", "raw_token", "token_fingerprint", "token_hash",
+                        "tokenized_url", "oauth_credential", "provider_response_body",
+                        "session_id");
     }
 
     @Test

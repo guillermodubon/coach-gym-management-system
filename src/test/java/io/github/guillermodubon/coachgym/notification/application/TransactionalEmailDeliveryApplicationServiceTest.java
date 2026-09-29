@@ -271,7 +271,7 @@ class TransactionalEmailDeliveryApplicationServiceTest {
     }
 
     @Test
-    void disabledOrUnexpectedSenderFailureIsConvertedToSafePersistedFailure() {
+    void escapedSenderExceptionIsPersistedAsAmbiguousWithoutLeakingTransportDetails() {
         when(sourceResolver.resolvePaymentReceiptForPayment(PAYMENT_ID)).thenReturn(source);
         when(composer.compose(source)).thenReturn(composed);
         when(deliveryQuery.findByIdempotencyKeyDigest(anyString())).thenReturn(Optional.empty());
@@ -282,17 +282,51 @@ class TransactionalEmailDeliveryApplicationServiceTest {
                 .thenAnswer(invocation -> invocation.getArgument(0, EmailDeliveryAttemptDetails.class));
         when(deliveryStore.finalizeAttempt(
                 any(UUID.class), eq(EmailDeliveryStatus.FAILED),
-                eq(EmailDeliveryFailureCode.UNEXPECTED_FAILURE),
-                eq("The email could not be delivered."), any(Instant.class), eq(null), eq(0L)))
+                eq(EmailDeliveryFailureCode.AMBIGUOUS_TRANSPORT_OUTCOME),
+                eq("The email transport outcome could not be confirmed."),
+                any(Instant.class), eq(null), eq(0L)))
                 .thenAnswer(invocation -> failed(invocation.getArgument(0, UUID.class),
-                        EmailDeliveryFailureCode.UNEXPECTED_FAILURE,
-                        "The email could not be delivered."));
+                        EmailDeliveryFailureCode.AMBIGUOUS_TRANSPORT_OUTCOME,
+                        "The email transport outcome could not be confirmed."));
 
         EmailDeliveryDetails result = service.requestPaymentReceiptEmail(
                 new RequestPaymentReceiptEmailCommand(PAYMENT_ID), actor());
 
-        assertThat(result.lastFailureMessage()).isEqualTo("The email could not be delivered.");
+        assertThat(result.status()).isEqualTo(EmailDeliveryStatus.FAILED);
+        assertThat(result.lastFailureCode())
+                .isEqualTo(EmailDeliveryFailureCode.AMBIGUOUS_TRANSPORT_OUTCOME);
+        assertThat(result.lastFailureMessage())
+                .isEqualTo("The email transport outcome could not be confirmed.")
+                .doesNotContain("smtp secret");
+        assertThat(new EmailDeliveryLifecyclePolicy().isRetryEligible(result)).isFalse();
         verify(sender).send(composed.message());
+    }
+
+    @Test
+    void nullSenderResultIsPersistedAsAmbiguous() {
+        when(sourceResolver.resolvePaymentReceiptForPayment(PAYMENT_ID)).thenReturn(source);
+        when(composer.compose(source)).thenReturn(composed);
+        when(deliveryQuery.findByIdempotencyKeyDigest(anyString())).thenReturn(Optional.empty());
+        when(deliveryStore.createPending(any(EmailDeliveryDetails.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0, EmailDeliveryDetails.class));
+        when(sender.send(composed.message())).thenReturn(null);
+        when(deliveryStore.appendAttempt(any(EmailDeliveryAttemptDetails.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0, EmailDeliveryAttemptDetails.class));
+        when(deliveryStore.finalizeAttempt(
+                any(UUID.class), eq(EmailDeliveryStatus.FAILED),
+                eq(EmailDeliveryFailureCode.AMBIGUOUS_TRANSPORT_OUTCOME),
+                eq("The email transport outcome could not be confirmed."),
+                any(Instant.class), eq(null), eq(0L)))
+                .thenAnswer(invocation -> failed(invocation.getArgument(0, UUID.class),
+                        EmailDeliveryFailureCode.AMBIGUOUS_TRANSPORT_OUTCOME,
+                        "The email transport outcome could not be confirmed."));
+
+        EmailDeliveryDetails result = service.requestPaymentReceiptEmail(
+                new RequestPaymentReceiptEmailCommand(PAYMENT_ID), actor());
+
+        assertThat(result.lastFailureCode())
+                .isEqualTo(EmailDeliveryFailureCode.AMBIGUOUS_TRANSPORT_OUTCOME);
+        assertThat(new EmailDeliveryLifecyclePolicy().isRetryEligible(result)).isFalse();
     }
 
     @Test

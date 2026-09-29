@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.accesscredential;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doAnswer;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -11,6 +12,7 @@ import com.google.zxing.BinaryBitmap;
 import com.google.zxing.MultiFormatReader;
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
 import com.google.zxing.common.HybridBinarizer;
+import io.github.guillermodubon.coachgym.accesscredential.application.AccessCredentialStore;
 import io.github.guillermodubon.coachgym.maintenance.AbstractIncidentApiIntegrationTest;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
@@ -30,6 +32,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,10 +41,14 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MvcResult;
 
 /** End-to-end lifecycle, concurrency, compensation and privacy regression coverage. */
 class AccessCredentialLifecycleIntegrationTest extends AbstractIncidentApiIntegrationTest {
+
+    @MockitoSpyBean
+    private AccessCredentialStore credentialStore;
 
     private static final Path STORAGE = createStorage();
 
@@ -253,12 +260,43 @@ class AccessCredentialLifecycleIntegrationTest extends AbstractIncidentApiIntegr
     void revokeVersusReplaceProducesOneValidCanonicalResult() throws Exception {
         UUID clientId = createActiveClient();
         UUID originalId = issueCredential(clientId, loginAsAdmin());
-        List<HttpResult> results = concurrently(
-                () -> revokeRequest(clientId, loginAsAdmin()),
-                () -> replaceRequest(clientId, loginAsReceptionist()));
+        CountDownLatch replacementHasClientLock = new CountDownLatch(1);
+        CountDownLatch continueReplacement = new CountDownLatch(1);
+        AtomicBoolean firstLifecycleLock = new AtomicBoolean();
+        doAnswer(invocation -> {
+            invocation.callRealMethod();
+            if (firstLifecycleLock.compareAndSet(false, true)) {
+                replacementHasClientLock.countDown();
+                assertThat(continueReplacement.await(30, TimeUnit.SECONDS))
+                        .as("replacement remains in its transaction until revoke is attempted")
+                        .isTrue();
+            }
+            return null;
+        }).when(credentialStore).lockClientForLifecycle(clientId);
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        HttpResult replacement;
+        HttpResult revocation;
+        try {
+            Future<HttpResult> replacementFuture = executor.submit(
+                    () -> replaceRequest(clientId, loginAsReceptionist()));
+            assertThat(replacementHasClientLock.await(10, TimeUnit.SECONDS))
+                    .as("replacement should acquire the client lifecycle lock")
+                    .isTrue();
+            revocation = revokeRequest(clientId, loginAsAdmin());
+            continueReplacement.countDown();
+            replacement = replacementFuture.get(30, TimeUnit.SECONDS);
+        } finally {
+            continueReplacement.countDown();
+            executor.shutdownNow();
+        }
+
+        List<HttpResult> results = List.of(replacement, revocation);
 
         assertThat(results).extracting(HttpResult::status)
                 .containsExactlyInAnyOrder(200, 409);
+        assertThat((String) JsonPath.read(revocation.body(), "$.code"))
+                .isEqualTo("ACCESS_CREDENTIAL_VERSION_CONFLICT");
         assertThat(jdbcTemplate.queryForObject("""
                 select count(*) from gym.access_credentials
                 where client_id = ? and status = 'ACTIVE'
