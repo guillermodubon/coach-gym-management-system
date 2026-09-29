@@ -108,7 +108,7 @@ class StaffInvitationSchemaMigrationContractTest {
     }
 
     @Test
-    void migrationChainIsUniqueAndContiguousThroughV42() throws Exception {
+    void migrationChainIsUniqueAndContiguousThroughV43() throws Exception {
         try (Stream<Path> files = Files.list(MIGRATION.getParent())) {
             var versions = files
                     .map(path -> VERSIONED_MIGRATION.matcher(path.getFileName().toString()))
@@ -118,9 +118,9 @@ class StaffInvitationSchemaMigrationContractTest {
                     .toList();
 
             assertThat(versions).doesNotHaveDuplicates();
-            assertThat(versions).contains(37, 38, 39, 40, 41, 42);
+            assertThat(versions).contains(37, 38, 39, 40, 41, 42, 43);
             assertThat(versions)
-                    .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, 42)
+                    .containsExactlyElementsOf(java.util.stream.IntStream.rangeClosed(1, 43)
                             .boxed().toList());
         }
     }
