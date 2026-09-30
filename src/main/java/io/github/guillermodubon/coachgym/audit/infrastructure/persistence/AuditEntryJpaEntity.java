@@ -1066,6 +1066,13 @@ class AuditEntryJpaEntity {
         metadata.put("filtersPresent", event.filterSummary());
         metadata.put("sortField", event.sortField().name());
         metadata.put("sortDirection", event.sortDirection().name());
+        metadata.put("visibilityScope", event.visibilityScope().organizationWide()
+                ? "ORGANIZATION"
+                : "BRANCH");
+        metadata.put("branchIds", event.visibilityScope().branchIds().stream()
+                .map(UUID::toString)
+                .sorted()
+                .toList());
         metadata.put("rowCount", event.rowCount());
         metadata.put("maximumRows", event.maximumRows());
         metadata.put("format", event.format());

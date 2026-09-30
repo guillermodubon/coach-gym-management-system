@@ -85,6 +85,8 @@ assertThat(AuditQueryPolicy.allowedActionCodes()).contains(
         assertThat(query.actorIdentifier()).isEqualTo("admin.user");
         assertThat(query.actionCode()).isEqualTo("PLAN_CREATED");
         assertThat(query.resourceType()).isEqualTo("MEMBERSHIP_PLAN");
+        assertThat(query.result()).isNull();
+        assertThat(query.branchIds()).isEmpty();
         assertThat(query.resourceCode()).isEqualTo("PLAN-001");
         assertThat(query.sortField()).isEqualTo(AuditSortField.OCCURRED_AT);
         assertThat(query.direction()).isEqualTo(AuditSortDirection.DESC);
@@ -135,9 +137,29 @@ assertThat(AuditQueryPolicy.allowedActionCodes()).contains(
     }
 
     @Test
-    void rejectsResultAndArbitraryMetadataFiltersBecauseSchemaDoesNotPersistThem() {
+    void allowsOnlyPersistedResultValuesAndRejectsArbitraryMetadataFilters() {
+        AuditSearchQuery filtered = AuditSearchQuery.from(
+                null, null, null, null, " denied ", null, null, null,
+                Set.of(UUID.fromString("00000000-0000-0000-0000-000000000002"),
+                        UUID.fromString("00000000-0000-0000-0000-000000000001")),
+                null, null, 0, 25, null, null);
+        assertThat(filtered.result()).isEqualTo("DENIED");
+        assertThat(filtered.branchIds()).containsExactly(
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
+                UUID.fromString("00000000-0000-0000-0000-000000000002"));
+        assertThatThrownBy(() -> filtered.branchIds().clear())
+                .isInstanceOf(UnsupportedOperationException.class);
+
         assertThatThrownBy(() -> AuditSearchQuery.from(
                 null, null, null, null, "SUCCESS", null, null, null,
+                null, null, 0, 25, null, null))
+                .isInstanceOf(AuditQueryValidationException.class);
+
+        assertThatThrownBy(() -> new AuditSearchQuery(
+                null, null, null, null, null, null, null, null,
+                java.util.stream.IntStream.range(0, AuditQueryPolicy.MAX_BRANCH_IDS + 1)
+                        .mapToObj(index -> UUID.randomUUID())
+                        .collect(java.util.stream.Collectors.toSet()),
                 null, null, 0, 25, null, null))
                 .isInstanceOf(AuditQueryValidationException.class);
 
@@ -146,7 +168,8 @@ assertThat(AuditQueryPolicy.allowedActionCodes()).contains(
                         .map(RecordComponent::getName)
                         .toArray(String[]::new));
         assertThat(componentNames)
-                .doesNotContain("result", "metadata", "metadataKey", "column");
+                .contains("result", "branchIds")
+                .doesNotContain("metadata", "metadataKey", "column");
     }
 
     @Test

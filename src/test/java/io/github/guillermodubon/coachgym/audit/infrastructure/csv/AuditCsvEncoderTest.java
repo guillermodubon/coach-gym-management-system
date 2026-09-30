@@ -26,7 +26,7 @@ class AuditCsvEncoderTest {
         assertThat(writer.toString()).isEqualTo(
                 "entry_id,occurred_at,actor_user_id,actor_identifier,"
                         + "action_code,resource_type,resource_id,resource_code,"
-                        + "summary,correlation_id,metadata\r\n");
+                        + "summary,correlation_id,branch_id,metadata\r\n");
         byte[] bytes = writer.toString().getBytes(StandardCharsets.UTF_8);
         assertThat(bytes).isNotEmpty();
         assertThat(bytes[0]).isNotEqualTo((byte) 0xef);

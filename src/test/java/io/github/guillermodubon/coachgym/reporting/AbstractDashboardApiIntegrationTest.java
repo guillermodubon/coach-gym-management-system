@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 
 abstract class AbstractDashboardApiIntegrationTest
@@ -13,6 +14,29 @@ abstract class AbstractDashboardApiIntegrationTest
     @BeforeEach
     void cleanDashboardFixtures() {
         jdbcTemplate.update("delete from gym.notifications");
+        normalizeReportingScopes();
+    }
+
+    @AfterEach
+    void restoreReportingStaffScopes() {
+        normalizeReportingScopes();
+    }
+
+    private void normalizeReportingScopes() {
+        if (adminId != null) {
+            jdbcTemplate.update("""
+                    update gym.staff_scopes
+                    set scope_type = 'ORGANIZATION', version = version + 1
+                    where user_id = ? and scope_type <> 'ORGANIZATION'
+                    """, adminId);
+        }
+        if (receptionistId != null) {
+            jdbcTemplate.update("""
+                    update gym.staff_scopes
+                    set scope_type = 'BRANCH', version = version + 1
+                    where user_id = ? and scope_type <> 'BRANCH'
+                    """, receptionistId);
+        }
     }
 
     protected UUID insertUnreadNotification(UUID recipientUserId) {

@@ -49,7 +49,7 @@ class StaffIdentityAbuseSchemaMigrationContractTest {
 
             assertThat(versions).doesNotHaveDuplicates();
             assertThat(versions).isSortedAccordingTo(Comparator.naturalOrder());
-            assertThat(versions.get(versions.size() - 1)).isEqualTo(42);
+            assertThat(versions.get(versions.size() - 1)).isEqualTo(43);
         }
     }
 }

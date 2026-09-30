@@ -16,6 +16,7 @@ public enum AuditExportColumn {
     RESOURCE_CODE("resource_code"),
     SUMMARY("summary"),
     CORRELATION_ID("correlation_id"),
+    BRANCH_ID("branch_id"),
     METADATA("metadata");
 
     private static final List<AuditExportColumn> ORDERED_COLUMNS =

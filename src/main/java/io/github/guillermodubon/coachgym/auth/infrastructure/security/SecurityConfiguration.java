@@ -259,9 +259,9 @@ class SecurityConfiguration {
                         .requestMatchers("/api/v1/email-deliveries/**")
                         .authenticated()
                         .requestMatchers("/api/v1/reporting/**")
-                        .authenticated()
+                        .hasAnyRole("ADMIN", "RECEPTIONIST")
                         .requestMatchers("/api/v1/audit-entries/**")
-                        .authenticated()
+                        .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/organization")
                                 .hasRole("ADMIN")
                         .requestMatchers(

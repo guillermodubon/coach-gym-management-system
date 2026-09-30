@@ -15,13 +15,26 @@ class DashboardSecurityApiIntegrationTest
     }
 
     @Test
-    void authenticatedCurrentRolesCanAccessDashboard() throws Exception {
+    void onlyPersistedOrganizationAdministratorsCanUseTheLegacyGlobalDashboard()
+            throws Exception {
         mockMvc.perform(get("/api/v1/reporting/dashboard")
                         .session(loginAsAdmin()))
                 .andExpect(status().isOk());
 
         mockMvc.perform(get("/api/v1/reporting/dashboard")
                         .session(loginAsReceptionist()))
-                .andExpect(status().isOk());
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void branchAdministratorCannotUseTheLegacyOrganizationWideDashboard() throws Exception {
+        var session = loginAsAdmin();
+        jdbcTemplate.update("""
+                update gym.staff_scopes set scope_type = 'BRANCH', version = version + 1
+                where user_id = ?
+                """, adminId);
+
+        mockMvc.perform(get("/api/v1/reporting/dashboard").session(session))
+                .andExpect(status().isForbidden());
     }
 }

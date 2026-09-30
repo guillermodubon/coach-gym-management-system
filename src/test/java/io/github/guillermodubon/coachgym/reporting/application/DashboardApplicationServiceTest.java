@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.reporting.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -16,20 +17,24 @@ import io.github.guillermodubon.coachgym.reporting.MembershipDashboardDetails;
 import io.github.guillermodubon.coachgym.reporting.OperationalDashboardDetails;
 import io.github.guillermodubon.coachgym.reporting.PaymentDashboardDetails;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.RoleCode;
+import io.github.guillermodubon.coachgym.user.StaffAccountStatus;
+import io.github.guillermodubon.coachgym.user.StaffAuthorizationContext;
+import io.github.guillermodubon.coachgym.user.StaffScopeQuery;
+import io.github.guillermodubon.coachgym.user.StaffScopeType;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.authentication.TestingAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 @ExtendWith(MockitoExtension.class)
 class DashboardApplicationServiceTest {
@@ -60,6 +65,9 @@ class DashboardApplicationServiceTest {
 
     @Mock
     private DashboardNotificationQuery notificationQuery;
+
+    @Mock
+    private StaffScopeQuery staffScopeQuery;
 
     @Mock
     private AuthenticatedActor actor;
@@ -93,18 +101,12 @@ class DashboardApplicationServiceTest {
                 incidentQuery,
                 maintenanceQuery,
                 notificationQuery,
+                staffScopeQuery,
                 clock);
     }
 
-    @AfterEach
-    void clearSecurityContext() {
-        SecurityContextHolder.clearContext();
-    }
-
     @Test
-    void administratorReceivesCompleteDashboard() {
-        authenticate("ROLE_ADMIN");
-
+    void persistedOrganizationAdministratorReceivesCompleteDashboard() {
         UUID actorId = common(actorId());
 
         when(paymentQuery.summarize(period, "USD"))
@@ -164,111 +166,60 @@ class DashboardApplicationServiceTest {
     }
 
     @Test
-    void receptionistReceivesLimitedDashboardWithoutRestrictedQueries() {
-        authenticate("ROLE_RECEPTIONIST");
+    void rejectsReceptionistBeforeExecutingAnyGlobalDashboardQuery() {
+        UUID actorId = actorId();
+        when(actor.id()).thenReturn(actorId);
+        when(staffScopeQuery.findAuthorizationContext(actorId)).thenReturn(Optional.of(
+                new StaffAuthorizationContext(
+                        actorId,
+                        Set.of(RoleCode.RECEPTIONIST),
+                        StaffAccountStatus.ACTIVE,
+                        StaffScopeType.BRANCH,
+                        Set.of(UUID.randomUUID()))));
 
-        UUID actorId = common(actorId());
-
-        OperationalDashboardDetails result =
-                service.getDashboard(
-                        DashboardQuery.defaults(),
-                        actor);
-
-        assertThat(result.administrativeSectionsIncluded())
-                .isFalse();
-
-        assertThat(result.payments())
-                .isNull();
-
-        assertThat(result.equipment())
-                .isNull();
-
-        assertThat(result.incidents())
-                .isNull();
-
-        assertThat(result.maintenance())
-                .isNull();
-
-        assertThat(result.memberships())
-                .isNotNull();
-
-        assertThat(result.access())
-                .isNotNull();
-
-        assertThat(result.notifications())
-                .isNotNull();
-
-        verify(notificationQuery)
-                .summarize(actorId);
-
+        assertThatThrownBy(() -> service.getDashboard(DashboardQuery.defaults(), actor))
+                .isInstanceOf(ReportingAccessDeniedException.class);
         verifyNoInteractions(
+                periodResolver,
+                settingsQuery,
+                membershipQuery,
+                accessQuery,
                 paymentQuery,
                 equipmentQuery,
                 incidentQuery,
                 maintenanceQuery);
+        org.mockito.Mockito.verifyNoInteractions(notificationQuery);
     }
 
     @Test
-    void administratorRoleTakesPrecedenceForMultiRoleActor() {
-        authenticate(
-                "ROLE_ADMIN",
-                "ROLE_RECEPTIONIST");
+    void rejectsBranchAdministratorEvenWhenThePersistedRoleIsAdmin() {
+        UUID actorId = actorId();
+        when(actor.id()).thenReturn(actorId);
+        when(staffScopeQuery.findAuthorizationContext(actorId)).thenReturn(Optional.of(
+                new StaffAuthorizationContext(
+                        actorId,
+                        Set.of(RoleCode.ADMIN),
+                        StaffAccountStatus.ACTIVE,
+                        StaffScopeType.BRANCH,
+                        Set.of(UUID.randomUUID()))));
 
-        common(actorId());
-
-        when(paymentQuery.summarize(period, "USD"))
-                .thenReturn(
-                        new PaymentDashboardDetails(
-                                0,
-                                BigDecimal.ZERO,
-                                "USD"));
-
-        when(equipmentQuery.summarize())
-                .thenReturn(
-                        new EquipmentDashboardDetails(
-                                0,
-                                0,
-                                0));
-
-        when(incidentQuery.summarize())
-                .thenReturn(
-                        new IncidentDashboardDetails(
-                                0,
-                                0,
-                                0));
-
-        when(maintenanceQuery.summarize(
-                period.operationalDate()))
-                .thenReturn(
-                        new MaintenanceDashboardDetails(
-                                0,
-                                0,
-                                0));
-
-        OperationalDashboardDetails result =
-                service.getDashboard(
-                        null,
-                        actor);
-
-        assertThat(result.administrativeSectionsIncluded())
-                .isTrue();
-
-        assertThat(result.payments())
-                .isNotNull();
-
-        assertThat(result.equipment())
-                .isNotNull();
-
-        assertThat(result.incidents())
-                .isNotNull();
-
-        assertThat(result.maintenance())
-                .isNotNull();
+        assertThatThrownBy(() -> service.getDashboard(DashboardQuery.defaults(), actor))
+                .isInstanceOf(ReportingAccessDeniedException.class);
+        verifyNoInteractions(periodResolver, settingsQuery, membershipQuery,
+                accessQuery, paymentQuery, equipmentQuery, incidentQuery,
+                maintenanceQuery, notificationQuery);
     }
 
     private UUID common(UUID actorId) {
         when(actor.id())
                 .thenReturn(actorId);
+        when(staffScopeQuery.findAuthorizationContext(actorId)).thenReturn(Optional.of(
+                new StaffAuthorizationContext(
+                        actorId,
+                        Set.of(RoleCode.ADMIN),
+                        StaffAccountStatus.ACTIVE,
+                        StaffScopeType.ORGANIZATION,
+                        Set.of())));
 
         when(periodResolver.resolve(
                 nullable(DashboardQuery.class)))
@@ -301,17 +252,6 @@ class DashboardApplicationServiceTest {
                                 5));
 
         return actorId;
-    }
-
-    private static void authenticate(String... authorities) {
-        TestingAuthenticationToken authentication =
-                new TestingAuthenticationToken(
-                        "dashboard-user",
-                        null,
-                        authorities);
-
-        SecurityContextHolder.getContext()
-                .setAuthentication(authentication);
     }
 
     private static UUID actorId() {

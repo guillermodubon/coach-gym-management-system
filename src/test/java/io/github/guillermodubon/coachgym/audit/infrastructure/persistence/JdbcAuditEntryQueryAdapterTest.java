@@ -18,6 +18,7 @@ import io.github.guillermodubon.coachgym.audit.AuditExportLimitExceededException
 import io.github.guillermodubon.coachgym.audit.AuditExportPolicy;
 import io.github.guillermodubon.coachgym.audit.AuditExportQuery;
 import io.github.guillermodubon.coachgym.audit.AuditSearchQuery;
+import io.github.guillermodubon.coachgym.audit.AuditVisibilityScope;
 import io.github.guillermodubon.coachgym.audit.application.AuditQueryDataAccessException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -28,10 +29,12 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -72,7 +75,8 @@ class JdbcAuditEntryQueryAdapterTest {
                 any(RowMapper.class)))
                 .thenReturn(List.of(summary()));
 
-        AuditEntryPage page = adapter().findAll(AuditSearchQuery.defaults());
+        AuditEntryPage page = adapter().findAll(
+                AuditSearchQuery.defaults(), AuditVisibilityScope.organization());
 
         assertThat(page.items()).hasSize(1);
         assertThat(page.items().getFirst().id()).isEqualTo(ENTRY_ID);
@@ -89,6 +93,42 @@ class JdbcAuditEntryQueryAdapterTest {
     }
 
     @Test
+    void bindsBranchResultAndScopeAsParametersForCountAndPageSql() {
+        UUID branchId = UUID.randomUUID();
+        AuditSearchQuery query = AuditSearchQuery.from(
+                null, null, "ACCESS_DENIED", "ACCESS_RECORD", "DENIED",
+                null, null, null, Set.of(branchId), null, null,
+                0, 25, null, null);
+        AuditVisibilityScope scope = AuditVisibilityScope.branches(Set.of(branchId));
+        when(jdbcTemplate.queryForObject(
+                eq(JdbcAuditEntryQueryAdapter.countSql(scope)),
+                any(MapSqlParameterSource.class),
+                eq(Long.class)))
+                .thenReturn(0L);
+        when(jdbcTemplate.query(
+                eq(JdbcAuditEntryQueryAdapter.pageSql(query, scope)),
+                any(MapSqlParameterSource.class),
+                any(RowMapper.class)))
+                .thenReturn(List.of());
+
+        adapter().findAll(query, scope);
+
+        ArgumentCaptor<MapSqlParameterSource> parameters =
+                ArgumentCaptor.forClass(MapSqlParameterSource.class);
+        verify(jdbcTemplate).queryForObject(
+                eq(JdbcAuditEntryQueryAdapter.countSql(scope)), parameters.capture(), eq(Long.class));
+        assertThat(parameters.getValue().getValue("result")).isEqualTo("DENIED");
+        assertThat(parameters.getValue().getValue("branchIds"))
+                .isEqualTo(List.of(branchId.toString()));
+        assertThat(JdbcAuditEntryQueryAdapter.countSql(scope))
+                .contains("metadata ->> 'branchId' is not null",
+                        "metadata ->> 'result' = cast(:result as varchar)",
+                        "metadata ->> 'branchId' in (:branchIds)");
+        assertThat(JdbcAuditEntryQueryAdapter.countSql(scope))
+                .doesNotContain("organizationWide", "cast(:organizationWide");
+    }
+
+    @Test
     void mapsDetailMetadataThroughTheSanitizingProjector() throws Exception {
         ResultSet resultSet = detailResultSet();
         when(jdbcTemplate.query(
@@ -101,7 +141,8 @@ class JdbcAuditEntryQueryAdapterTest {
                     return List.of(mapper.mapRow(resultSet, 0));
                 });
 
-        Optional<AuditEntryDetails> details = adapter().findById(ENTRY_ID);
+        Optional<AuditEntryDetails> details = adapter().findById(
+                ENTRY_ID, AuditVisibilityScope.organization());
 
         assertThat(details).isPresent();
         assertThat(details.orElseThrow().metadata().values())
@@ -119,7 +160,8 @@ class JdbcAuditEntryQueryAdapterTest {
                 any(RowMapper.class)))
                 .thenReturn(List.of());
 
-        assertThat(adapter().findById(ENTRY_ID)).isEmpty();
+        assertThat(adapter().findById(
+                ENTRY_ID, AuditVisibilityScope.organization())).isEmpty();
     }
 
     @Test
@@ -130,14 +172,16 @@ class JdbcAuditEntryQueryAdapterTest {
                 eq(Long.class)))
                 .thenThrow(new DataRetrievalFailureException("password=secret"));
 
-        assertThatThrownBy(() -> adapter().findAll(AuditSearchQuery.defaults()))
+        assertThatThrownBy(() -> adapter().findAll(
+                AuditSearchQuery.defaults(), AuditVisibilityScope.organization()))
                 .isInstanceOf(AuditQueryDataAccessException.class)
                 .hasMessage("Audit entries could not be read.");
     }
 
     @Test
     void nullDetailIdIsRejectedBeforeDatabaseAccess() {
-        assertThatThrownBy(() -> adapter().findById(null))
+        assertThatThrownBy(() -> adapter().findById(
+                null, AuditVisibilityScope.organization()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("Audit entry id must be provided.");
 
@@ -155,12 +199,23 @@ class JdbcAuditEntryQueryAdapterTest {
                 .doesNotContain("?1", "${", "rawSql");
         assertThat(JdbcAuditEntryQueryAdapter.PAGE_SQL_DESC)
                 .contains("order by occurred_at desc, id desc")
-                .doesNotContain("metadata");
+                .contains("metadata ->> 'result'")
+                .doesNotContain("metadata ->> 'branchId'")
+                .doesNotContain("metadata::text");
+        AuditVisibilityScope branchScope = AuditVisibilityScope.branches(Set.of(UUID.randomUUID()));
+        String branchPageSql = JdbcAuditEntryQueryAdapter.pageSql(
+                AuditSearchQuery.defaults(), branchScope);
+        assertThat(branchPageSql)
+                .contains("metadata ->> 'branchId' is not null",
+                        "metadata ->> 'branchId' in (:branchIds)")
+                .doesNotContain("organizationWide", "cast(:organizationWide", "metadata::text");
         assertThat(JdbcAuditEntryQueryAdapter.PAGE_SQL_ASC)
                 .contains("order by occurred_at asc, id asc")
-                .doesNotContain("metadata");
+                .doesNotContain("metadata::text");
         assertThat(JdbcAuditEntryQueryAdapter.EXPORT_SQL_DESC)
                 .contains("metadata::text as metadata_json")
+                .contains("metadata ->> 'branchId' as branch_id")
+                .contains("metadata ->> 'result'")
                 .contains("order by occurred_at desc, id asc")
                 .contains("limit ?");
         assertThat(JdbcAuditEntryQueryAdapter.EXPORT_SQL_ASC)
@@ -182,6 +237,7 @@ class JdbcAuditEntryQueryAdapterTest {
         assertThatThrownBy(() -> adapter().streamExport(
                 exportQuery(),
                 new AuditExportPolicy(Duration.ofDays(1), 2),
+                AuditVisibilityScope.organization(),
                 row -> { }))
                 .isInstanceOf(AuditExportLimitExceededException.class);
 
@@ -202,6 +258,7 @@ class JdbcAuditEntryQueryAdapterTest {
         assertThatThrownBy(() -> adapter().streamExport(
                 exportQuery(),
                 new AuditExportPolicy(Duration.ofDays(1), 2),
+                AuditVisibilityScope.organization(),
                 row -> { }))
                 .isInstanceOf(AuditExportDataAccessException.class)
                 .hasMessage("Audit export data could not be read.")
@@ -220,6 +277,7 @@ class JdbcAuditEntryQueryAdapterTest {
         adapter().streamExport(
                 exportQuery(),
                 new AuditExportPolicy(Duration.ofDays(1), 2),
+                AuditVisibilityScope.organization(),
                 row -> { });
 
         var captor = org.mockito.ArgumentCaptor.forClass(
@@ -232,7 +290,8 @@ class JdbcAuditEntryQueryAdapterTest {
         Connection connection = mock(Connection.class);
         PreparedStatement statement = mock(PreparedStatement.class);
         when(connection.prepareStatement(
-                JdbcAuditEntryQueryAdapter.EXPORT_SQL_DESC,
+                JdbcAuditEntryQueryAdapter.exportSql(
+                        exportQuery(), AuditVisibilityScope.organization()),
                 ResultSet.TYPE_FORWARD_ONLY,
                 ResultSet.CONCUR_READ_ONLY))
                 .thenReturn(statement);
@@ -248,10 +307,55 @@ class JdbcAuditEntryQueryAdapterTest {
                         "streamExport",
                         io.github.guillermodubon.coachgym.audit.AuditExportQuery.class,
                         AuditExportPolicy.class,
+                        AuditVisibilityScope.class,
                         io.github.guillermodubon.coachgym.audit.AuditExportSink.class)
                 .getAnnotation(Transactional.class)
                 .readOnly())
                 .isTrue();
+    }
+
+    @Test
+    void exportCountAndStreamApplyAuthorizedBranchAndResultPredicatesWithParameters()
+            throws Exception {
+        UUID branchId = UUID.randomUUID();
+        AuditExportQuery query = AuditExportQuery.from(
+                null, null, null, null, "denied", null, null, null,
+                Set.of(branchId),
+                Instant.parse("2026-09-16T00:00:00Z"),
+                Instant.parse("2026-09-16T23:59:59Z"),
+                null, null);
+        AuditVisibilityScope scope = AuditVisibilityScope.branches(Set.of(branchId));
+        String sql = JdbcAuditEntryQueryAdapter.exportSql(query, scope);
+
+        assertThat(sql)
+                .contains("metadata ->> 'result' = cast(? as varchar)")
+                .contains("metadata ->> 'branchId' is not null")
+                .contains("metadata ->> 'branchId' in (cast(? as varchar))")
+                .doesNotContain(branchId.toString());
+        assertThat(JdbcAuditEntryQueryAdapter.exportCountSql(scope))
+                .contains("metadata ->> 'result' = cast(? as varchar)")
+                .contains("metadata ->> 'branchId' in (cast(? as varchar))");
+
+        when(streamJdbcTemplate.query(
+                any(PreparedStatementCreator.class),
+                any(PreparedStatementSetter.class),
+                any(ResultSetExtractor.class)))
+                .thenReturn(0L)
+                .thenReturn(null);
+        adapter().streamExport(query, new AuditExportPolicy(Duration.ofDays(1), 10),
+                scope, row -> { });
+
+        ArgumentCaptor<PreparedStatementSetter> setters =
+                ArgumentCaptor.forClass(PreparedStatementSetter.class);
+        verify(streamJdbcTemplate, times(2)).query(
+                any(PreparedStatementCreator.class),
+                setters.capture(),
+                any(ResultSetExtractor.class));
+        PreparedStatement statement = mock(PreparedStatement.class);
+        setters.getAllValues().getFirst().setValues(statement);
+        verify(statement).setObject(19, "DENIED");
+        verify(statement).setObject(20, "DENIED");
+        verify(statement).setObject(21, branchId.toString());
     }
 
     private JdbcAuditEntryQueryAdapter adapter() {

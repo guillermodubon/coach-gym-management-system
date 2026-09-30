@@ -12,11 +12,12 @@ import java.util.UUID;
  */
 public interface AuditEntryQuery {
 
-    /** Returns one bounded summary page for a validated query. */
-    AuditEntryPage findAll(AuditSearchQuery query);
+    /** Returns one bounded summary page after applying the resolved visibility scope. */
+    AuditEntryPage findAll(AuditSearchQuery query, AuditVisibilityScope visibilityScope);
 
-    /** Returns safe details for an entry, or empty when its UUID is absent. */
-    Optional<AuditEntryDetails> findById(UUID auditEntryId);
+    /** Returns safe details only when visible within the independently resolved scope. */
+    Optional<AuditEntryDetails> findById(
+            UUID auditEntryId, AuditVisibilityScope visibilityScope);
 
     /**
      * Streams bounded, already-sanitized export rows to the supplied sink.
@@ -28,15 +29,18 @@ public interface AuditEntryQuery {
     void streamExport(
             AuditExportQuery query,
             AuditExportPolicy policy,
+            AuditVisibilityScope visibilityScope,
             AuditExportSink sink);
 
     /** Alias used by application services that call list operations "search". */
-    default AuditEntryPage search(AuditSearchQuery query) {
-        return findAll(query);
+    default AuditEntryPage search(
+            AuditSearchQuery query, AuditVisibilityScope visibilityScope) {
+        return findAll(query, visibilityScope);
     }
 
     /** Alias matching other module query ports. */
-    default AuditEntryPage findPage(AuditSearchQuery query) {
-        return findAll(query);
+    default AuditEntryPage findPage(
+            AuditSearchQuery query, AuditVisibilityScope visibilityScope) {
+        return findAll(query, visibilityScope);
     }
 }

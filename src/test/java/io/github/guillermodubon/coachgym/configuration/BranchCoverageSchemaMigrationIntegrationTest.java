@@ -91,7 +91,7 @@ class BranchCoverageSchemaMigrationIntegrationTest {
 
         flyway.validate();
 assertThat(flyway.info().current().getVersion().getVersion())
-        .isEqualTo("42");
+        .isEqualTo("43");
 
 assertThat(jdbc.queryForObject("""
         select count(*)

@@ -23,10 +23,10 @@ class DashboardNotificationMetricIntegrationTest
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.notifications.unread").value(2));
 
-        mockMvc.perform(get("/api/v1/reporting/dashboard")
+        mockMvc.perform(get("/api/v1/notifications/unread-count")
                         .session(loginAsReceptionist()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.notifications.unread").value(1));
+                .andExpect(jsonPath("$.count").value(1));
 
         org.assertj.core.api.Assertions.assertThat(unread).isNotNull();
     }

@@ -34,10 +34,11 @@ class DashboardController {
     @Operation(
             summary = "Get the operational dashboard",
             description =
-                    "ADMIN receives complete operational and financial metrics. "
-                            + "RECEPTIONIST receives memberships, today's access "
-                            + "metrics, and personal unread notifications only. "
-                            + "The endpoint is read-only and does not require CSRF.",
+                    "Legacy organization-wide dashboard retained for compatibility and "
+                            + "restricted to active ADMIN + ORGANIZATION staff scope. Branch-scoped "
+                            + "administrators and RECEPTIONIST + BRANCH staff must use the "
+                            + "scope-authorized "
+                            + "reporting summary. The endpoint is read-only and does not require CSRF.",
             security = @SecurityRequirement(
                     name = "sessionCookie"))
     OperationalDashboardResponse dashboard(

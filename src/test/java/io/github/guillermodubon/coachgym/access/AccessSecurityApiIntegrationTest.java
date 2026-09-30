@@ -28,7 +28,7 @@ class AccessSecurityApiIntegrationTest extends AbstractAccessApiIntegrationTest 
 
     @Test
     void postRequiresCsrfButGetDoesNot() throws Exception {
-        MockHttpSession session = loginAsAdmin();
+        MockHttpSession session = loginAsAdminWithActiveBranch();
         mockMvc.perform(post("/api/v1/access/check-in").session(session)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"identifier\":\"XYZ-1\"}"))
@@ -41,8 +41,8 @@ class AccessSecurityApiIntegrationTest extends AbstractAccessApiIntegrationTest 
 
     @Test
     void adminAndReceptionistCanPost() throws Exception {
-        checkIn(loginAsAdmin(), "XYZ-ADMIN");
-        checkIn(loginAsReceptionist(), "XYZ-RECEPTIONIST");
+        checkIn(loginAsAdminWithActiveBranch(), "XYZ-ADMIN");
+        checkIn(loginAsReceptionistWithActiveBranch(), "XYZ-RECEPTIONIST");
         org.assertj.core.api.Assertions.assertThat(countAccessRows()).isEqualTo(2);
     }
 }

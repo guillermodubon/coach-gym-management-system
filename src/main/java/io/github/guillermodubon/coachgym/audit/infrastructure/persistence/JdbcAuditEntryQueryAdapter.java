@@ -13,6 +13,7 @@ import io.github.guillermodubon.coachgym.audit.AuditExportStreamException;
 import io.github.guillermodubon.coachgym.audit.AuditExportValidationException;
 import io.github.guillermodubon.coachgym.audit.AuditQueryValidationException;
 import io.github.guillermodubon.coachgym.audit.AuditSearchQuery;
+import io.github.guillermodubon.coachgym.audit.AuditVisibilityScope;
 import io.github.guillermodubon.coachgym.audit.AuditSortDirection;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryProjector;
 import io.github.guillermodubon.coachgym.audit.application.AuditEntryRow;
@@ -77,29 +78,39 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
                    or occurred_at <= cast(:occurredUntil as timestamptz))
             """;
 
+    static final String QUERY_WHERE_SQL = WHERE_SQL + """
+              and (cast(:result as varchar) is null
+                   or metadata ->> 'result' = cast(:result as varchar))
+            """;
+
     static final String COUNT_SQL = """
             select count(*)
             from gym.audit_entries
-            """ + WHERE_SQL;
+            """ + QUERY_WHERE_SQL;
 
     static final String PAGE_SELECT_SQL = """
             select id, actor_user_id, actor_identifier_snapshot,
                    action_code, resource_type, resource_id,
                    resource_code_snapshot, summary, correlation_id, occurred_at
             from gym.audit_entries
-            """ + WHERE_SQL;
+            """;
 
     static final String PAGE_SQL_DESC = PAGE_SELECT_SQL + """
+            """ + QUERY_WHERE_SQL + """
             order by occurred_at desc, id desc
             limit :limit offset :offset
             """;
 
     static final String PAGE_SQL_ASC = PAGE_SELECT_SQL + """
+            """ + QUERY_WHERE_SQL + """
             order by occurred_at asc, id asc
             limit :limit offset :offset
             """;
 
-    private static final String EXPORT_WHERE_SQL = positionalWhereSql();
+    private static final String EXPORT_WHERE_SQL = positionalWhereSql() + """
+              and (cast(? as varchar) is null
+                   or metadata ->> 'result' = cast(? as varchar))
+            """;
 
     static final String EXPORT_COUNT_SQL = """
             select count(*)
@@ -110,16 +121,17 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
             select id, actor_user_id, actor_identifier_snapshot,
                    action_code, resource_type, resource_id,
                    resource_code_snapshot, summary,
+                   metadata ->> 'branchId' as branch_id,
                    metadata::text as metadata_json, correlation_id, occurred_at
             from gym.audit_entries
-            """ + EXPORT_WHERE_SQL;
+            """;
 
-    static final String EXPORT_SQL_DESC = EXPORT_SELECT_SQL + """
+    static final String EXPORT_SQL_DESC = EXPORT_SELECT_SQL + EXPORT_WHERE_SQL + """
             order by occurred_at desc, id asc
             limit ?
             """;
 
-    static final String EXPORT_SQL_ASC = EXPORT_SELECT_SQL + """
+    static final String EXPORT_SQL_ASC = EXPORT_SELECT_SQL + EXPORT_WHERE_SQL + """
             order by occurred_at asc, id asc
             limit ?
             """;
@@ -164,18 +176,20 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
 
     @Override
     @Transactional(readOnly = true)
-    public AuditEntryPage findAll(AuditSearchQuery query) {
+    public AuditEntryPage findAll(
+            AuditSearchQuery query,
+            AuditVisibilityScope visibilityScope) {
         AuditSearchQuery validated = requireQuery(query);
-        MapSqlParameterSource parameters = parameters(validated);
+        MapSqlParameterSource parameters = parameters(validated, visibilityScope);
         try {
             Long totalElements = jdbcTemplate.queryForObject(
-                    COUNT_SQL, parameters, Long.class);
+                    countSql(visibilityScope), parameters, Long.class);
             if (totalElements == null) {
                 throw new AuditQueryDataAccessException(
                         "Audit entries could not be read.", null);
             }
             List<AuditEntrySummary> summaries = jdbcTemplate.query(
-                    pageSql(validated), parameters, (resultSet, rowNumber) ->
+                    pageSql(validated, visibilityScope), parameters, (resultSet, rowNumber) ->
                             projector.toSummary(mapRow(resultSet, false)));
             return AuditEntryPage.of(
                     summaries,
@@ -193,15 +207,18 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<AuditEntryDetails> findById(UUID auditEntryId) {
+    public Optional<AuditEntryDetails> findById(
+            UUID auditEntryId,
+            AuditVisibilityScope visibilityScope) {
         if (auditEntryId == null) {
             throw new AuditQueryValidationException(
                     "Audit entry id must be provided.");
         }
+        Objects.requireNonNull(visibilityScope, "Audit visibility scope is required.");
         try {
             List<AuditEntryDetails> details = jdbcTemplate.query(
-                    DETAIL_SQL,
-                    new MapSqlParameterSource()
+                    detailSql(visibilityScope),
+                    visibilityParameters(visibilityScope)
                             .addValue("auditEntryId", auditEntryId),
                     (resultSet, rowNumber) ->
                             projector.toDetails(mapRow(resultSet, true)));
@@ -218,6 +235,7 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
     public void streamExport(
             AuditExportQuery query,
             AuditExportPolicy policy,
+            AuditVisibilityScope visibilityScope,
             AuditExportSink sink) {
         if (query == null) {
             throw new AuditExportValidationException(
@@ -227,11 +245,12 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
             throw new AuditExportValidationException(
                     "Audit export sink must be provided.");
         }
+        requireMatchingVisibility(query, visibilityScope);
         query.validate(policy);
 
         long totalRows;
         try {
-            totalRows = countExportRows(query);
+            totalRows = countExportRows(query, visibilityScope);
         } catch (DataAccessException exception) {
             throw exportDataAccess(exception);
         }
@@ -239,12 +258,13 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
 
         try {
             streamJdbcTemplate.query(
-                    preparedStatement(exportSql(query), EXPORT_FETCH_SIZE),
-                    setter(exportParameters(query, policy.maxRows())),
+                    preparedStatement(exportSql(query, visibilityScope), EXPORT_FETCH_SIZE),
+                    setter(exportParameters(query, visibilityScope, policy.maxRows())),
                     (resultSet) -> {
                         while (resultSet.next()) {
                             sink.accept(new AuditExportRow(
-                                    projector.toDetails(mapRow(resultSet, true))));
+                                    projector.toDetails(mapRow(resultSet, true)),
+                                    optionalUuid(resultSet.getString("branch_id"))));
                         }
                         return null;
                     });
@@ -258,21 +278,65 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
     }
 
     static String pageSql(AuditSearchQuery query) {
+        return pageSql(query, AuditVisibilityScope.organization());
+    }
+
+    static String pageSql(
+            AuditSearchQuery query,
+            AuditVisibilityScope visibilityScope) {
+        String select = PAGE_SELECT_SQL + queryWhereSql(visibilityScope);
         return query.direction() == AuditSortDirection.ASC
-                ? PAGE_SQL_ASC
-                : PAGE_SQL_DESC;
+                ? select + "order by occurred_at asc, id asc\nlimit :limit offset :offset\n"
+                : select + "order by occurred_at desc, id desc\nlimit :limit offset :offset\n";
+    }
+
+    static String countSql(AuditVisibilityScope visibilityScope) {
+        return "select count(*)\nfrom gym.audit_entries\n"
+                + queryWhereSql(visibilityScope);
+    }
+
+    static String detailSql(AuditVisibilityScope visibilityScope) {
+        Objects.requireNonNull(visibilityScope, "Audit visibility scope is required.");
+        if (visibilityScope.organizationWide()) {
+            return DETAIL_SQL;
+        }
+        return DETAIL_SQL + " and metadata ->> 'branchId' is not null\n"
+                + " and metadata ->> 'branchId' in (:branchIds)\n";
+    }
+
+    private static String queryWhereSql(AuditVisibilityScope visibilityScope) {
+        Objects.requireNonNull(visibilityScope, "Audit visibility scope is required.");
+        if (visibilityScope.organizationWide()) {
+            return QUERY_WHERE_SQL;
+        }
+        return QUERY_WHERE_SQL + "  and metadata ->> 'branchId' is not null\n"
+                + "  and metadata ->> 'branchId' in (:branchIds)\n";
     }
 
     static String exportSql(AuditExportQuery query) {
-        return query.direction() == AuditSortDirection.ASC
-                ? EXPORT_SQL_ASC
-                : EXPORT_SQL_DESC;
+        return exportSql(query, AuditVisibilityScope.organization());
     }
 
-    private long countExportRows(AuditExportQuery query) {
+    static String exportSql(
+            AuditExportQuery query,
+            AuditVisibilityScope visibilityScope) {
+        String orderAndLimit = query.direction() == AuditSortDirection.ASC
+                ? "order by occurred_at asc, id asc\nlimit ?"
+                : "order by occurred_at desc, id asc\nlimit ?";
+        return EXPORT_SELECT_SQL + exportWhereSql(visibilityScope) + orderAndLimit;
+    }
+
+    static String exportCountSql(AuditVisibilityScope visibilityScope) {
+        return "select count(*) from gym.audit_entries\n"
+                + exportWhereSql(visibilityScope);
+    }
+
+    private long countExportRows(
+            AuditExportQuery query,
+            AuditVisibilityScope visibilityScope) {
         Long count = streamJdbcTemplate.query(
-                preparedStatement(EXPORT_COUNT_SQL, 0),
-                setter(exportParameters(query, null)),
+                preparedStatement(exportCountSql(visibilityScope), 0),
+                setter(exportParameters(query, visibilityScope, null)),
                 resultSet -> {
                     if (!resultSet.next()) {
                         return null;
@@ -316,8 +380,9 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
 
     private static Object[] exportParameters(
             AuditExportQuery query,
+            AuditVisibilityScope visibilityScope,
             Integer limit) {
-        List<Object> values = new ArrayList<>(19);
+        List<Object> values = new ArrayList<>(21 + visibilityScope.branchIds().size());
         addTwice(values, query.actorUserId());
         addTwice(values, query.actorIdentifier());
         addTwice(values, query.actionCode());
@@ -327,6 +392,13 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
         addTwice(values, query.correlationId());
         addTwice(values, offset(query.occurredFrom()));
         addTwice(values, offset(query.occurredUntil()));
+        addTwice(values, query.result());
+        if (!visibilityScope.organizationWide()) {
+            visibilityScope.branchIds().stream()
+                    .sorted()
+                    .map(UUID::toString)
+                    .forEach(values::add);
+        }
         if (limit != null) {
             values.add(limit);
         }
@@ -349,6 +421,44 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
         return sql;
     }
 
+    private static String exportWhereSql(AuditVisibilityScope visibilityScope) {
+        Objects.requireNonNull(visibilityScope, "Audit visibility scope is required.");
+        if (visibilityScope.organizationWide()) {
+            return EXPORT_WHERE_SQL;
+        }
+        String placeholders = visibilityScope.branchIds().stream()
+                .sorted()
+                .map(ignored -> "cast(? as varchar)")
+                .collect(java.util.stream.Collectors.joining(", "));
+        return EXPORT_WHERE_SQL + """
+                  and metadata ->> 'branchId' is not null
+                  and metadata ->> 'branchId' in (%s)
+                """.formatted(placeholders);
+    }
+
+    private static void requireMatchingVisibility(
+            AuditExportQuery query,
+            AuditVisibilityScope visibilityScope) {
+        if (visibilityScope == null
+                || (visibilityScope.organizationWide() && !query.branchIds().isEmpty())
+                || (!visibilityScope.organizationWide()
+                        && !visibilityScope.branchIds().equals(query.branchIds()))) {
+            throw new AuditExportValidationException(
+                    "Audit export scope is invalid.");
+        }
+    }
+
+    private static UUID optionalUuid(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException invalidHistoricalValue) {
+            return null;
+        }
+    }
+
     private static AuditSearchQuery requireQuery(AuditSearchQuery query) {
         if (query == null) {
             throw new AuditQueryValidationException(
@@ -357,13 +467,17 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
         return query;
     }
 
-    private static MapSqlParameterSource parameters(AuditSearchQuery query) {
+    private static MapSqlParameterSource parameters(
+            AuditSearchQuery query,
+            AuditVisibilityScope visibilityScope) {
+        Objects.requireNonNull(visibilityScope, "Audit visibility scope is required.");
         long offset = Math.multiplyExact((long) query.page(), query.size());
-        return new MapSqlParameterSource()
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
                 .addValue("actorUserId", query.actorUserId())
                 .addValue("actorIdentifier", query.actorIdentifier())
                 .addValue("actionCode", query.actionCode())
                 .addValue("resourceType", query.resourceType())
+                .addValue("result", query.result())
                 .addValue("resourceId", query.resourceId())
                 .addValue("resourceCode", query.resourceCode())
                 .addValue("correlationId", query.correlationId())
@@ -371,6 +485,24 @@ class JdbcAuditEntryQueryAdapter implements AuditEntryQuery {
                 .addValue("occurredUntil", offset(query.occurredUntil()))
                 .addValue("limit", query.size())
                 .addValue("offset", offset);
+        if (!visibilityScope.organizationWide()) {
+            parameters.addValue("branchIds", visibilityScope.branchIds().stream()
+                    .map(UUID::toString)
+                    .toList());
+        }
+        return parameters;
+    }
+
+    private static MapSqlParameterSource visibilityParameters(
+            AuditVisibilityScope visibilityScope) {
+        Objects.requireNonNull(visibilityScope, "Audit visibility scope is required.");
+        MapSqlParameterSource parameters = new MapSqlParameterSource();
+        if (!visibilityScope.organizationWide()) {
+            parameters.addValue("branchIds", visibilityScope.branchIds().stream()
+                    .map(UUID::toString)
+                    .toList());
+        }
+        return parameters;
     }
 
     private static OffsetDateTime offset(Instant value) {

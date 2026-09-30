@@ -25,6 +25,7 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
         name = "Audit history",
         description = "ADMIN-only, read-only inspection of immutable audit history. "
                 + "Metadata is default-deny sanitized; bounded CSV export uses the "
-                + "same filters and privacy policy.")
+                + "same scope authorization, filters, and privacy policy as audit queries.")
 @SecurityRequirement(name = "sessionCookie")
 class AuditQueryController {
 
@@ -68,8 +69,10 @@ class AuditQueryController {
     @Operation(
             summary = "List audit entries",
             description = "Returns a bounded newest-first page of immutable audit summaries. "
-                    + "Only administrators may access this read-only operation. Filters are exact "
-                    + "and allowlisted; no arbitrary metadata or result filter is supported. "
+                    + "ADMIN users may query only the organization or branches allowed by their "
+                    + "current persisted staff scope. Branch IDs are filters, never authority. "
+                    + "Filters are exact and allowlisted; result is ALLOWED or DENIED, and no "
+                    + "arbitrary metadata filter is supported. "
                     + "Date bounds are inclusive ISO-8601 instants and may span at most 366 days. "
                     + "Page is zero-based, size is between 1 and 100, and the only sort field is "
                     + "OCCURRED_AT with the audit ID used as a deterministic tie-breaker.",
@@ -80,7 +83,7 @@ class AuditQueryController {
             content = @Content(schema = @Schema(implementation = AuditEntryPageResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid audit filter, pagination, or sorting")
     @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "403", description = "Administrator role required")
+    @ApiResponse(responseCode = "403", description = "ADMIN role and authorized persisted scope required")
     @ApiResponse(responseCode = "500", description = "Audit history could not be read")
     AuditEntryPageResponse findAll(
             @Parameter(description = "Exact actor user UUID")
@@ -91,6 +94,10 @@ class AuditQueryController {
             @RequestParam(required = false) String actionCode,
             @Parameter(description = "Exact allowlisted resource type")
             @RequestParam(required = false) String resourceType,
+            @Parameter(description = "Exact persisted result: ALLOWED or DENIED")
+            @RequestParam(required = false) String result,
+            @Parameter(description = "Requested canonical branch UUIDs; authorization is resolved independently")
+            @RequestParam(required = false) Set<UUID> branchIds,
             @Parameter(description = "Exact resource UUID")
             @RequestParam(required = false) UUID resourceId,
             @Parameter(description = "Exact resource-code snapshot")
@@ -108,23 +115,26 @@ class AuditQueryController {
             @Parameter(description = "Only OCCURRED_AT is supported")
             @RequestParam(defaultValue = "OCCURRED_AT") String sort,
             @Parameter(description = "ASC or DESC; default DESC")
-            @RequestParam(defaultValue = "DESC") String direction) {
+            @RequestParam(defaultValue = "DESC") String direction,
+            Authentication authentication) {
         AuditSearchQuery query = AuditSearchQuery.from(
                 actorUserId,
                 actorIdentifier,
                 actionCode,
                 resourceType,
+                result,
                 resourceId,
                 resourceCode,
                 correlationId,
+                branchIds == null ? Set.of() : branchIds,
                 parseInstant(occurredFrom, "occurredFrom"),
                 parseInstant(occurredUntil, "occurredUntil"),
                 page,
                 size,
                 sort,
                 direction);
-        AuditEntryPage result = service.findAll(query);
-        return AuditEntryPageResponse.from(result);
+        AuditEntryPage pageResult = service.findAll(query, actor(authentication).userId());
+        return AuditEntryPageResponse.from(pageResult);
     }
 
     @GetMapping("/{auditEntryId}")
@@ -140,11 +150,14 @@ class AuditQueryController {
             content = @Content(schema = @Schema(implementation = AuditEntryDetailsResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid audit-entry UUID")
     @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "403", description = "Administrator role required")
+    @ApiResponse(responseCode = "403", description = "ADMIN role and authorized persisted scope required")
     @ApiResponse(responseCode = "404", description = "Audit entry not found")
     @ApiResponse(responseCode = "500", description = "Audit detail could not be read or projected")
-    AuditEntryDetailsResponse findById(@PathVariable UUID auditEntryId) {
-        AuditEntryDetails result = service.findById(auditEntryId);
+    AuditEntryDetailsResponse findById(
+            @PathVariable UUID auditEntryId,
+            Authentication authentication) {
+        AuditEntryDetails result = service.findById(
+                auditEntryId, actor(authentication).userId());
         return AuditEntryDetailsResponse.from(result);
     }
 
@@ -152,13 +165,21 @@ class AuditQueryController {
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(
             summary = "Download a bounded audit CSV export",
-            description = "Streams a UTF-8 CSV download for administrators using the exact "
-                    + "allowlisted audit filters. occurredFrom and occurredUntil are required "
+            description = "Streams a UTF-8 CSV using the same current persisted scope rules as "
+                    + "audit list and detail queries. ADMIN + ORGANIZATION may export organization-wide "
+                    + "or explicitly selected canonical branches; ADMIN + BRANCH must provide a "
+                    + "non-empty set of actively assigned branches; RECEPTIONIST and anonymous users "
+                    + "are denied. Branch IDs are filters, never authority, and SQL applies the "
+                    + "authoritatively resolved scope before rows are streamed. Uses exact allowlisted "
+                    + "audit filters including result and branchIds. occurredFrom and occurredUntil are required "
                     + "inclusive UTC instants; the range is limited to 31 days by default and "
                     + "the result is rejected when it exceeds the server maximum of 10,000 rows. "
-                    + "Columns are fixed, metadata is sanitized with the audit default-deny policy, "
-                    + "and spreadsheet formula values are neutralized. No export file is stored "
-                    + "on the server.",
+                    + "Columns are fixed and include only persisted branch IDs; metadata is sanitized "
+                    + "with the audit default-deny policy, and spreadsheet formula values are neutralized. "
+                    + "The fixed CSV header includes branch_id, sourced only from persisted audit attribution. "
+                    + "A successful export audit record is written after streaming, so it cannot appear "
+                    + "in its own export, but may appear in a later export whose date range includes it. "
+                    + "No export file is stored on the server.",
             security = @SecurityRequirement(name = "sessionCookie"))
     @ApiResponse(
             responseCode = "200",
@@ -168,7 +189,7 @@ class AuditQueryController {
                     schema = @Schema(type = "string", format = "binary")))
     @ApiResponse(responseCode = "400", description = "Invalid filters, range, or export limit")
     @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "403", description = "Administrator role required")
+    @ApiResponse(responseCode = "403", description = "ADMIN role and authorized persisted organization or branch scope required")
     @ApiResponse(responseCode = "500", description = "The export could not be prepared or streamed")
     void exportCsv(
             @Parameter(description = "Exact actor user UUID")
@@ -179,6 +200,10 @@ class AuditQueryController {
             @RequestParam(required = false) String actionCode,
             @Parameter(description = "Exact allowlisted resource type")
             @RequestParam(required = false) String resourceType,
+            @Parameter(description = "Exact persisted result: ALLOWED or DENIED")
+            @RequestParam(required = false) String result,
+            @Parameter(description = "Requested canonical branch UUIDs; authorization is resolved independently")
+            @RequestParam(required = false) Set<UUID> branchIds,
             @Parameter(description = "Exact resource UUID")
             @RequestParam(required = false) String resourceId,
             @Parameter(description = "Exact resource-code snapshot")
@@ -200,6 +225,8 @@ class AuditQueryController {
                 actorIdentifier,
                 actionCode,
                 resourceType,
+                result,
+                branchIds == null ? Set.of() : branchIds,
                 parseUuid(resourceId, "resourceId"),
                 resourceCode,
                 parseUuid(correlationId, "correlationId"),
@@ -208,14 +235,15 @@ class AuditQueryController {
                 sort,
                 direction);
 
-        exportService.validate(query);
         AuditExportActor actor = actor(authentication);
+        exportService.validate(query, actor.userId());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.parseMediaType(
                 AuditExportApplicationService.CSV_MEDIA_TYPE).toString());
         response.setHeader(
                 HttpHeaders.CONTENT_DISPOSITION,
-                "attachment; filename=\"" + exportService.newFilename() + "\"");
+                "attachment; filename=\""
+                        + exportService.newFilename(query, actor.userId()) + "\"");
         response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store");
         response.setHeader(HttpHeaders.PRAGMA, "no-cache");
         response.setHeader("X-Content-Type-Options", "nosniff");
@@ -270,6 +298,8 @@ class AuditQueryController {
             String actorIdentifier,
             String actionCode,
             String resourceType,
+            String result,
+            Set<UUID> branchIds,
             UUID resourceId,
             String resourceCode,
             UUID correlationId,
@@ -283,9 +313,11 @@ class AuditQueryController {
                     actorIdentifier,
                     actionCode,
                     resourceType,
+                    result,
                     resourceId,
                     resourceCode,
                     correlationId,
+                    branchIds,
                     occurredFrom,
                     occurredUntil,
                     sort,

@@ -77,6 +77,10 @@ public final class AuditMetadataPolicy {
 
     public static Map<String, Set<String>> allowedKeysByActionFamily() {
         Map<String, Set<String>> policy = new LinkedHashMap<>();
+        policy.put("AUDIT_ENTRIES_EXPORTED", immutableSet(
+                "occurredFrom", "occurredUntil", "filtersPresent", "sortField",
+                "sortDirection", "rowCount", "maximumRows", "format",
+                "visibilityScope", "branchIds"));
         policy.put("ACCESS_CREDENTIAL_", immutableSet(
                 "accessCredentialId", "clientId", "replacementCredentialId",
                 "tokenSchemeVersion", "previousStatus", "newStatus", "branchId",

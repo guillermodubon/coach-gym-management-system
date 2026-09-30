@@ -3,6 +3,8 @@ package io.github.guillermodubon.coachgym.organization.infrastructure.persistenc
 import io.github.guillermodubon.coachgym.organization.ChangeGymBranchStatusCommand;
 import io.github.guillermodubon.coachgym.organization.CreateGymBranchCommand;
 import io.github.guillermodubon.coachgym.organization.GymBranchDetails;
+import io.github.guillermodubon.coachgym.organization.GymBranchReportingQuery;
+import io.github.guillermodubon.coachgym.organization.GymBranchReportingUnavailableException;
 import io.github.guillermodubon.coachgym.organization.GymBranchStatus;
 import io.github.guillermodubon.coachgym.organization.GymBranchSummary;
 import io.github.guillermodubon.coachgym.organization.OrganizationBranchLifecyclePolicy;
@@ -38,7 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** JDBC adapter for branches belonging to the canonical organization. */
 @Repository
-class JdbcGymBranchPersistenceAdapter implements GymBranchStore, GymBranchQuery {
+class JdbcGymBranchPersistenceAdapter
+        implements GymBranchStore, GymBranchQuery, GymBranchReportingQuery {
 
     static final String SELECT = """
             select b.id, b.organization_id, b.code, b.name,
@@ -58,6 +61,9 @@ class JdbcGymBranchPersistenceAdapter implements GymBranchStore, GymBranchQuery 
             GymBranchSortField.CITY, "b.city",
             GymBranchSortField.CREATED_AT, "b.created_at",
             GymBranchSortField.UPDATED_AT, "b.updated_at");
+
+    static final String REPORTING_BRANCHES_ACTIVE_SQL = reportingBranchSql(false);
+    static final String REPORTING_BRANCHES_WITH_INACTIVE_SQL = reportingBranchSql(true);
 
     private final NamedParameterJdbcTemplate jdbcTemplate;
     private final OrganizationBranchLifecyclePolicy lifecyclePolicy =
@@ -126,6 +132,53 @@ class JdbcGymBranchPersistenceAdapter implements GymBranchStore, GymBranchQuery 
                         SELECT + " and b.id = :id and b.status = 'ACTIVE'",
                         new MapSqlParameterSource("id", id))
                 .map(GymBranchSummary::from);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<GymBranchSummary> findCanonicalBranches(
+            java.util.Collection<UUID> branchIds,
+            boolean includeInactive) {
+        Objects.requireNonNull(branchIds, "Reporting branch identifiers are required.");
+        if (branchIds.isEmpty()
+                || branchIds.size() > GymBranchReportingQuery.MAXIMUM_BRANCH_IDS
+                || branchIds.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("Reporting branch identifiers are invalid.");
+        }
+        List<UUID> normalizedIds = branchIds.stream()
+                .distinct()
+                .sorted()
+                .toList();
+        try {
+            return jdbcTemplate.query(
+                    includeInactive
+                            ? REPORTING_BRANCHES_WITH_INACTIVE_SQL
+                            : REPORTING_BRANCHES_ACTIVE_SQL,
+                    new MapSqlParameterSource("branchIds", normalizedIds),
+                    (rs, row) -> new GymBranchSummary(
+                            rs.getObject("id", UUID.class),
+                            rs.getObject("organization_id", UUID.class),
+                            rs.getString("code"),
+                            rs.getString("name"),
+                            rs.getString("timezone"),
+                            GymBranchStatus.valueOf(rs.getString("status")),
+                            rs.getBoolean("is_initial_branch")));
+        } catch (DataAccessException exception) {
+            throw new GymBranchReportingUnavailableException(exception);
+        }
+    }
+
+    private static String reportingBranchSql(boolean includeInactive) {
+        return """
+                select b.id, b.organization_id, b.code, b.name,
+                       b.timezone, b.status, b.is_initial_branch
+                  from gym.gym_branches b
+                  join gym.organizations o on o.id = b.organization_id
+                 where o.is_canonical = true
+                   and o.status = 'ACTIVE'
+                   and b.id in (:branchIds)
+                """ + (includeInactive ? "" : " and b.status = 'ACTIVE'")
+                + " order by b.code, b.id";
     }
 
     @Override

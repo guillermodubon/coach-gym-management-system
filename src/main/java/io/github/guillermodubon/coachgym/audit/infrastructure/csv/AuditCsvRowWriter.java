@@ -36,6 +36,7 @@ public final class AuditCsvRowWriter {
             row.resourceCode(),
             row.summary(),
             row.correlationId(),
+            row.branchId(),
             metadataFormatter.format(row.metadata())
         };
         for (int index = 0; index < values.length; index++) {
