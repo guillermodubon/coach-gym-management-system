@@ -69,6 +69,7 @@ coach-gym:
     login-rate-limit:
       max-attempts: ${LOGIN_RATE_LIMIT_MAX_ATTEMPTS:10}
       window: ${LOGIN_RATE_LIMIT_WINDOW:PT1M}
+      max-tracked-identifiers: ${LOGIN_RATE_LIMIT_MAX_TRACKED_IDENTIFIERS:10000}
     identity-abuse:
       max-invitation-creations-per-admin-per-hour: ${STAFF_INVITATION_CREATIONS_PER_ADMIN_PER_HOUR:20}
       invitation-creation-window: ${STAFF_INVITATION_CREATION_WINDOW:PT1H}
