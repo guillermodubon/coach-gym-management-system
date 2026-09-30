@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.auth.infrastructure.security;
 
 import io.github.guillermodubon.coachgym.auth.SessionSecurityPolicy;
+import io.github.guillermodubon.coachgym.auth.application.LoginAttemptGuard;
 import io.github.guillermodubon.coachgym.shared.web.CorrelationIdFilter;
 import io.github.guillermodubon.coachgym.user.AuthenticationUserQuery;
 import java.time.Clock;
@@ -85,7 +86,7 @@ class SecurityConfiguration {
     }
 
     @Bean
-    LoginAttemptRateLimiter loginAttemptRateLimiter(
+    LoginAttemptGuard loginAttemptGuard(
             LoginRateLimitProperties properties,
             Clock clock) {
         return new LoginAttemptRateLimiter(properties, clock);
