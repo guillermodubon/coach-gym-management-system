@@ -46,6 +46,15 @@ public record GmailApiProperties(
         return isValidWhenEnabled(false);
     }
 
+    /**
+     * JDK HttpClient exposes one whole-exchange deadline rather than separate
+     * read and write deadlines. Use the stricter configured bound so neither
+     * setting can be silently relaxed by the other.
+     */
+    Duration exchangeTimeout() {
+        return readTimeout.compareTo(writeTimeout) <= 0 ? readTimeout : writeTimeout;
+    }
+
     boolean isValidForLoopbackStub() {
         return isValidWhenEnabled(true);
     }

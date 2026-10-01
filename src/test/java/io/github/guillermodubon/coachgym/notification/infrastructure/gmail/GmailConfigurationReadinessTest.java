@@ -27,7 +27,7 @@ class GmailConfigurationReadinessTest {
 
         GmailConfigurationReadiness ready = new GmailConfigurationReadiness(
                 new GmailApiProperties(
-                        null, "coachgym.demo@gmail.com", null, null, null),
+                        null, "coach-gym@example.test", null, null, null),
                 new GoogleOAuthProperties(
                         null, "client-id", "client-secret", "refresh-token",
                         Duration.ofSeconds(5), Duration.ofSeconds(15),
@@ -39,13 +39,13 @@ class GmailConfigurationReadinessTest {
     void enabledDeliveryRequiresTheConfiguredFromAddressToMatchTheGmailIdentity() {
         GmailConfigurationReadiness readiness = new GmailConfigurationReadiness(
                 new GmailApiProperties(
-                        null, "coachgym.demo@gmail.com", null, null, null),
+                        null, "coach-gym@example.test", null, null, null),
                 new GoogleOAuthProperties(
                         null, "client-id", "client-secret", "refresh-token",
                         Duration.ofSeconds(5), Duration.ofSeconds(15),
                         Duration.ofSeconds(60), Duration.ofSeconds(20)));
 
-        assertThat(readiness.status(true, "CoachGym.Demo@gmail.com"))
+        assertThat(readiness.status(true, "coach-gym@example.test"))
                 .isEqualTo(GmailConfigurationReadiness.Status.READY);
         assertThat(readiness.status(true, "other@example.test"))
                 .isEqualTo(GmailConfigurationReadiness.Status.INVALID_CONFIGURATION);

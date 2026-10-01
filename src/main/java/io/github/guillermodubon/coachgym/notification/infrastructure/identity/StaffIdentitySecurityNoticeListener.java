@@ -94,11 +94,16 @@ class StaffIdentitySecurityNoticeListener {
             IdentityEmailDeliveryStatus status = sender.sendSecurityNotice(new StaffIdentitySecurityEmail(
                     target.email(), target.displayName(), type, role, scope, occurredAt));
             if (status != IdentityEmailDeliveryStatus.SENT) {
-                LOGGER.warn("Staff security notice delivery was not confirmed (userId={}, type={}, status={}).",
-                        userId, type, status == null ? "UNKNOWN" : status.name());
+                LOGGER.warn(
+                        "Staff security notice delivery was not confirmed "
+                                + "(event=staff_security_notice, type={}, outcome={}).",
+                        type.name(), status == null ? "UNKNOWN" : status.name());
             }
-        } catch (RuntimeException exception) {
-            LOGGER.warn("Staff security notice delivery failed (userId={}, type={}).", userId, type);
+        } catch (RuntimeException ignored) {
+            LOGGER.warn(
+                    "Staff security notice delivery failed "
+                            + "(event=staff_security_notice, type={}).",
+                    type.name());
         }
     }
 }

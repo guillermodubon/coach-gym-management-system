@@ -43,7 +43,7 @@ class GmailOAuthConfigurationTest {
         contextRunner
                 .withPropertyValues(
                         "coach-gym.email.gmail.api-base-url=https://gmail.googleapis.com",
-                        "coach-gym.email.gmail.sender-address=coachgym.demo@gmail.com",
+                        "coach-gym.email.gmail.sender-address=coach-gym@example.test",
                         "coach-gym.email.gmail.oauth.client-id=synthetic-client-id",
                         "coach-gym.email.gmail.oauth.client-secret=synthetic-client-secret",
                         "coach-gym.email.gmail.oauth.refresh-token=synthetic-refresh-token")

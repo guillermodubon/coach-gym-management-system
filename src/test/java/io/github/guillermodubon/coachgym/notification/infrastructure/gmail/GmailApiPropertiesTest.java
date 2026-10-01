@@ -10,11 +10,11 @@ class GmailApiPropertiesTest {
     @Test
     void defaultsToGoogleHttpsEndpointAndBoundedTimeouts() {
         GmailApiProperties properties = new GmailApiProperties(
-                null, "coachgym.demo@gmail.com", null, null, null);
+                null, "coach-gym@example.test", null, null, null);
 
         assertThat(properties.apiBaseUrl()).isEqualTo("https://gmail.googleapis.com");
         assertThat(properties.isValidWhenEnabled()).isTrue();
-        assertThat(properties.toString()).doesNotContain("coachgym.demo@gmail.com");
+        assertThat(properties.toString()).doesNotContain("coach-gym@example.test");
     }
 
     @Test
@@ -59,6 +59,19 @@ class GmailApiPropertiesTest {
         assertThat(defaultLimit.isValidWhenEnabled()).isTrue();
         assertThat(tooSmall.isValidWhenEnabled()).isFalse();
         assertThat(tooLarge.isValidWhenEnabled()).isFalse();
+    }
+
+    @Test
+    void wholeExchangeDeadlineUsesTheStricterReadOrWriteTimeout() {
+        GmailApiProperties stricterRead = new GmailApiProperties(
+                "https://gmail.googleapis.com", "sender@example.test",
+                Duration.ofSeconds(5), Duration.ofSeconds(4), Duration.ofSeconds(12));
+        GmailApiProperties stricterWrite = new GmailApiProperties(
+                "https://gmail.googleapis.com", "sender@example.test",
+                Duration.ofSeconds(5), Duration.ofSeconds(12), Duration.ofSeconds(4));
+
+        assertThat(stricterRead.exchangeTimeout()).isEqualTo(Duration.ofSeconds(4));
+        assertThat(stricterWrite.exchangeTimeout()).isEqualTo(Duration.ofSeconds(4));
     }
 
     private static GmailApiProperties api(String sender, String endpoint, Duration connectTimeout) {
