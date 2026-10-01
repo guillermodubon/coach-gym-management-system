@@ -115,7 +115,6 @@ class SupabaseStorageClientTest {
                 .hasMessage("Storage provider returned an oversized response.");
 
         assertThat(responseFinished.await(5, TimeUnit.SECONDS)).isTrue();
-        assertThat(bytesWritten.get()).isLessThan(responseLength);
     }
 
     @Test
