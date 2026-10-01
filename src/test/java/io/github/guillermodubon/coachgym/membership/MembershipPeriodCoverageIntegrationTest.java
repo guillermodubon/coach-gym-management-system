@@ -13,6 +13,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -207,6 +212,117 @@ class MembershipPeriodCoverageIntegrationTest
                 "SELECT COUNT(*) FROM gym.audit_entries "
                         + "WHERE action_code = 'MEMBERSHIP_PERIOD_COVERAGE_CAPTURED'",
                 Integer.class)).isEqualTo(coverageAuditsBefore);
+    }
+
+    @Test
+    void concurrentCoverageUpdateAndMembershipSaleCaptureOneCommittedPlanVersion()
+            throws Exception {
+        MockHttpSession setupSession = loginAsAdmin();
+        UUID initialBranchId = jdbcTemplate.queryForObject(
+                "SELECT id FROM gym.gym_branches WHERE is_initial_branch AND status = 'ACTIVE'",
+                UUID.class);
+        UUID clientId = createClient(
+                setupSession, uniqueValue("coverage-race-member") + "@example.com");
+        UUID planId = createPlan(
+                setupSession, uniqueValue("Coverage Race Plan"), "25.00", "USD");
+        UUID secondBranchId = createBranch(setupSession);
+        MockHttpSession coverageSession = loginAsAdmin();
+        MockHttpSession saleSession = loginAsAdmin();
+        mockMvc.perform(put("/api/v1/me/branch-context")
+                        .with(csrf())
+                        .session(saleSession)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"branchId\":\"" + initialBranchId + "\"}"))
+                .andExpect(status().isOk());
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<?> coverageUpdate = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Coverage update race did not start.");
+                }
+                mockMvc.perform(put("/api/v1/plans/{id}/branch-coverage", planId)
+                                .with(csrf())
+                                .session(coverageSession)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("""
+                                        {
+                                          "scope":"SELECTED_BRANCHES",
+                                          "branchIds":["%s","%s"],
+                                          "expectedVersion":0
+                                        }
+                                        """.formatted(initialBranchId, secondBranchId)))
+                        .andExpect(status().isOk());
+                return null;
+            });
+            Future<UUID> membershipSale = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Membership sale race did not start.");
+                }
+                MvcResult sale = mockMvc.perform(post("/api/v1/memberships")
+                                .with(csrf())
+                                .session(saleSession)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(membershipBody(
+                                        clientId, planId, null, "2026-09-01")))
+                        .andReturn();
+                assertThat(sale.getResponse().getStatus())
+                        .withFailMessage(
+                                "Concurrent membership sale failed: %s",
+                                sale.getResponse().getContentAsString())
+                        .isEqualTo(201);
+                return responseId(sale);
+            });
+
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            coverageUpdate.get(30, TimeUnit.SECONDS);
+            UUID membershipId = membershipSale.get(30, TimeUnit.SECONDS);
+            UUID createdPeriodId = periodId(membershipId, (short) 1);
+
+            long capturedVersion = jdbcTemplate.queryForObject(
+                    "SELECT source_plan_version FROM gym.membership_period_coverage_snapshots "
+                            + "WHERE membership_period_id = ?",
+                    Long.class,
+                    createdPeriodId);
+            assertThat(capturedVersion).isIn(0L, 1L);
+            if (capturedVersion == 0L) {
+                assertSnapshot(
+                        createdPeriodId,
+                        MembershipPlanBranchCoverageScope.SINGLE_BRANCH,
+                        Set.of(initialBranchId),
+                        0L);
+            } else {
+                assertSnapshot(
+                        createdPeriodId,
+                        MembershipPlanBranchCoverageScope.SELECTED_BRANCHES,
+                        Set.of(initialBranchId, secondBranchId),
+                        1L);
+            }
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT version FROM gym.membership_plans WHERE id = ?",
+                    Long.class,
+                    planId)).isEqualTo(1L);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+            long branchVersion = jdbcTemplate.queryForObject(
+                    "SELECT version FROM gym.gym_branches WHERE id = ?",
+                    Long.class,
+                    secondBranchId);
+            mockMvc.perform(post("/api/v1/branches/{id}/deactivate", secondBranchId)
+                            .with(csrf())
+                            .session(setupSession)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"reason\":\"Coverage concurrency fixture cleanup\","
+                                    + "\"version\":" + branchVersion + "}"))
+                    .andExpect(status().isOk());
+        }
     }
 
     private UUID createBranch(MockHttpSession session) throws Exception {

@@ -22,6 +22,13 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestReporter;
@@ -383,6 +390,123 @@ class AuditQuerySchemaIntegrationTest extends AbstractIncidentApiIntegrationTest
         assertThat(rows.get(1).metadata().values())
                 .containsEntry("paymentId", PAYMENT_ID.toString())
                 .doesNotContainKey("token");
+    }
+
+    @Test
+    void exportKeepsItsDatabaseSnapshotWhenNewAuditRowsArriveDuringStreaming()
+            throws Exception {
+        String resourceCode = "HARDENING-SNAPSHOT-" + UUID.randomUUID();
+        UUID firstId = UUID.randomUUID();
+        UUID insertedId = UUID.randomUUID();
+        insertAuditEntry(
+                firstId, "snapshot-admin", "CLIENT_REGISTERED", "CLIENT",
+                UUID.randomUUID(), resourceCode, "Initial snapshot row.", "{}",
+                null, TIE_TIMESTAMP);
+        AuditExportQuery query = AuditExportQuery.from(
+                null,
+                null,
+                null,
+                null,
+                null,
+                resourceCode,
+                null,
+                TIE_TIMESTAMP.minusSeconds(1),
+                TIE_TIMESTAMP.plusSeconds(1),
+                null,
+                null);
+        List<AuditExportRow> rows = new ArrayList<>();
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            queryAdapter.streamExport(
+                    query,
+                    new AuditExportPolicy(Duration.ofDays(1), 10),
+                    AuditVisibilityScope.organization(),
+                    row -> {
+                        rows.add(row);
+                        if (rows.size() == 1) {
+                            Future<?> insert = executor.submit(() -> insertAuditEntry(
+                                    insertedId,
+                                    "snapshot-admin",
+                                    "CLIENT_REGISTERED",
+                                    "CLIENT",
+                                    UUID.randomUUID(),
+                                    resourceCode,
+                                    "Inserted while export is streaming.",
+                                    "{}",
+                                    null,
+                                    TIE_TIMESTAMP));
+                            try {
+                                insert.get(10, TimeUnit.SECONDS);
+                            } catch (InterruptedException exception) {
+                                Thread.currentThread().interrupt();
+                                throw new AssertionError(
+                                        "Concurrent audit insert did not complete.", exception);
+                            } catch (ExecutionException | TimeoutException exception) {
+                                throw new AssertionError(
+                                        "Concurrent audit insert did not complete.", exception);
+                            }
+                        }
+                    });
+        } finally {
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
+
+        assertThat(rows).extracting(AuditExportRow::entryId)
+                .containsExactly(firstId);
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*)
+                from gym.audit_entries
+                where resource_code_snapshot = ?
+                """, Integer.class, resourceCode)).isEqualTo(2);
+    }
+
+    @Test
+    void streamsLargeExportThroughBoundedFetchesWithoutAccumulatingRows(
+            TestReporter reporter) {
+        String actorIdentifier = "bounded-stream-" + UUID.randomUUID();
+        int fixtureRows = 4_096;
+        jdbcTemplate.update("""
+                insert into gym.audit_entries
+                    (id, actor_user_id, actor_identifier_snapshot, action_code,
+                     resource_type, resource_id, resource_code_snapshot, summary,
+                     metadata, correlation_id, occurred_at)
+                select gen_random_uuid(), ?, ?, 'CLIENT_REGISTERED', 'CLIENT',
+                       gen_random_uuid(), 'STREAM-' || item,
+                       'Bounded streaming fixture', '{}'::jsonb, null,
+                       current_timestamp - make_interval(secs => item)
+                from generate_series(1, ?) item
+                """, adminId, actorIdentifier, fixtureRows);
+
+        AtomicInteger consumedRows = new AtomicInteger();
+        Instant until = Instant.now().plusSeconds(1);
+        AuditExportQuery query = AuditExportQuery.from(
+                null,
+                actorIdentifier,
+                "CLIENT_REGISTERED",
+                "CLIENT",
+                null,
+                null,
+                null,
+                until.minus(Duration.ofHours(2)),
+                until,
+                null,
+                null);
+
+        queryAdapter.streamExport(
+                query,
+                new AuditExportPolicy(Duration.ofDays(1), fixtureRows),
+                AuditVisibilityScope.organization(),
+                ignored -> consumedRows.incrementAndGet());
+
+        assertThat(consumedRows).hasValue(fixtureRows);
+        assertThat(JdbcAuditEntryQueryAdapter.EXPORT_FETCH_SIZE).isEqualTo(256);
+        reporter.publishEntry(
+                "auditExportStreamingRetention",
+                fixtureRows + " rows consumed incrementally; sink retains only a counter; "
+                        + "PostgreSQL forward-only fetch size="
+                        + JdbcAuditEntryQueryAdapter.EXPORT_FETCH_SIZE + ".");
     }
 
     @Test
