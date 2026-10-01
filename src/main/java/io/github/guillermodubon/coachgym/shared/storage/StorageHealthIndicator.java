@@ -32,6 +32,17 @@ public class StorageHealthIndicator implements HealthIndicator {
 
     @Override
     public Health health() {
+        try {
+            return assessStorageReadiness();
+        } catch (RuntimeException unavailable) {
+            return Health.down()
+                    .withDetail("provider", "unavailable")
+                    .withDetail("reason", "configuration_invalid")
+                    .build();
+        }
+    }
+
+    private Health assessStorageReadiness() {
         String provider = environment.getProperty(
                 "gym.storage.provider", "local").strip().toLowerCase(Locale.ROOT);
         if ("supabase".equals(provider)) {
@@ -44,7 +55,7 @@ public class StorageHealthIndicator implements HealthIndicator {
         }
         if (!"local".equals(provider)) {
             return Health.down()
-                    .withDetail("provider", provider)
+                    .withDetail("provider", "unsupported")
                     .withDetail("reason", "unsupported_provider")
                     .build();
         }

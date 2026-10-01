@@ -36,6 +36,8 @@ public record SupabaseStorageProperties(
                         || "localhost".equalsIgnoreCase(uri.getHost()))
                     && uri.getHost() != null
                     && bucket.matches("[A-Za-z0-9._-]{1,63}")
+                    && !bucket.equals(".")
+                    && !bucket.equals("..")
                     && positiveBounded(connectionTimeout, Duration.ofMinutes(1))
                     && positiveBounded(requestTimeout, Duration.ofMinutes(2));
         } catch (IllegalArgumentException exception) {
