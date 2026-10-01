@@ -71,8 +71,14 @@ class OpenApiConfiguration {
                                         at that branch. Plan coverage and branch access
                                         policy administration are organization-admin
                                         operations; purchased membership-period coverage is
-                                        an immutable snapshot. Reporting filters and the
-                                        frontend selector remain outside this API contract.
+                                        an immutable snapshot. Dashboard, reporting, audit
+                                        list/detail, and CSV operations enforce the persisted
+                                        organization or branch scope documented by each
+                                        operation. Notification reads remain limited to the
+                                        authenticated recipient. This API is a single-organization
+                                        system, not a multi-tenant API. The generated contract at
+                                        /v3/api-docs is authoritative for exact paths, methods,
+                                        statuses, schemas, filters, sorting, and response headers.
 
                                         Equipment and equipment categories are
                                         never physically deleted through the

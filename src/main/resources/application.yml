@@ -63,6 +63,9 @@ coach-gym:
       max-age: ${CORS_MAX_AGE:PT1H}
     session:
       absolute-timeout: ${SESSION_ABSOLUTE_TIMEOUT:PT8H}
+    csrf-cookie:
+      same-site: ${CSRF_COOKIE_SAME_SITE:${SESSION_COOKIE_SAME_SITE:lax}}
+      secure: ${CSRF_COOKIE_SECURE:${SESSION_COOKIE_SECURE:false}}
     headers:
       hsts-enabled: ${SECURITY_HSTS_ENABLED:false}
       hsts-max-age: ${SECURITY_HSTS_MAX_AGE:PT8760H}
@@ -155,7 +158,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info}
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info,metrics}
   endpoint:
     health:
       probes:
@@ -166,7 +169,10 @@ management:
         liveness:
           include: livenessState
         readiness:
-          include: readinessState,db,storage,email,stripe
+          include: readinessState,db,diskSpace,storage,email,stripe
+          show-details: when-authorized
+          show-components: when-authorized
+          roles: ADMIN
   health:
     db:
       enabled: true
