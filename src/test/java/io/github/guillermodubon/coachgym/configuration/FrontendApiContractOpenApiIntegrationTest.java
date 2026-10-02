@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.configuration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -19,6 +20,23 @@ import org.springframework.test.web.servlet.MvcResult;
  * inventory rather than an informal list of selected controllers.
  */
 class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiIntegrationTest {
+
+    @Test
+    void credentialedCorsPreflightAllowsOnlyConfiguredBrowserOrigin() throws Exception {
+        mockMvc.perform(options("/api/v1/auth/login")
+                        .header("Origin", "http://localhost:5173")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "content-type,x-xsrf-token"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+
+        mockMvc.perform(options("/api/v1/auth/login")
+                        .header("Origin", "https://untrusted.invalid")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "content-type,x-xsrf-token"))
+                .andExpect(status().isForbidden());
+    }
 
     @Test
     void inventoriesEveryPublicModuleAndUsesOnlyVersionedApplicationPaths() throws Exception {
@@ -123,6 +141,16 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
         assertSessionSecurity(document, "/api/v1/memberships/{id}", "get");
         assertSessionSecurity(document, "/api/v1/payments", "get");
         assertSessionSecurity(document, "/api/v1/audit-entries", "get");
+        assertSessionSecurity(document, "/api/v1/audit-entries/{auditEntryId}", "get");
+        assertSessionSecurity(document, "/api/v1/audit-entries/export.csv", "get");
+        assertSessionSecurity(document, "/api/v1/reporting/dashboard", "get");
+        assertSessionSecurity(document, "/api/v1/reporting/summary", "get");
+        assertSessionSecurity(document, "/api/v1/reporting/financial-trend", "get");
+        assertSessionSecurity(document, "/api/v1/reporting/access-trend", "get");
+        assertSessionSecurity(document, "/api/v1/reporting/branches/comparison", "get");
+        assertSessionSecurity(document, "/api/v1/notifications", "get");
+        assertSessionSecurity(document, "/api/v1/notifications/{id}", "get");
+        assertSessionSecurity(document, "/api/v1/notifications/unread-count", "get");
         Object webhookSecurity = JsonPath.read(
                 document,
                 "$.paths['/api/v1/payment-provider/stripe/webhook'].post"
@@ -144,6 +172,19 @@ class FrontendApiContractOpenApiIntegrationTest extends AbstractIncidentApiInteg
             assertThat(operation).as("public token/recovery operation %s", path)
                     .doesNotContainKey("security");
         }
+    }
+
+    @Test
+    void openApiDescriptionDocumentsFinalBranchAndNotificationPolicies() throws Exception {
+        String document = openApiDocument();
+        String description = JsonPath.read(document, "$.info.description");
+        String normalizedDescription = description.replaceAll("\\s+", " ");
+
+        assertThat(normalizedDescription)
+                .contains("persisted organization or branch scope")
+                .contains("Notification reads remain limited to the authenticated recipient")
+                .contains("single-organization system, not a multi-tenant API")
+                .doesNotContain("Reporting filters and the frontend selector remain outside this API contract");
     }
 
     @Test

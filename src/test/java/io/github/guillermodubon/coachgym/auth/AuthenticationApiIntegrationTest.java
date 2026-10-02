@@ -34,7 +34,10 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest(properties = "spring.docker.compose.enabled=false")
+@SpringBootTest(properties = {
+        "spring.docker.compose.enabled=false",
+        "coach-gym.security.login-rate-limit.max-attempts=2"
+})
 @AutoConfigureMockMvc
 class AuthenticationApiIntegrationTest {
 
@@ -225,6 +228,33 @@ class AuthenticationApiIntegrationTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"))
                 .andExpect(jsonPath("$.detail").value("Invalid credentials."));
+    }
+
+    @Test
+    void rateLimitsRepeatedFailedLoginsWithoutEchoingTheIdentifier() throws Exception {
+        String identifier = "rate-limit-" + UUID.randomUUID();
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mockMvc.perform(post("/api/v1/auth/login")
+                            .with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(loginBody(identifier, "incorrect-password")))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
+        }
+
+        MvcResult limited = mockMvc.perform(post("/api/v1/auth/login")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginBody(identifier, "incorrect-password")))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_RATE_LIMITED"))
+                .andExpect(jsonPath("$.detail").value(
+                        "Too many unsuccessful authentication attempts. Try again later."))
+                .andReturn();
+
+        assertThat(limited.getResponse().getHeader("Retry-After")).isNotBlank();
+        assertThat(limited.getResponse().getContentAsString()).doesNotContain(identifier);
     }
 
     @Test

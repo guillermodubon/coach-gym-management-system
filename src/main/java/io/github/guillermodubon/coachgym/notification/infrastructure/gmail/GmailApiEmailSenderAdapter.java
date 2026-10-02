@@ -16,7 +16,6 @@ import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -154,12 +153,8 @@ final class GmailApiEmailSenderAdapter implements EmailSender {
         try {
             URI endpoint = URI.create(apiProperties.apiBaseUrl())
                     .resolve("/gmail/v1/users/me/messages/send");
-            Duration boundedRequestTimeout = apiProperties.readTimeout()
-                    .compareTo(apiProperties.writeTimeout()) >= 0
-                    ? apiProperties.readTimeout()
-                    : apiProperties.writeTimeout();
             request = HttpRequest.newBuilder(endpoint)
-                    .timeout(boundedRequestTimeout)
+                    .timeout(apiProperties.exchangeTimeout())
                     .header("Authorization", "Bearer " + accessToken)
                     .header("Accept", "application/json")
                     .header("Content-Type", "application/json; charset=UTF-8")

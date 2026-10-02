@@ -1,8 +1,10 @@
 package io.github.guillermodubon.coachgym.auth.infrastructure.security;
 
 import io.github.guillermodubon.coachgym.auth.SessionSecurityPolicy;
+import io.github.guillermodubon.coachgym.auth.application.LoginAttemptGuard;
 import io.github.guillermodubon.coachgym.shared.web.CorrelationIdFilter;
 import io.github.guillermodubon.coachgym.user.AuthenticationUserQuery;
+import io.github.guillermodubon.coachgym.user.StaffScopeQuery;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -38,6 +40,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
         CorsProperties.class,
         SessionProperties.class,
         SecurityHeadersProperties.class,
+        CsrfCookieProperties.class,
         LoginRateLimitProperties.class,
         RequestBodyLimitProperties.class})
 class SecurityConfiguration {
@@ -59,6 +62,16 @@ class SecurityConfiguration {
     @Bean
     SecurityContextRepository securityContextRepository() {
         return new HttpSessionSecurityContextRepository();
+    }
+
+    @Bean
+    CookieCsrfTokenRepository csrfTokenRepository(CsrfCookieProperties properties) {
+        CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setCookiePath("/");
+        repository.setCookieCustomizer(cookie -> cookie
+                .sameSite(properties.sameSite())
+                .secure(properties.secure()));
+        return repository;
     }
 
     @Bean
@@ -85,7 +98,7 @@ class SecurityConfiguration {
     }
 
     @Bean
-    LoginAttemptRateLimiter loginAttemptRateLimiter(
+    LoginAttemptGuard loginAttemptGuard(
             LoginRateLimitProperties properties,
             Clock clock) {
         return new LoginAttemptRateLimiter(properties, clock);
@@ -146,9 +159,9 @@ class SecurityConfiguration {
             AbsoluteSessionTimeoutFilter absoluteSessionTimeoutFilter,
             AccountSecurityFreshnessFilter accountSecurityFreshnessFilter,
             RequestBodyLimitFilter requestBodyLimitFilter,
-            CorrelationIdFilter correlationIdFilter) throws Exception {
-        CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
-        csrfTokenRepository.setCookiePath("/");
+            CorrelationIdFilter correlationIdFilter,
+            StaffScopeQuery staffScopeQuery,
+            CookieCsrfTokenRepository csrfTokenRepository) throws Exception {
         RequestMatcher stripeWebhook = request ->
                 HttpMethod.POST.matches(request.getMethod())
                         && "/api/v1/payment-provider/stripe/webhook"
@@ -198,6 +211,8 @@ class SecurityConfiguration {
                                 "/swagger-ui/**",
                                 "/swagger-ui.html")
                         .permitAll()
+                        .requestMatchers("/actuator/metrics", "/actuator/metrics/**")
+                        .access(new OrganizationAdminActuatorAuthorizationManager(staffScopeQuery))
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/payment-provider/stripe/webhook")

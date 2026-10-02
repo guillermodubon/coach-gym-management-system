@@ -22,6 +22,9 @@ coach-gym:
   security:
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS}
+    csrf-cookie:
+      same-site: ${CSRF_COOKIE_SAME_SITE:none}
+      secure: ${CSRF_COOKIE_SECURE:true}
     headers:
       hsts-enabled: true
 

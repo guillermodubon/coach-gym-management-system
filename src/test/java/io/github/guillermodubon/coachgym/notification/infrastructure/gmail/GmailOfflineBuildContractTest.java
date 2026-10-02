@@ -42,7 +42,7 @@ class GmailOfflineBuildContractTest {
                         "dependsOn(gmailIntegrationTestSourceSet");
         assertThat(application)
                 .contains("show-details: never", "show-components: never",
-                        "include: readinessState,db,storage,email,stripe");
+                        "include: readinessState,db,diskSpace,storage,email,stripe");
     }
 
     @Test

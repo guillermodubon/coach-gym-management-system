@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.access;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,6 +12,11 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +44,9 @@ class AccessPaymentPolicyIntegrationTest extends AbstractAccessApiIntegrationTes
         jdbcTemplate.update(
                 "update gym.gym_settings "
                         + "set require_confirmed_payment_for_access=false");
+        jdbcTemplate.update(
+                "delete from gym.branch_access_policy_overrides where branch_id = ?",
+                initialBranchId());
         jdbcTemplate.execute("truncate table gym.access_records, "
                 + "gym.access_credential_history, gym.access_credentials");
     }
@@ -47,6 +56,9 @@ class AccessPaymentPolicyIntegrationTest extends AbstractAccessApiIntegrationTes
         jdbcTemplate.update(
                 "update gym.gym_settings "
                         + "set require_confirmed_payment_for_access=false");
+        jdbcTemplate.update(
+                "delete from gym.branch_access_policy_overrides where branch_id = ?",
+                initialBranchId());
     }
 
     @Test
@@ -78,6 +90,69 @@ class AccessPaymentPolicyIntegrationTest extends AbstractAccessApiIntegrationTes
                 .isEqualTo("PAYMENT_REQUIRED");
         assertThat(countAccessRows()).isEqualTo(1);
         assertThat(countPayments(client.id())).isZero();
+    }
+
+    @Test
+    void concurrentBranchPolicyOverrideAndAccessPersistOneValidDecision()
+            throws Exception {
+        ClientFixture client = createClient("ACTIVE");
+        MembershipFixture membership = createMembershipForToday(client);
+        MockHttpSession admin = loginAsAdminWithActiveBranch();
+        MockHttpSession receptionist = loginAsReceptionistWithActiveBranch();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<Integer> policyUpdate = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Branch policy race did not start.");
+                }
+                return mockMvc.perform(put(
+                                "/api/v1/branches/{id}/access-payment-policy",
+                                initialBranchId())
+                                .with(csrf())
+                                .session(admin)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"mode\":\"REQUIRED\",\"expectedVersion\":0}"))
+                        .andReturn()
+                        .getResponse()
+                        .getStatus();
+            });
+            Future<MvcAccessResult> accessAttempt = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Branch policy race did not start.");
+                }
+                return manualCheckIn(receptionist, membership.code());
+            });
+
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            assertThat(policyUpdate.get(30, TimeUnit.SECONDS)).isEqualTo(200);
+            MvcAccessResult result = accessAttempt.get(30, TimeUnit.SECONDS);
+
+            assertThat(result.reasonCode()).isIn("ACCESS_ALLOWED", "PAYMENT_REQUIRED");
+            assertThat(result.result()).isEqualTo(
+                    "ACCESS_ALLOWED".equals(result.reasonCode()) ? "ALLOWED" : "DENIED");
+            assertThat(countAccessRows()).isEqualTo(1);
+            assertThat(countPayments(client.id())).isZero();
+            assertThat(jdbcTemplate.queryForObject("""
+                    select policy_mode
+                    from gym.branch_access_policy_overrides
+                    where branch_id = ?
+                    """, String.class, initialBranchId())).isEqualTo("REQUIRED");
+            assertThat(jdbcTemplate.queryForObject("""
+                    select version
+                    from gym.branch_access_policy_overrides
+                    where branch_id = ?
+                    """, Long.class, initialBranchId())).isEqualTo(1L);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
     }
 
     @Test

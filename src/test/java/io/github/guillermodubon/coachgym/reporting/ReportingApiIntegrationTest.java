@@ -1,5 +1,6 @@
 package io.github.guillermodubon.coachgym.reporting;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -8,9 +9,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.UUID;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.junit.jupiter.api.Test;
 
 class ReportingApiIntegrationTest extends AbstractDashboardApiIntegrationTest {
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     private static final String FROM = "2026-09-01";
     private static final String UNTIL = "2026-09-06";
@@ -56,6 +62,15 @@ class ReportingApiIntegrationTest extends AbstractDashboardApiIntegrationTest {
                 .andExpect(jsonPath("$.metrics.durableEmail").exists())
                 .andExpect(jsonPath("$.metrics.notifications").doesNotExist())
                 .andExpect(content().string(not(containsString("recipient"))));
+
+        assertThat(meterRegistry.get("coachgym.reporting.requests")
+                .tag("route", "reporting")
+                .tag("outcome", "SUCCESS")
+                .counter().count()).isGreaterThanOrEqualTo(1.0);
+        assertThat(meterRegistry.get("coachgym.reporting.request.duration")
+                .tag("route", "reporting")
+                .tag("outcome", "SUCCESS")
+                .timer().count()).isGreaterThanOrEqualTo(1L);
     }
 
     @Test

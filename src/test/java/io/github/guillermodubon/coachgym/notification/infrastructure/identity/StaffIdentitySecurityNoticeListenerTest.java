@@ -27,8 +27,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class StaffIdentitySecurityNoticeListenerTest {
 
     private static final UUID USER_ID = UUID.fromString("00000000-0000-0000-0000-000000009401");
@@ -62,7 +64,7 @@ class StaffIdentitySecurityNoticeListenerTest {
     }
 
     @Test
-    void transportExceptionCannotRollBackCommittedAuthorityChange() {
+    void transportExceptionCannotRollBackCommittedAuthorityChange(CapturedOutput output) {
         when(recipients.findNoticeRecipient(USER_ID)).thenReturn(Optional.of(
                 new StaffIdentityNoticeRecipient("staff@example.test", "Staff Person")));
         when(sender.sendSecurityNotice(org.mockito.ArgumentMatchers.any()))
@@ -77,6 +79,10 @@ class StaffIdentitySecurityNoticeListenerTest {
 
         verify(sender).sendSecurityNotice(org.mockito.ArgumentMatchers.any());
         verify(recipients, never()).findNoticeRecipient(ACTOR_ID);
+        org.assertj.core.api.Assertions.assertThat(output.getAll())
+                .contains("event=staff_security_notice", "type=AUTHORITY_CHANGED")
+                .doesNotContain(USER_ID.toString(), ACTOR_ID.toString(),
+                        "staff@example.test", "private transport detail");
     }
 
     @Test

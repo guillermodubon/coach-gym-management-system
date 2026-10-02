@@ -16,12 +16,15 @@ class ActuatorConfigurationContractTest {
         String yaml = managementSection();
 
         assertThat(yaml)
-                .contains("include: ${management_endpoints_web_exposure_include:health,info}")
+                .contains("include: ${management_endpoints_web_exposure_include:health,info,metrics}")
                 .contains("probes: enabled: true")
                 .contains("show-details: never")
                 .contains("show-components: never")
                 .contains("liveness: include: livenessstate")
-                .contains("readiness: include: readinessstate,db,storage,email,stripe")
+                .contains("readiness: include: readinessstate,db,diskspace,storage,email,stripe")
+                .contains("show-details: when-authorized")
+                .contains("show-components: when-authorized")
+                .contains("roles: admin")
                 .doesNotContain("env", "beans", "configprops", "mappings", "loggers", "heapdump");
     }
 

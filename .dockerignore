@@ -1,0 +1,13 @@
+.git
+.codex
+.gradle
+build
+data
+docs
+.env
+.env.*
+*.md
+src/test
+src/gmailIntegrationTest
+.idea
+.vscode

@@ -22,7 +22,14 @@ import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryS
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryStore;
 import io.github.guillermodubon.coachgym.notification.application.EmailDeliveryVersionConflictException;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -126,6 +133,47 @@ class JdbcTransactionalEmailDeliveryAdapterIntegrationTest
                         pending.id(), pending.version(), NOW.plusSeconds(31), NOW.plusSeconds(61))
                 .orElseThrow();
         assertThat(recovered.claimToken()).isNotEqualTo(first.claimToken());
+    }
+
+    @Test
+    void concurrentClaimersAcquireOnlyOneDatabaseLease() throws Exception {
+        UUID clientId = insertClient("concurrent-claim");
+        EmailDeliveryDetails pending = deliveryStore.createPending(
+                pending(clientId, UUID.randomUUID(), "9".repeat(64)));
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Optional<EmailDeliveryClaim>> first = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return deliveryStore.claimForAttempt(
+                        pending.id(), pending.version(), NOW, NOW.plusSeconds(30));
+            });
+            Future<Optional<EmailDeliveryClaim>> second = executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                return deliveryStore.claimForAttempt(
+                        pending.id(), pending.version(), NOW, NOW.plusSeconds(30));
+            });
+
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            List<Optional<EmailDeliveryClaim>> results = List.of(
+                    first.get(10, TimeUnit.SECONDS), second.get(10, TimeUnit.SECONDS));
+
+            assertThat(results.stream().filter(Optional::isPresent)).hasSize(1);
+            assertThat(results.stream().filter(Optional::isEmpty)).hasSize(1);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.email_delivery_claims where delivery_id = ?",
+                Integer.class, pending.id())).isEqualTo(1);
     }
 
     @Test
