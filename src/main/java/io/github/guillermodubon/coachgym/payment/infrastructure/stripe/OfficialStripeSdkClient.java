@@ -34,22 +34,7 @@ final class OfficialStripeSdkClient implements StripeSdkClient {
     @Override
     public StripeCheckoutResult createCheckout(StripeCheckoutCreationRequest request) {
         try {
-            SessionCreateParams params = SessionCreateParams.builder()
-                    .setMode(SessionCreateParams.Mode.PAYMENT)
-                    .setSuccessUrl(request.successUrl().toString())
-                    .setCancelUrl(request.cancelUrl().toString())
-                    .addLineItem(SessionCreateParams.LineItem.builder()
-                            .setQuantity(1L)
-                            .setPriceData(SessionCreateParams.LineItem.PriceData.builder()
-                                    .setCurrency(request.currency())
-                                    .setUnitAmount(request.amountMinor())
-                                    .setProductData(SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                                            .setName("Coach Gym membership")
-                                            .build())
-                                    .build())
-                            .build())
-                    .putMetadata("payment_attempt_id", request.attemptId())
-                    .build();
+            SessionCreateParams params = checkoutParams(request);
             Session session = Session.create(params, requestOptionsFor(request.attemptId()));
             if (session == null || session.getId() == null || session.getId().isBlank()
                     || session.getUrl() == null || session.getUrl().isBlank()
@@ -65,6 +50,28 @@ final class OfficialStripeSdkClient implements StripeSdkClient {
         } catch (RuntimeException exception) {
             throw new PaymentProviderException(PaymentProviderFailureCode.UNAVAILABLE);
         }
+    }
+
+    static SessionCreateParams checkoutParams(StripeCheckoutCreationRequest request) {
+        return SessionCreateParams.builder()
+                .setMode(SessionCreateParams.Mode.PAYMENT)
+                .setSuccessUrl(request.successUrl().toString())
+                .setCancelUrl(request.cancelUrl().toString())
+                .addLineItem(SessionCreateParams.LineItem.builder()
+                        .setQuantity(1L)
+                        .setPriceData(SessionCreateParams.LineItem.PriceData.builder()
+                                .setCurrency(request.currency())
+                                .setUnitAmount(request.amountMinor())
+                                .setProductData(SessionCreateParams.LineItem.PriceData.ProductData.builder()
+                                        .setName("Coach Gym membership")
+                                        .build())
+                                .build())
+                        .build())
+                .putMetadata("payment_attempt_id", request.attemptId())
+                .setPaymentIntentData(SessionCreateParams.PaymentIntentData.builder()
+                        .putMetadata("payment_attempt_id", request.attemptId())
+                        .build())
+                .build();
     }
 
     private RequestOptions requestOptionsFor(String attemptId) {

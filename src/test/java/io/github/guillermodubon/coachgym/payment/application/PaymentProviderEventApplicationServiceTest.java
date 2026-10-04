@@ -1,6 +1,7 @@
 package io.github.guillermodubon.coachgym.payment.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
@@ -131,6 +132,21 @@ class PaymentProviderEventApplicationServiceTest {
         verify(attemptStore, never()).markProviderSucceeded(any());
         verify(attemptStore, never()).markProviderFailure(any());
         verify(eventStore).finalizeProcessing(any(FinalizePaymentProviderEventCommand.class));
+    }
+
+    @Test
+    void unknownAttemptIsRejectedBeforeReservingProviderEventIdentity() {
+        VerifiedPaymentProviderEvent event = completedEvent("evt_unknown_attempt");
+        given(attemptStore.findProviderDetails(ATTEMPT_ID)).willReturn(java.util.Optional.empty());
+
+        assertThatThrownBy(() -> service.process(event))
+                .isInstanceOf(PaymentProviderException.class)
+                .extracting("failureCode")
+                .isEqualTo(PaymentProviderFailureCode.INVALID_RESPONSE);
+
+        verify(eventStore, never()).reserve(any());
+        verify(eventStore, never()).finalizeProcessing(any());
+        verify(paymentStore, never()).register(any());
     }
 
     @Test

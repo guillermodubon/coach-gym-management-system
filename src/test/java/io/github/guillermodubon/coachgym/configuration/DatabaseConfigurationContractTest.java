@@ -51,7 +51,16 @@ class DatabaseConfigurationContractTest {
         assertThat(supabase)
                 .contains("provider: supabase")
                 .contains("endpoint: ${supabase_storage_url}")
-                .contains("service-key: ${supabase_service_role_key}");
+                .contains("secret-key: ${supabase_secret_key}");
+    }
+
+    @Test
+    void supabaseFlywayHistoryUsesTheSamePrivateDomainSchema() throws Exception {
+        String yaml = normalized(SUPABASE_CONFIGURATION);
+
+        assertThat(yaml)
+                .contains("default-schema: gym")
+                .contains("schemas: gym");
     }
 
     private static String normalized(Path path) throws Exception {

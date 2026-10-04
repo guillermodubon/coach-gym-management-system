@@ -12,6 +12,8 @@ spring:
     url: ${SUPABASE_FLYWAY_JDBC_URL:${SUPABASE_JDBC_URL}}
     user: ${SUPABASE_FLYWAY_USERNAME:${SUPABASE_DB_USERNAME}}
     password: ${SUPABASE_FLYWAY_PASSWORD:${SUPABASE_DB_PASSWORD}}
+    default-schema: gym
+    schemas: gym
     connect-retries: ${FLYWAY_CONNECT_RETRIES:3}
     connect-retries-interval: ${FLYWAY_CONNECT_RETRIES_INTERVAL:PT5S}
   docker:
@@ -40,7 +42,7 @@ gym:
     provider: supabase
     supabase:
       endpoint: ${SUPABASE_STORAGE_URL}
-      service-key: ${SUPABASE_SERVICE_ROLE_KEY}
+      secret-key: ${SUPABASE_SECRET_KEY}
       bucket: ${SUPABASE_STORAGE_BUCKET:coach-gym-private}
       connection-timeout: ${SUPABASE_STORAGE_CONNECTION_TIMEOUT:PT5S}
       request-timeout: ${SUPABASE_STORAGE_REQUEST_TIMEOUT:PT30S}

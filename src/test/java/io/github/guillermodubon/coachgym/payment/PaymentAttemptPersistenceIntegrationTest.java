@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptStore;
+import io.github.guillermodubon.coachgym.payment.application.CardCheckoutGateway;
+import io.github.guillermodubon.coachgym.payment.application.CheckoutRedirectPolicy;
 import io.github.guillermodubon.coachgym.payment.application.CancelPaymentAttemptPersistenceCommand;
 import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptVersionConflictException;
 import io.github.guillermodubon.coachgym.payment.application.FailPaymentAttemptCommand;
@@ -15,21 +17,42 @@ import io.github.guillermodubon.coachgym.payment.application.PaymentProviderEven
 import io.github.guillermodubon.coachgym.payment.application.PaymentProviderEventType;
 import io.github.guillermodubon.coachgym.payment.application.PersistPaymentAttemptCommand;
 import io.github.guillermodubon.coachgym.payment.application.PersistPaymentProviderEventCommand;
+import io.github.guillermodubon.coachgym.payment.application.PaymentProviderWebhookLimits;
+import io.github.guillermodubon.coachgym.payment.application.PaymentProviderWebhookVerifier;
 import io.github.guillermodubon.coachgym.payment.application.VerifiedPaymentProviderEvent;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@TestPropertySource(properties = {
+        "coach-gym.payment.stripe.enabled=true",
+        "coach-gym.payment.stripe.sandbox=true",
+        "coach-gym.payment.stripe.secret-key=sk_test_integration_only",
+        "coach-gym.payment.stripe.webhook-signing-secret=whsec_integration_only",
+        "coach-gym.payment.stripe.success-url=http://localhost:8080/stripe/success",
+        "coach-gym.payment.stripe.cancel-url=http://localhost:8080/stripe/cancel"
+})
 class PaymentAttemptPersistenceIntegrationTest extends AbstractPaymentCorrectionApiIntegrationTest {
 
     private static final Instant NOW = Instant.parse("2026-09-10T16:00:00Z");
+    private static final String WEBHOOK_SECRET = "whsec_integration_only";
 
     @Autowired
     private PaymentAttemptStore paymentAttemptStore;
@@ -39,6 +62,20 @@ class PaymentAttemptPersistenceIntegrationTest extends AbstractPaymentCorrection
 
     @Autowired
     private PaymentProviderEventApplicationService paymentProviderEventApplicationService;
+
+    @Autowired
+    private ApplicationContext applicationContext;
+
+    @Test
+    void enabledStripeRuntimeContainsOneVerifierAndItsHealthIndicator() {
+        assertThat(applicationContext.getBeansOfType(PaymentProviderWebhookVerifier.class))
+                .hasSize(1);
+        assertThat(applicationContext.getBeansOfType(CardCheckoutGateway.class)).hasSize(1);
+        assertThat(applicationContext.getBeansOfType(CheckoutRedirectPolicy.class)).hasSize(1);
+        assertThat(applicationContext.getBeansOfType(PaymentProviderWebhookLimits.class))
+                .hasSize(1);
+        assertThat(applicationContext.containsBean("stripe")).isTrue();
+    }
 
     @Test
     void persistsCreatedAttemptWithInitialAppendOnlyHistory() throws Exception {
@@ -318,6 +355,97 @@ class PaymentAttemptPersistenceIntegrationTest extends AbstractPaymentCorrection
                 "select count(*) from gym.payments", Integer.class)).isEqualTo(paymentsBefore);
     }
 
+    @Test
+    void signedCheckoutCompletionIsProcessedAndRepeatedDeliveryIsAcknowledgedIdempotently()
+            throws Exception {
+        PaymentFixture fixture = fixture();
+        UUID attemptId = createProcessingAttempt(fixture, "cs_test_webhook_completed");
+        long timestamp = Instant.now().getEpochSecond();
+        String payload = completedPayload(
+                "evt_webhook_completed", "cs_test_webhook_completed", "pi_test_webhook_completed",
+                attemptId, 2_500, "usd", timestamp);
+
+        postWebhook(payload, sign(payload, timestamp))
+                .andExpect(status().isNoContent());
+        postWebhook(payload, sign(payload, timestamp))
+                .andExpect(status().isNoContent());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from gym.payment_attempts where id = ?", String.class, attemptId))
+                .isEqualTo("SUCCEEDED");
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*) from gym.processed_payment_provider_events
+                where provider_event_reference = 'evt_webhook_completed'
+                  and processing_result = 'PROCESSED'
+                """, Integer.class)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.payments where payment_method = 'CARD' and status = 'PAID'",
+                Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void signedExpiredCheckoutAndPaymentIntentFailureFinalizeTheirAttempts()
+            throws Exception {
+        PaymentFixture expiredFixture = fixture();
+        UUID expiredAttemptId = createProcessingAttempt(expiredFixture, "cs_test_webhook_expired");
+        long expiredTimestamp = Instant.now().getEpochSecond();
+        String expiredPayload = expiredPayload(
+                "evt_webhook_expired", "cs_test_webhook_expired", expiredAttemptId, expiredTimestamp);
+
+        postWebhook(expiredPayload, sign(expiredPayload, expiredTimestamp))
+                .andExpect(status().isNoContent());
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from gym.payment_attempts where id = ?", String.class, expiredAttemptId))
+                .isEqualTo("EXPIRED");
+
+        PaymentFixture failedFixture = fixture();
+        UUID failedAttemptId = createProcessingAttempt(failedFixture, "cs_test_webhook_failed");
+        long failedTimestamp = Instant.now().getEpochSecond();
+        String failedPayload = paymentIntentFailedPayload(
+                "evt_webhook_failed", "pi_test_webhook_failed", failedAttemptId, failedTimestamp);
+
+        postWebhook(failedPayload, sign(failedPayload, failedTimestamp))
+                .andExpect(status().isNoContent());
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from gym.payment_attempts where id = ?", String.class, failedAttemptId))
+                .isEqualTo("FAILED");
+    }
+
+    @Test
+    void signedAmountAndCurrencyMismatchesAreRejectedWithoutConfirmingPayment()
+            throws Exception {
+        assertCompletedEventRejected("evt_webhook_amount_mismatch", 9_900, "usd");
+        assertCompletedEventRejected("evt_webhook_currency_mismatch", 2_500, "eur");
+    }
+
+    @Test
+    void invalidSignatureAndMissingAttemptMetadataAreRejectedBeforePaymentWrites()
+            throws Exception {
+        long timestamp = Instant.now().getEpochSecond();
+        UUID attemptId = UUID.randomUUID();
+        String missingMetadataPayload = """
+                {"id":"evt_webhook_missing_metadata","object":"event","api_version":"2024-06-20",
+                "created":%d,"data":{"object":{"id":"cs_test_missing_metadata",
+                "object":"checkout.session","metadata":{}}},"livemode":false,
+                "pending_webhooks":1,"type":"checkout.session.expired"}
+                """.formatted(timestamp).replaceAll("\\s+", "");
+        String unknownAttemptPayload = expiredPayload(
+                "evt_webhook_unknown_attempt", "cs_test_unknown_attempt", attemptId, timestamp);
+
+        postWebhook(missingMetadataPayload, sign(missingMetadataPayload, timestamp))
+                .andExpect(status().isBadRequest());
+        postWebhook(unknownAttemptPayload, sign(unknownAttemptPayload, timestamp))
+                .andExpect(status().isBadRequest());
+        postWebhook(missingMetadataPayload, "t=" + timestamp + ",v1=invalid")
+                .andExpect(status().isBadRequest());
+
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*) from gym.processed_payment_provider_events
+                where provider_event_reference in (
+                    'evt_webhook_missing_metadata', 'evt_webhook_unknown_attempt')
+                """, Integer.class)).isZero();
+    }
+
     private PaymentFixture fixture() throws Exception {
         var session = loginAsAdmin();
         return createPaidPayment(session, "CASH", null);
@@ -333,5 +461,101 @@ class PaymentAttemptPersistenceIntegrationTest extends AbstractPaymentCorrection
         return jdbcTemplate.queryForObject(
                 "select registered_by_user_id from gym.payments where id = ?",
                 UUID.class, fixture.paymentId());
+    }
+
+    private UUID createProcessingAttempt(PaymentFixture fixture, String checkoutReference) {
+        UUID attemptId = UUID.randomUUID();
+        paymentAttemptStore.create(command(attemptId, fixture));
+        paymentAttemptStore.markProcessing(new ProcessPaymentAttemptCommand(
+                attemptId, 0, checkoutReference, Instant.now().plusSeconds(900),
+                actorId(fixture), Instant.now()));
+        return attemptId;
+    }
+
+    private void assertCompletedEventRejected(String eventReference, long amountMinor, String currency)
+            throws Exception {
+        PaymentFixture fixture = fixture();
+        String checkoutReference = "cs_test_" + eventReference;
+        UUID attemptId = createProcessingAttempt(fixture, checkoutReference);
+        long timestamp = Instant.now().getEpochSecond();
+        String payload = completedPayload(
+                eventReference, checkoutReference, "pi_test_" + eventReference,
+                attemptId, amountMinor, currency, timestamp);
+        int cardPaymentsBefore = jdbcTemplate.queryForObject(
+                "select count(*) from gym.payments where payment_method = 'CARD'",
+                Integer.class);
+
+        postWebhook(payload, sign(payload, timestamp))
+                .andExpect(status().isBadRequest());
+
+        assertThat(jdbcTemplate.queryForObject(
+                "select status from gym.payment_attempts where id = ?", String.class, attemptId))
+                .isEqualTo("PROCESSING");
+        assertThat(jdbcTemplate.queryForObject("""
+                select processing_result from gym.processed_payment_provider_events
+                where provider_event_reference = ?
+                """, String.class, eventReference)).isEqualTo("REJECTED");
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from gym.payments where payment_method = 'CARD'",
+                Integer.class)).isEqualTo(cardPaymentsBefore);
+    }
+
+    private org.springframework.test.web.servlet.ResultActions postWebhook(
+            String payload, String signature) throws Exception {
+        return mockMvc.perform(post("/api/v1/payment-provider/stripe/webhook")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Stripe-Signature", signature)
+                .content(payload));
+    }
+
+    private static String completedPayload(
+            String eventReference,
+            String checkoutReference,
+            String paymentReference,
+            UUID attemptId,
+            long amountMinor,
+            String currency,
+            long timestamp) {
+        return """
+                {"id":"%s","object":"event","api_version":"2024-06-20","created":%d,
+                "data":{"object":{"id":"%s","object":"checkout.session","amount_total":%d,
+                "currency":"%s","payment_intent":"%s","metadata":{"payment_attempt_id":"%s"}}},
+                "livemode":false,"pending_webhooks":1,"type":"checkout.session.completed"}
+                """.formatted(eventReference, timestamp, checkoutReference, amountMinor,
+                        currency, paymentReference, attemptId)
+                .replaceAll("\\s+", "");
+    }
+
+    private static String expiredPayload(
+            String eventReference, String checkoutReference, UUID attemptId, long timestamp) {
+        return """
+                {"id":"%s","object":"event","api_version":"2024-06-20","created":%d,
+                "data":{"object":{"id":"%s","object":"checkout.session",
+                "metadata":{"payment_attempt_id":"%s"}}},"livemode":false,
+                "pending_webhooks":1,"type":"checkout.session.expired"}
+                """.formatted(eventReference, timestamp, checkoutReference, attemptId)
+                .replaceAll("\\s+", "");
+    }
+
+    private static String paymentIntentFailedPayload(
+            String eventReference, String paymentReference, UUID attemptId, long timestamp) {
+        return """
+                {"id":"%s","object":"event","api_version":"2024-06-20","created":%d,
+                "data":{"object":{"id":"%s","object":"payment_intent",
+                "metadata":{"payment_attempt_id":"%s"}}},"livemode":false,
+                "pending_webhooks":1,"type":"payment_intent.payment_failed"}
+                """.formatted(eventReference, timestamp, paymentReference, attemptId)
+                .replaceAll("\\s+", "");
+    }
+
+    private static String sign(String payload, long timestamp) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(WEBHOOK_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] digest = mac.doFinal((timestamp + "." + payload).getBytes(StandardCharsets.UTF_8));
+            return "t=" + timestamp + ",v1=" + HexFormat.of().formatHex(digest);
+        } catch (Exception exception) {
+            throw new AssertionError("Could not sign the local Stripe test event.", exception);
+        }
     }
 }

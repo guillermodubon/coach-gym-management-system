@@ -5,11 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.guillermodubon.coachgym.payment.application.PaymentProviderException;
 import io.github.guillermodubon.coachgym.payment.application.PaymentProviderFailureCode;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HexFormat;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import com.stripe.param.checkout.SessionCreateParams;
 import org.junit.jupiter.api.Test;
 
 class OfficialStripeSdkClientTest {
@@ -38,6 +40,21 @@ class OfficialStripeSdkClientTest {
         assertThat(event.providerPaymentReference()).isEqualTo("pi_test_1");
         assertThat(event.amount()).isEqualByComparingTo("25.00");
         assertThat(event.currency()).isEqualTo("usd");
+    }
+
+    @Test
+    void checkoutAttemptMetadataIsAttachedToSessionAndPaymentIntent() {
+        SessionCreateParams params = OfficialStripeSdkClient.checkoutParams(
+                new StripeCheckoutCreationRequest(
+                        ATTEMPT_ID,
+                        2_500,
+                        "usd",
+                        URI.create("http://localhost:8080/stripe/success"),
+                        URI.create("http://localhost:8080/stripe/cancel")));
+
+        assertThat(params.getMetadata()).containsEntry("payment_attempt_id", ATTEMPT_ID);
+        assertThat(params.getPaymentIntentData().getMetadata())
+                .containsEntry("payment_attempt_id", ATTEMPT_ID);
     }
 
     @Test

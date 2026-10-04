@@ -53,10 +53,10 @@ class StripeWebhookControllerTest {
     private StripeWebhookMetrics webhookMetrics;
 
     @Test
-    void verifiesBeforeProcessingAndAcceptsDuplicateAcknowledgementWithoutSession() throws Exception {
+    void returnsNoContentForVerifiedProcessedEventWithoutSession() throws Exception {
         when(verifier.verify(PaymentProvider.STRIPE, "{}".getBytes(), "v1=test"))
                 .thenReturn(event());
-        when(eventService.process(any())).thenReturn(PaymentProviderEventProcessingResult.REJECTED);
+        when(eventService.process(any())).thenReturn(PaymentProviderEventProcessingResult.PROCESSED);
 
         mockMvc.perform(post("/api/v1/payment-provider/stripe/webhook")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -65,6 +65,19 @@ class StripeWebhookControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(eventService).process(any(VerifiedPaymentProviderEvent.class));
+    }
+
+    @Test
+    void doesNotAcknowledgePersistedBusinessRejectionAsSuccess() throws Exception {
+        when(verifier.verify(any(), any(), any())).thenReturn(event());
+        when(eventService.process(any())).thenReturn(PaymentProviderEventProcessingResult.REJECTED);
+
+        mockMvc.perform(post("/api/v1/payment-provider/stripe/webhook")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Stripe-Signature", "v1=test")
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("MALFORMED_PROVIDER_PAYLOAD"));
     }
 
     @Test
