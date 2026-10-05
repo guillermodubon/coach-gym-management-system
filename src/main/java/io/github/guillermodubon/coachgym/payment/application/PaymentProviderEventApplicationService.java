@@ -51,6 +51,11 @@ public class PaymentProviderEventApplicationService {
             throw new IllegalArgumentException("Verified provider event is required.");
         }
 
+        PaymentAttemptProviderDetails providerDetails = paymentAttemptStore
+                .findProviderDetails(event.paymentAttemptId())
+                .orElseThrow(() -> new PaymentProviderException(
+                        PaymentProviderFailureCode.INVALID_RESPONSE));
+
         PaymentProviderEventReservation reservation = eventStore.reserve(
                 new PersistPaymentProviderEventCommand(
                         UUID.randomUUID(), event.provider(), event.providerEventReference(),
@@ -59,12 +64,12 @@ public class PaymentProviderEventApplicationService {
                 event.provider(), event.providerEventReference());
 
         if (stored.processingResult() != PaymentProviderEventProcessingResult.PENDING) {
-            publishDuplicateAcknowledgement(stored);
+            publishDuplicateAcknowledgement(stored, providerDetails);
             return stored.processingResult();
         }
         if (reservation == PaymentProviderEventReservation.ALREADY_RESERVED
                 && !sameIdentity(stored, event)) {
-            publishDuplicateAcknowledgement(stored);
+            publishDuplicateAcknowledgement(stored, providerDetails);
             return PaymentProviderEventProcessingResult.REJECTED;
         }
         if (!sameIdentity(stored, event)) {
@@ -73,9 +78,6 @@ public class PaymentProviderEventApplicationService {
             return PaymentProviderEventProcessingResult.REJECTED;
         }
 
-        PaymentAttemptProviderDetails providerDetails = paymentAttemptStore
-                .findProviderDetails(event.paymentAttemptId())
-                .orElseThrow(() -> new IllegalStateException("Payment attempt was not found."));
         if (!matchesLineage(event, providerDetails)) {
             eventStore.finalizeProcessing(finalizeCommand(
                     event, PaymentProviderEventProcessingResult.REJECTED));
@@ -201,14 +203,18 @@ public class PaymentProviderEventApplicationService {
         });
     }
 
-    private void publishDuplicateAcknowledgement(PaymentProviderEventDetails stored) {
+    private void publishDuplicateAcknowledgement(
+            PaymentProviderEventDetails stored,
+            PaymentAttemptProviderDetails incomingProviderDetails) {
         UUID paymentAttemptId = stored.paymentAttemptId();
         if (paymentAttemptId == null) {
             return;
         }
-        UUID branchId = paymentAttemptStore.findProviderDetails(paymentAttemptId)
-                .map(details -> details.details().initiatedAtBranchId())
-                .orElse(null);
+        UUID branchId = paymentAttemptId.equals(incomingProviderDetails.details().id())
+                ? incomingProviderDetails.details().initiatedAtBranchId()
+                : paymentAttemptStore.findProviderDetails(paymentAttemptId)
+                        .map(details -> details.details().initiatedAtBranchId())
+                        .orElse(null);
         // The duplicate branch has no further state change. Publishing inside
         // the current transaction makes its audit record commit atomically
         // with the acknowledgement and disappear on rollback.

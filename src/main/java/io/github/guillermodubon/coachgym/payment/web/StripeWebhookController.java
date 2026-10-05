@@ -85,19 +85,26 @@ class StripeWebhookController {
             webhookMetrics.recordRejected(PaymentProviderFailureCode.UNAVAILABLE);
             throw new PaymentProviderException(PaymentProviderFailureCode.UNAVAILABLE);
         }
+        VerifiedPaymentProviderEvent verified;
+        PaymentProviderEventProcessingResult result;
         try {
-            VerifiedPaymentProviderEvent verified = verifier.verify(
-                    PaymentProvider.STRIPE, rawPayload, signatureHeader);
-            PaymentProviderEventProcessingResult result = eventService.process(verified);
-            if (result == null) {
-                throw new IllegalStateException("Provider event processing result was missing.");
-            }
-            webhookMetrics.record(verified.eventType(), result);
-            return ResponseEntity.noContent().build();
+            verified = verifier.verify(PaymentProvider.STRIPE, rawPayload, signatureHeader);
+            result = eventService.process(verified);
         } catch (PaymentProviderException exception) {
             webhookMetrics.recordRejected(exception.failureCode());
             throw exception;
         }
+        if (result == null) {
+            throw new IllegalStateException("Provider event processing result was missing.");
+        }
+        webhookMetrics.record(verified.eventType(), result);
+        if (result == PaymentProviderEventProcessingResult.REJECTED) {
+            throw new PaymentProviderException(PaymentProviderFailureCode.INVALID_RESPONSE);
+        }
+        if (result != PaymentProviderEventProcessingResult.PROCESSED) {
+            throw new IllegalStateException("Provider event processing did not complete.");
+        }
+        return ResponseEntity.noContent().build();
     }
 
     private void enforceLimits(byte[] rawPayload, String signatureHeader) {
