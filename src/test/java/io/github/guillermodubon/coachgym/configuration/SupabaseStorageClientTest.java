@@ -37,11 +37,13 @@ class SupabaseStorageClientTest {
         String checksum = HexFormat.of().formatHex(
                 MessageDigest.getInstance("SHA-256").digest(content));
         AtomicReference<String> authorization = new AtomicReference<>();
+        AtomicReference<String> apiKey = new AtomicReference<>();
         AtomicReference<String> method = new AtomicReference<>();
         server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         server.createContext("/storage/v1/object/coach-gym-private/receipts/", exchange -> {
             method.set(exchange.getRequestMethod());
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            apiKey.set(exchange.getRequestHeaders().getFirst("apikey"));
             if ("GET".equals(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(200, content.length);
                 exchange.getResponseBody().write(content);
@@ -54,7 +56,7 @@ class SupabaseStorageClientTest {
 
         SupabaseStorageProperties properties = new SupabaseStorageProperties(
                 "http://localhost:" + server.getAddress().getPort(),
-                "service-role-secret", "coach-gym-private",
+                "offline-secret-key", "coach-gym-private",
                 Duration.ofSeconds(1), Duration.ofSeconds(2));
         SupabaseStorageClient client = new SupabaseStorageClient(
                 properties, HttpClient.newHttpClient());
@@ -67,7 +69,9 @@ class SupabaseStorageClientTest {
         client.delete("receipts/00000000-0000-0000-0000-000000000001.pdf");
 
         assertThat(method.get()).isEqualTo("DELETE");
-        assertThat(authorization.get()).isEqualTo("Bearer service-role-secret");
+        assertThat(apiKey.get()).isEqualTo("offline-secret-key");
+        assertThat(authorization.get()).isNull();
+        assertThat(properties.toString()).doesNotContain("offline-secret-key");
     }
 
     @Test
@@ -120,7 +124,7 @@ class SupabaseStorageClientTest {
     @Test
     void rejectsDotSegmentBucketConfigurationBeforeMakingARequest() {
         SupabaseStorageProperties properties = new SupabaseStorageProperties(
-                "https://storage.example.test", "service-role-secret", "..",
+                "https://storage.example.test", "offline-secret-key", "..",
                 Duration.ofSeconds(1), Duration.ofSeconds(2));
 
         assertThat(properties.isValid()).isFalse();
@@ -129,7 +133,7 @@ class SupabaseStorageClientTest {
     private SupabaseStorageClient clientForServer() {
         SupabaseStorageProperties properties = new SupabaseStorageProperties(
                 "http://localhost:" + server.getAddress().getPort(),
-                "service-role-secret", "coach-gym-private",
+                "offline-secret-key", "coach-gym-private",
                 Duration.ofSeconds(1), Duration.ofSeconds(2));
         return new SupabaseStorageClient(properties, HttpClient.newHttpClient());
     }

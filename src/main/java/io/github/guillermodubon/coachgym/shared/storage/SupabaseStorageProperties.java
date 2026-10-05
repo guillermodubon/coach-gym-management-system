@@ -11,7 +11,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties(prefix = "gym.storage.supabase")
 public record SupabaseStorageProperties(
         String endpoint,
-        String serviceKey,
+        String secretKey,
         String bucket,
         Duration connectionTimeout,
         Duration requestTimeout) {
@@ -19,7 +19,7 @@ public record SupabaseStorageProperties(
     @ConstructorBinding
     public SupabaseStorageProperties {
         endpoint = endpoint == null ? null : endpoint.strip();
-        serviceKey = serviceKey == null || serviceKey.isBlank() ? null : serviceKey.strip();
+        secretKey = secretKey == null || secretKey.isBlank() ? null : secretKey.strip();
         bucket = bucket == null || bucket.isBlank() ? "coach-gym-private" : bucket.strip();
         connectionTimeout = connectionTimeout == null ? Duration.ofSeconds(5) : connectionTimeout;
         requestTimeout = requestTimeout == null ? Duration.ofSeconds(30) : requestTimeout;
@@ -28,9 +28,9 @@ public record SupabaseStorageProperties(
     public boolean isValid() {
         try {
             URI uri = URI.create(endpoint == null ? "" : endpoint);
-            return serviceKey != null
-                    && !serviceKey.contains("\r")
-                    && !serviceKey.contains("\n")
+            return secretKey != null
+                    && !secretKey.contains("\r")
+                    && !secretKey.contains("\n")
                     && uri.getScheme() != null
                     && (uri.getScheme().equalsIgnoreCase("https")
                         || "localhost".equalsIgnoreCase(uri.getHost()))
@@ -48,7 +48,7 @@ public record SupabaseStorageProperties(
     @Override
     public String toString() {
         return "SupabaseStorageProperties[endpointPresent=" + (endpoint != null)
-                + ", serviceKeyPresent=" + (serviceKey != null)
+                + ", secretKeyPresent=" + (secretKey != null)
                 + ", bucket=" + bucket
                 + ", connectionTimeout=" + connectionTimeout
                 + ", requestTimeout=" + requestTimeout + ']';

@@ -5,6 +5,7 @@ HELP.md
 build/
 .env
 .env.*
+!.env.example
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/

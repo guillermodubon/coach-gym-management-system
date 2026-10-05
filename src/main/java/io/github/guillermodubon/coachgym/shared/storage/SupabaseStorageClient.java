@@ -20,7 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * Small bounded HTTP adapter for the private Supabase Storage object API.
- * Provider HTTP details and the service key do not escape configuration.
+ * Provider HTTP details and the server-side secret key do not escape configuration.
  */
 @Component
 public class SupabaseStorageClient {
@@ -87,8 +87,7 @@ public class SupabaseStorageClient {
         URI uri = objectUri(storageKey);
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                 .timeout(properties.requestTimeout())
-                .header("Authorization", "Bearer " + properties.serviceKey())
-                .header("apikey", properties.serviceKey());
+                .header("apikey", properties.secretKey());
         if (contentType != null) {
             builder.header("Content-Type", contentType);
         }
