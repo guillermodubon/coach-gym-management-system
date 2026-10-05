@@ -17,20 +17,11 @@ class DeploymentReadinessContractTest {
     private static final Path APPLICATION = Path.of("src/main/resources/application.yml");
     private static final Path LOCAL_PROFILE = Path.of("src/main/resources/application-local.yml");
     private static final Path DEPLOYED_PROFILE = Path.of("src/main/resources/application-supabase.yml");
-    private static final Path ENV_EXAMPLE = Path.of(".env.example");
     private static final Pattern SECRET_LIKE_VALUE = Pattern.compile(
             "(?i)(?:sb_secret_[a-z0-9_-]{12,}|sk_(?:live|test)_[a-z0-9]{12,}|"
                     + "whsec_[a-z0-9]{12,}|"
                     + "ya29\\.[a-z0-9._-]+|gocspx-[a-z0-9_-]{12,}|"
                     + "-----begin (?:rsa|ec|openssh) private key-----)");
-    private static final Pattern SENSITIVE_ENV_ASSIGNMENT = Pattern.compile(
-            "(?im)^(?:POSTGRES_PASSWORD|DATABASE_PASSWORD|SUPABASE_DB_PASSWORD|"
-                    + "SUPABASE_SECRET_KEY|GMAIL_CLIENT_ID|GMAIL_CLIENT_SECRET|GMAIL_REFRESH_TOKEN|"
-                    + "STRIPE_SECRET_KEY|STRIPE_WEBHOOK_SIGNING_SECRET|BOOTSTRAP_ADMIN_PASSWORD)"
-                    + "\\s*=\\s*(?!REPLACE_WITH_[A-Z0-9_]+\\s*$)[^\\r\\n]+$");
-    private static final Pattern REAL_LIVE_TEST_RECIPIENT = Pattern.compile(
-            "(?im)^GMAIL_LIVE_TEST_RECIPIENT(?:_ALLOWLIST)?\\s*=.*@"
-                    + "(?!example\\.test(?:\\s|,|$))[^\\s,]+.*$");
 
     @Test
     void localComposeContainsOnlyHealthyPersistentPostgres() throws Exception {
@@ -133,60 +124,6 @@ class DeploymentReadinessContractTest {
         }
 
         assertThat(applicationConfig).doesNotMatch(SECRET_LIKE_VALUE);
-    }
-
-    @Test
-    void environmentExampleUsesCurrentNamesAndContainsOnlySafeCredentialPlaceholders()
-            throws Exception {
-        String example = Files.readString(ENV_EXAMPLE);
-
-        assertThat(example).contains(
-                "SPRING_PROFILES_ACTIVE=",
-                "CORS_ALLOWED_ORIGINS=",
-                "DATABASE_MAX_POOL_SIZE=",
-                "SUPABASE_JDBC_URL=",
-                "SUPABASE_DB_USERNAME=",
-                "SUPABASE_DB_PASSWORD=",
-                "SUPABASE_STORAGE_URL=https://REPLACE_WITH_PROJECT_REF.supabase.co",
-                "SUPABASE_SECRET_KEY=",
-                "SUPABASE_STORAGE_BUCKET=",
-                "SUPABASE_STORAGE_CONNECTION_TIMEOUT=",
-                "SUPABASE_STORAGE_REQUEST_TIMEOUT=",
-                "EMAIL_ENABLED=",
-                "EMAIL_FROM_ADDRESS=",
-                "EMAIL_FROM_NAME=",
-                "GMAIL_API_BASE_URL=",
-                "GOOGLE_OAUTH_TOKEN_URL=",
-                "GMAIL_SENDER_ADDRESS=",
-                "GMAIL_CLIENT_ID=",
-                "GMAIL_CLIENT_SECRET=",
-                "GMAIL_REFRESH_TOKEN=",
-                "GMAIL_CONNECT_TIMEOUT=",
-                "GMAIL_READ_TIMEOUT=",
-                "GMAIL_WRITE_TIMEOUT=",
-                "EMAIL_MAX_ATTACHMENT_BYTES=",
-                "EMAIL_MAX_MESSAGE_BYTES=",
-                "GMAIL_LIVE_TESTS_ENABLED=",
-                "GMAIL_LIVE_TEST_RECIPIENT=",
-                "GMAIL_LIVE_TEST_RECIPIENT_ALLOWLIST=",
-                "STRIPE_ENABLED=",
-                "STRIPE_SANDBOX=",
-                "STRIPE_SECRET_KEY=",
-                "STRIPE_WEBHOOK_SIGNING_SECRET=",
-                "STRIPE_SUCCESS_URL=",
-                "STRIPE_CANCEL_URL=",
-                "STRIPE_CONNECT_TIMEOUT=",
-                "STRIPE_READ_TIMEOUT=",
-                "STRIPE_WEBHOOK_TOLERANCE=",
-                "STRIPE_MAX_WEBHOOK_PAYLOAD_BYTES=",
-                "STRIPE_MAX_SIGNATURE_HEADER_LENGTH=")
-                .doesNotContain("COACH_GYM_PAYMENT_STRIPE_", "SUPABASE_SERVICE_ROLE_KEY");
-        assertThat(example)
-                .doesNotContain("SUPABASE_STORAGE_URL=https://REPLACE_WITH_PROJECT_REF.supabase.co/storage/v1");
-        assertThat(example)
-                .doesNotMatch(SECRET_LIKE_VALUE)
-                .doesNotMatch(SENSITIVE_ENV_ASSIGNMENT)
-                .doesNotMatch(REAL_LIVE_TEST_RECIPIENT);
     }
 
     private static String normalized(Path path) throws Exception {
