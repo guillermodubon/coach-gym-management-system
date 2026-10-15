@@ -1,11 +1,10 @@
 HELP.md
-*.md
 *.xml
 .gradle
 build/
 .env
 .env.*
-!gradle/wrapper/gradle-wrapper.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
 
@@ -40,12 +39,16 @@ out/
 ### VS Code ###
 .vscode/
 
-# Client profile photos generated during local development
-/data/client-photos/
+# Private runtime files in both the repository root and backend application
+/data/
+/backend/data/
 
-# Payment receipt PDFs generated during local development
-/data/payment-receipts/
-
-# Access credential PNGs generated during local development
-/data/access-credentials/
+# Frontend dependencies, caches and generated output
+node_modules/
+/frontend/dist/
+/frontend/coverage/
+/frontend/.vite/
+/frontend/playwright-report/
+/frontend/test-results/
+npm-debug.log*
 
