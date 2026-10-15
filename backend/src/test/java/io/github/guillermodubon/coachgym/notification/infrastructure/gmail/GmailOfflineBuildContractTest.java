@@ -11,7 +11,7 @@ class GmailOfflineBuildContractTest {
     private static final Path APPLICATION_CONFIGURATION =
             Path.of("src/main/resources/application.yml");
     private static final Path CI_WORKFLOW =
-            Path.of(".github/workflows/backend-ci.yml");
+            Path.of("../.github/workflows/backend-ci.yml");
     private static final Path GRADLE_BUILD = Path.of("build.gradle.kts");
     private static final Path OAUTH_STUB_TEST = Path.of(
             "src/test/java/io/github/guillermodubon/coachgym/notification/"
