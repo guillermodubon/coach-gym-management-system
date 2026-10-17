@@ -1,9 +1,12 @@
 package io.github.guillermodubon.coachgym.membership;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.time.Clock;
+import java.time.LocalDate;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -12,9 +15,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 public class MembershipExpiredRenewalApiIntegrationTest extends AbstractMembershipRenewalApiIntegrationTest {
 
+    @Autowired
+    private Clock clock;
+
     @Test
     void adminRenewsExpiredMembershipAndReactivatesIt()
             throws Exception {
+
+        LocalDate operationalDate = LocalDate.now(clock);
+        LocalDate renewalStartsOn = operationalDate.plusDays(1);
 
         MockHttpSession session =
                 loginAsAdmin();
@@ -38,7 +47,7 @@ public class MembershipExpiredRenewalApiIntegrationTest extends AbstractMembersh
                         clientId,
                         planId,
                         null,
-                        "2026-07-01");
+                        operationalDate.minusMonths(3).toString());
 
         expireMembership(
                 membershipId);
@@ -49,7 +58,7 @@ public class MembershipExpiredRenewalApiIntegrationTest extends AbstractMembersh
                         membershipId,
                         planId,
                         null,
-                        "2026-10-05",
+                        renewalStartsOn.toString(),
                         1)
                         .andExpect(status().isOk())
                         .andExpect(
@@ -69,11 +78,11 @@ public class MembershipExpiredRenewalApiIntegrationTest extends AbstractMembersh
                         .andExpect(
                                 jsonPath(
                                         "$.currentPeriod.startsOn")
-                                        .value("2026-10-05"))
+                                        .value(renewalStartsOn.toString()))
                         .andExpect(
                                 jsonPath(
                                         "$.currentPeriod.baseEndsOn")
-                                        .value("2026-11-05"))
+                                        .value(renewalStartsOn.plusMonths(1).toString()))
                         .andReturn();
 
         UUID renewalPeriodId =
