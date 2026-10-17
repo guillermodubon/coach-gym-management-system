@@ -4,7 +4,7 @@ These instructions supplement the root `AGENTS.md`.
 
 ## Current authorization boundary
 
-F00 prepares this directory with documentation only. Do not initialize an application, create a package manifest, install dependencies or implement screens until the user authorizes the appropriate frontend scope.
+F00 established this directory and repository boundaries. B01 of F01 was explicitly authorized and implemented; its application base and tooling are recovered on `feature/frontend-foundation-auth`. This recovery does not authorize B02 or later blocks. Implement only the frontend block explicitly requested by the user.
 
 ## Future implementation
 
