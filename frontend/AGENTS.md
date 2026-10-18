@@ -4,7 +4,7 @@ These instructions supplement the root `AGENTS.md`.
 
 ## Current authorization boundary
 
-F00 established this directory and repository boundaries. B01 of F01 was explicitly authorized and implemented; its application base and tooling are recovered on `feature/frontend-foundation-auth`. This recovery does not authorize B02 or later blocks. Implement only the frontend block explicitly requested by the user.
+F00 established this directory and repository boundaries. B01–B07 of F01 were explicitly authorized and implemented locally on `feature/frontend-foundation-auth`. B02 provides HTTP contracts, transport, CSRF, safe errors and query infrastructure; B03 adds shared visual foundations; B04 integrates server-session authentication and protected navigation; B05 completes the mandatory password-change flow; B06 adds the account menu and read-only operational branch context; B07 adds isolated real-backend integration and CI. R01–R13 pass against PostgreSQL 17 and the backend JAR; `npm run check` passes 177 Vitest and 5 contract tests. F01 closure remains pending the documented manual 200% browser-zoom check. Implement only the frontend block explicitly requested by the user.
 
 ## Future implementation
 
