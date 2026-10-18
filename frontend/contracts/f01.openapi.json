@@ -1,0 +1,399 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Coach Gym - F01 HTTP contracts",
+    "version": "v1",
+    "description": "Proyección de las seis operaciones de F01 desde Springdoc. Los esquemas conservan la forma exportada por el backend."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/csrf": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Get a CSRF token for state-changing requests",
+        "operationId": "csrf",
+        "parameters": [
+          {
+            "name": "csrfToken",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/CsrfToken"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfTokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Create an authenticated server-side session",
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Authentication succeeded"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "Get the current authenticated staff account",
+        "operationId": "currentUser",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentUserResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Invalidate the current server-side session",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Session invalidated"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/profile/password": {
+      "post": {
+        "tags": ["Staff self-profile"],
+        "summary": "Change the authenticated staff password",
+        "description": "Requires the current password, the configured password policy, confirmation, and CSRF. The current session requires reauthentication; password values are never returned.",
+        "operationId": "changePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeStaffPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffPasswordChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid password or confirmation",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffPasswordChangeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffPasswordChangeResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid CSRF token required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffPasswordChangeResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/branch-context": {
+      "get": {
+        "tags": ["Active branch context"],
+        "summary": "Get the authenticated branch context",
+        "description": "Returns the server-authoritative organization scope, current active branch and active branches available to the authenticated ADMIN or RECEPTIONIST. The selected branch never grants authorization by itself.",
+        "operationId": "get",
+        "responses": {
+          "200": {
+            "description": "Branch context returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Selected branch is no longer available",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CsrfToken": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "parameterName": {
+            "type": "string"
+          },
+          "headerName": {
+            "type": "string"
+          }
+        }
+      },
+      "CsrfTokenResponse": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "headerName": {
+            "type": "string"
+          },
+          "parameterName": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "maxLength": 254,
+            "minLength": 0
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 0
+          }
+        },
+        "required": ["identifier", "password"]
+      },
+      "CurrentUserResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "organizationScope": {
+            "type": "string",
+            "enum": ["ORGANIZATION", "BRANCH"]
+          },
+          "activeBranch": {
+            "$ref": "#/components/schemas/AuthorizedBranchSummary"
+          },
+          "availableBranches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuthorizedBranchSummary"
+            }
+          },
+          "passwordChangeRequired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AuthorizedBranchSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "initialBranch": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ChangeStaffPasswordRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newPasswordConfirmation": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword",
+          "newPasswordConfirmation"
+        ]
+      },
+      "StaffPasswordChangeResponse": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "profileVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reauthenticationRequired": {
+            "type": "boolean"
+          }
+        }
+      },
+      "StaffBranchContextResponse": {
+        "type": "object",
+        "properties": {
+          "organizationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scopeType": {
+            "type": "string",
+            "enum": ["ORGANIZATION", "BRANCH"]
+          },
+          "activeBranch": {
+            "$ref": "#/components/schemas/AuthorizedBranchSummary"
+          },
+          "availableBranches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuthorizedBranchSummary"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "description": "Server-side authenticated\nsession established by\nPOST /api/v1/auth/login.\n",
+        "name": "JSESSIONID",
+        "in": "cookie"
+      }
+    }
+  }
+}

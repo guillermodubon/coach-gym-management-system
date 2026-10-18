@@ -1,0 +1,52 @@
+.cg-state-panel {
+  inline-size: 100%;
+  max-inline-size: 720px;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.cg-state-panel-body {
+  padding: var(--cg-panel-padding);
+}
+
+.cg-state-panel-stack {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cg-feedback {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cg-feedback-content {
+  flex: 1 1 12rem;
+  min-inline-size: 0;
+}
+
+.cg-feedback-actions {
+  max-inline-size: 100%;
+  margin: 0;
+}
+
+.cg-session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cg-session-actions > .ant-btn {
+  flex: 1 1 10rem;
+}
+
+@media (max-width: 575.98px) {
+  .cg-feedback-actions {
+    flex-basis: 100%;
+  }
+
+  .cg-feedback-actions > .ant-btn {
+    inline-size: 100%;
+  }
+}

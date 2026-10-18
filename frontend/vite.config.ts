@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
@@ -23,8 +24,16 @@ function backendOrigin(): string {
 }
 
 const apiTarget = backendOrigin();
+const isolatedEnvDir = process.env.CG_F01_VITE_ENV_DIR;
+
+if (isolatedEnvDir && !isAbsolute(isolatedEnvDir)) {
+  throw new Error(
+    "CG_F01_VITE_ENV_DIR must be an absolute isolated directory.",
+  );
+}
 
 export default defineConfig({
+  ...(isolatedEnvDir ? { envDir: isolatedEnvDir } : {}),
   plugins: [react()],
   resolve: {
     alias: {
@@ -44,6 +53,7 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./src/test/setup.ts"],
+    maxWorkers: 1,
     clearMocks: true,
     restoreMocks: true,
   },
