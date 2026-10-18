@@ -1,3 +1,4 @@
+.integration-runtime
 coverage
 dist
 node_modules

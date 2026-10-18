@@ -9,6 +9,10 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { projectF01 } from "../contracts/scope.mjs";
 import { seedExecutionBranch } from "./seed.mjs";
 import { startBuiltServer } from "./serve-built.mjs";
+import {
+  gradleBuildInvocation,
+  processStartFailureMessage,
+} from "./process-command.mjs";
 
 const FRONTEND_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const REPOSITORY_ROOT = resolve(FRONTEND_ROOT, "..");
@@ -18,8 +22,6 @@ const FRONTEND_PORT = 5183;
 const BACKEND_PORT = 18082;
 const FIXTURE_DATABASE = "coach_gym_f01_e2e";
 const FIXTURE_USER = "f01_fixture";
-const GRADLE_ARGUMENTS =
-  ".\\gradlew.bat compileJava compileTestJava bootJar --console=plain";
 const JAVA_BASE_ARGUMENTS = [
   "--server.address=127.0.0.1",
   `--server.port=${BACKEND_PORT}`,
@@ -109,9 +111,9 @@ function spawnOwned(command, args, options) {
       shell: false,
       windowsHide: true,
     });
-  } catch {
+  } catch (error) {
     throw new HarnessFailure(
-      "A required integration process could not be started.",
+      processStartFailureMessage("Integration process", error),
     );
   }
   childProcesses.add(child);
@@ -120,7 +122,7 @@ function spawnOwned(command, args, options) {
   return child;
 }
 
-function waitForChild(child) {
+function waitForChild(child, label = "Integration process") {
   return new Promise((resolveWait, rejectWait) => {
     let settled = false;
     const finish = (callback, value) => {
@@ -130,10 +132,10 @@ function waitForChild(child) {
       callback(value);
     };
     const close = (code, signal) => finish(resolveWait, { code, signal });
-    const error = () =>
+    const error = (cause) =>
       finish(
         rejectWait,
-        new HarnessFailure("A required integration process failed to start."),
+        new HarnessFailure(processStartFailureMessage(label, cause)),
       );
     const abort = () => {
       void stopChild(child).finally(() =>
@@ -186,7 +188,7 @@ async function runCommand(command, args, { cwd, env, label }) {
     env,
     stdio: "ignore",
   });
-  const result = await waitForChild(child);
+  const result = await waitForChild(child, label);
   if (result.code !== 0) {
     throw new HarnessFailure(
       `${label} failed (exit ${result.code ?? "unknown"}).`,
@@ -438,7 +440,7 @@ async function runBrowserProject(project, runDirectory, childEnvironment) {
       stdio: "ignore",
     },
   );
-  const exit = await waitForChild(result);
+  const exit = await waitForChild(result, "Chromium integration runner");
   let report;
   try {
     report = await readSafeReporterResult(reportFile);
@@ -601,12 +603,8 @@ async function main() {
   console.log(
     "F01 integration: compiling the backend with its repository wrapper.",
   );
-  const gradleCommand = process.platform === "win32" ? "cmd.exe" : "./gradlew";
-  const gradleArgs =
-    process.platform === "win32"
-      ? ["/d", "/s", "/c", GRADLE_ARGUMENTS]
-      : ["compileJava", "compileTestJava", "bootJar", "--console=plain"];
-  await runCommand(gradleCommand, gradleArgs, {
+  const gradle = gradleBuildInvocation();
+  await runCommand(gradle.command, gradle.args, {
     cwd: BACKEND_ROOT,
     env: hostEnvironment,
     label: "Backend compile and bootJar",

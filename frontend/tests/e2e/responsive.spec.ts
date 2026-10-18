@@ -1,11 +1,19 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { waitForVisualTransitions } from "../helpers/visual-stability";
 import { responsiveIdentity } from "../fixtures/responsive-identity";
 import {
   expectPageToFit,
   expectTouchTarget,
   expectWithinScreen,
 } from "./helpers/responsive";
+
+async function expectAccessible(page: Page): Promise<void> {
+  await waitForVisualTransitions(page);
+  const result = await new AxeBuilder({ page }).analyze();
+  expect(result.violations.map((violation) => violation.id)).toEqual([]);
+}
 
 for (const mode of ["light", "dark"] as const) {
   test(`reflows the real home, navigation and account menu in ${mode}`, async ({
@@ -57,6 +65,13 @@ for (const mode of ["light", "dark"] as const) {
       }
     }
 
+    // Both directions must be audited after the actual color transitions finish.
+    for (let transition = 0; transition < 2; transition += 1) {
+      await page.getByRole("button", { name: /^Activar tema/ }).click();
+      await expectAccessible(page);
+    }
+    await expect(page.locator("html")).toHaveAttribute("data-theme", mode);
+
     for (const width of [280, 390, 768, 992, 1440]) {
       await page.setViewportSize({ width, height: 600 });
       await account.click();
@@ -80,7 +95,7 @@ for (const mode of ["light", "dark"] as const) {
     await page.setViewportSize({ width: 844, height: 320 });
     await refresh.scrollIntoViewIfNeeded();
     await expect(refresh).toBeInViewport();
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await expectAccessible(page);
   });
 
   test(`keeps identity forms and session actions usable in ${mode}`, async ({
@@ -154,7 +169,7 @@ for (const mode of ["light", "dark"] as const) {
         ).toBeGreaterThanOrEqual(16);
         await expectPageToFit(page);
       }
-      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+      await expectAccessible(page);
     }
   });
 }

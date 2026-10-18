@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
+import { waitForVisualTransitions } from "../helpers/visual-stability";
 import {
   createStaffFixture,
   invalidateFixtureSecurityVersion,
@@ -136,6 +137,7 @@ async function expectNoHorizontalOverflow(
 }
 
 async function expectNoAxeViolations(page: Page): Promise<void> {
+  await waitForVisualTransitions(page);
   const result = await new AxeBuilder({ page }).analyze();
   expect(result.violations.map((violation) => violation.id)).toEqual([]);
 }
