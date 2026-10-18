@@ -50,6 +50,7 @@ node_modules/
 /frontend/.vite/
 /frontend/playwright-report/
 /frontend/test-results/
+/frontend/src/shared/api/generated/
 npm-debug.log*
 
 # Local project guidance and documentation

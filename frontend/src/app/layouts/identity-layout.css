@@ -1,0 +1,78 @@
+.cg-identity-layout {
+  min-block-size: 100vh;
+  min-block-size: 100dvh;
+  padding: 16px var(--cg-page-gutter);
+  background: var(--cg-layout-background, #f4f4f5);
+}
+
+.cg-identity-header,
+.cg-identity-footer {
+  display: flex;
+  min-inline-size: 0;
+  min-block-size: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cg-brand {
+  font-size: 16px;
+  letter-spacing: 0.01em;
+}
+
+.cg-identity-main {
+  display: grid;
+  flex: 1;
+  min-inline-size: 0;
+  place-items: center;
+  padding-block: clamp(16px, 4vh, 40px);
+}
+
+.cg-identity-card {
+  inline-size: 100%;
+  max-inline-size: 440px;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.cg-identity-card-body {
+  padding: var(--cg-panel-padding);
+}
+
+.cg-identity-card h1.ant-typography {
+  font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2rem);
+  line-height: 1.25;
+}
+
+.cg-identity-card .ant-btn {
+  max-inline-size: 100%;
+  min-block-size: 44px;
+  block-size: auto;
+  padding-block: 8px;
+  white-space: normal;
+}
+
+.cg-identity-card .cg-state-panel.ant-card {
+  border: 0;
+  background: transparent;
+}
+
+.cg-identity-card .cg-state-panel-body {
+  padding: 0;
+}
+
+.cg-identity-footer {
+  justify-content: center;
+  padding-block: 8px max(8px, env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+@media (max-height: 500px) {
+  .cg-identity-layout {
+    padding-block: 8px;
+  }
+
+  .cg-identity-main {
+    padding-block: 12px;
+  }
+}

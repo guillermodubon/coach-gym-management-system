@@ -1,5 +1,6 @@
 /gradlew text eol=lf
 /backend/gradlew text eol=lf
+/frontend/** text=auto eol=lf
 *.bat text eol=crlf
 *.md text eol=lf
 *.jar binary

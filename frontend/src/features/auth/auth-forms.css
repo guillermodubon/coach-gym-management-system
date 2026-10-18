@@ -1,0 +1,19 @@
+.cg-auth-form-stack {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.cg-auth-form-stack > * {
+  min-inline-size: 0;
+}
+
+.cg-auth-form-stack .ant-form-item-label > label {
+  block-size: auto;
+  white-space: normal;
+}
+
+.cg-password-logout {
+  margin-block-start: 16px;
+}

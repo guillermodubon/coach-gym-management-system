@@ -1,0 +1,50 @@
+.cg-account-trigger.ant-btn {
+  inline-size: 100%;
+  min-inline-size: 44px;
+  min-block-size: 44px;
+  max-inline-size: 100%;
+  padding-inline: 6px;
+}
+
+.cg-account-avatar {
+  flex-shrink: 0;
+  color: var(--cg-container-background, #ffffff);
+  background: var(--cg-color-primary, #111111);
+}
+
+.cg-account-avatar::after {
+  display: grid;
+  block-size: 100%;
+  place-items: center;
+  content: attr(data-initials);
+}
+
+.cg-account-trigger-name {
+  display: block;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cg-account-popup {
+  inline-size: min(20rem, calc(100vw - 24px));
+  max-inline-size: calc(100vw - 24px);
+  max-block-size: calc(100dvh - 24px);
+  overflow-y: auto;
+}
+
+.cg-account-menu-summary {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  gap: 4px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+@media (max-width: 575.98px) {
+  .cg-account-trigger-name {
+    display: none;
+  }
+}
