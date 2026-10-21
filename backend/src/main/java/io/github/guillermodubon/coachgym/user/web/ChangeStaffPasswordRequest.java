@@ -12,9 +12,18 @@ import jakarta.validation.constraints.NotBlank;
         name = "ChangeStaffPasswordRequest",
         additionalProperties = Schema.AdditionalPropertiesValue.FALSE)
 record ChangeStaffPasswordRequest(
-        @NotBlank String currentPassword,
-        @NotBlank String newPassword,
-        @NotBlank String newPasswordConfirmation) {
+        @NotBlank
+        @Schema(description = "Current staff account password.", writeOnly = true,
+                requiredMode = Schema.RequiredMode.REQUIRED)
+        String currentPassword,
+        @NotBlank
+        @Schema(description = "New staff account password.", writeOnly = true,
+                requiredMode = Schema.RequiredMode.REQUIRED)
+        String newPassword,
+        @NotBlank
+        @Schema(description = "Confirmation of the new password.", writeOnly = true,
+                requiredMode = Schema.RequiredMode.REQUIRED)
+        String newPasswordConfirmation) {
 
     @JsonAnySetter
     void rejectUnknownField(String name, Object value) {

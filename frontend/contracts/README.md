@@ -1,12 +1,12 @@
 # Contrato HTTP de F01
 
-`f01.openapi.json` contiene las seis operaciones autorizadas de F01 y el cierre de sus referencias a esquemas y seguridad. Se capturó el 17 de octubre de 2026 desde `/v3/api-docs` del backend compilado de este repositorio, sin redactar DTOs equivalentes a mano.
+`f01.openapi.json` contiene las seis operaciones autorizadas de F01 y el cierre de sus referencias a esquemas y seguridad. Se recapturó el 19 de octubre de 2026 desde `/v3/api-docs` del JAR del backend compilado en un directorio aislado, sin redactar DTOs equivalentes a mano.
 
-- Revisión al capturar: `f13dd8904eb50a452ac52313aefb846cbe05c3ce`.
-- Árbol Git de `backend/`: `9b5732d3e200e8bef6195e69e0aa917104bc76bc`.
-- Java 21, Spring Boot 4.1.0, Springdoc 3.0.3 y OpenAPI 3.1.0.
+- Base Git al capturar: `HEAD` `a2dce237ed3e32f7af7290132b09d1a981edb499` en `feature/backend-frontend-contracts`; el JAR incluye los cambios locales sin commit de B02–B07.
+- Java 21.0.12, Spring Boot 4.1.0, Springdoc 3.0.3 y OpenAPI 3.1.0.
 - PostgreSQL 17 temporal y aislado, con Flyway V1–V43; sin datos del usuario, bootstrap, correo ni Stripe habilitados.
-- Las propiedades públicas del documento se reducen al alcance F01 y un servidor relativo `/`. Los esquemas de las operaciones se conservan como los exporta Springdoc.
+- La captura conserva las seis operaciones F01, el servidor relativo `/` y los esquemas exportados por Springdoc. No incorpora los nuevos endpoints de personal, membresías, períodos o intentos de pago.
+- B07 corrige el parámetro CSRF ficticio, documenta campos requeridos y nullable conforme a la respuesta real y añade estados HTTP, media types y cuerpos de error comprobados. Los errores usan el esquema extensible `ApiProblemResponse`, que representa los campos RFC 9457 y las extensiones aplanadas `code`, `timestamp` y `correlationId`; no expone una propiedad `properties` anidada que el JSON real no devuelve. El componente `OpenApiNullValue` usa `type: "null"` de OpenAPI 3.1; el customizer se limita a ese componente y no infiere requiredness global.
 
 | Método | Ruta                          | Consumo en B02                                           |
 | ------ | ----------------------------- | -------------------------------------------------------- |
@@ -45,13 +45,15 @@ Usa el puerto real de ese backend. El comando admite únicamente loopback HTTP y
 
 Antes de aceptar una actualización, revisar los cambios contra controladores, DTOs, configuración de seguridad y handlers actuales. Después regenerar, ejecutar `npm run check` y actualizar la procedencia. B07 deberá volver a contrastar la entrada con el backend de integración y registrar sus recorridos reales. La generación offline por sí sola no demuestra vigencia ni cookies correctas en navegador.
 
-## Diferencias observadas entre metadatos y ejecución
+## Resultado de compatibilidad B07
 
-1. Springdoc anuncia `csrfToken` como parámetro de consulta obligatorio en `GET /auth/csrf`. El controlador lo obtiene del argumento de seguridad de Spring; la petición real sin query respondió `200` con `token`, `headerName` y `parameterName`. El transporte no envía ese parámetro ni coloca el token en una URL. Se conserva el metadato exportado para hacer visible la discrepancia. Corregir el exportador requeriría un alcance backend propio.
-2. Las respuestas basadas en records no declaran todas sus propiedades como `required`, y `activeBranch` no figura como nullable aunque la implementación puede devolver `null`. Los consumidores comprueban los campos mínimos y producen una proyección segura con `activeBranch: null` cuando falta el valor. No se interpreta un tipo generado como validación en ejecución.
-3. Los errores de filtros y algunos handlers no aparecen completamente descritos en las respuestas de estas operaciones. La conversión de `ProblemDetail` se contrastó con `ApiProblemFactory`, `ApiExceptionHandler`, los handlers de seguridad y de perfil/contexto. Solo se conservan códigos de F01 comprobados y metadatos seguros; respuestas desconocidas reciben un error genérico.
+1. `GET /api/v1/auth/csrf` fue solicitado sin query y respondió `200` con los nombres y el token CSRF. El parámetro de seguridad `CsrfToken` ya no aparece como parámetro HTTP; el token continúa viajando en el header configurado para mutaciones.
+2. `CurrentUserResponse.activeBranch` y `StaffBranchContextResponse.activeBranch` están presentes y admiten `null`, validado con una cuenta sintética que no tiene sucursal seleccionada. `roles` y `availableBranches` se declaran como arrays requeridos y no nullable. El test también verifica presencia y nullabilidad por separado en OpenAPI 3.1.
+3. Los DTOs F01 y los DTOs nuevos cubiertos por B07 declaran explícitamente sus campos requeridos; las promociones, coberturas, períodos e identificadores/fechas opcionales de pago reflejan nullabilidad comprobada.
+4. Las respuestas documentan los códigos aplicables por operación: autenticación, autorización, filtros de cambio de contraseña, CSRF, tamaño de cuerpo, rate limit, reautenticación, errores de perfil/contexto, conflictos y recurso inexistente. Las respuestas `204`, las rutas y las reglas de sesión/contraseña se mantuvieron.
+5. La prueba integra el esquema generado y las respuestas HTTP reales; la comparación del runner confirmó que la proyección viva F01 coincide con este snapshot. La integración real finalizó con 12/12 recorridos normales y 1/1 de expiración aprobados.
 
-No se modificó Java, SQL, CSRF ni CORS para resolver estas diferencias.
+La prueba OpenAPI incluye un usuario y una sucursal sintéticos y termina la asignación temporal mediante una sesión ADMIN. No cambia el contrato de runtime ni requiere migración.
 
 ## Referencias de implementación
 

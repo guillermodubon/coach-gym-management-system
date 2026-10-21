@@ -2,6 +2,7 @@ package io.github.guillermodubon.coachgym.membership;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
@@ -327,9 +328,14 @@ abstract class AbstractMembershipApiIntegrationTest {
                         .andExpect(status().isNoContent())
                         .andReturn();
 
-        return (MockHttpSession)
-                result.getRequest()
-                        .getSession(false);
+        MockHttpSession session = (MockHttpSession) result.getRequest().getSession(false);
+        mockMvc.perform(put("/api/v1/me/branch-context")
+                        .with(csrf())
+                        .session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"branchId\":\"%s\"}".formatted(INITIAL_BRANCH_ID)))
+                .andExpect(status().isOk());
+        return session;
     }
 
     private void provisionUser(

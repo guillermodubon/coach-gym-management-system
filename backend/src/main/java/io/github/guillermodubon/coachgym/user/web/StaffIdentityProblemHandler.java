@@ -8,6 +8,7 @@ import io.github.guillermodubon.coachgym.user.StaffIdentityValidationException;
 import io.github.guillermodubon.coachgym.user.StaffInvitationNotFoundException;
 import io.github.guillermodubon.coachgym.user.StaffInvitationRateLimitException;
 import io.github.guillermodubon.coachgym.user.application.StaffCurrentPasswordInvalidException;
+import io.github.guillermodubon.coachgym.user.application.StaffDirectoryUnavailableException;
 import io.github.guillermodubon.coachgym.user.application.StaffIdentityDataAccessException;
 import io.github.guillermodubon.coachgym.user.application.StaffIdentityNotFoundException;
 import io.github.guillermodubon.coachgym.user.application.StaffIdentityVersionConflictException;
@@ -27,6 +28,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 /** Stable ProblemDetail mapping for identity endpoints; it never includes exception data. */
 @RestControllerAdvice(assignableTypes = {
         StaffInvitationController.class,
+        StaffDirectoryController.class,
         StaffIdentityAdministrationController.class,
         PasswordRecoveryController.class})
 class StaffIdentityProblemHandler {
@@ -103,6 +105,12 @@ class StaffIdentityProblemHandler {
     ResponseEntity<ProblemDetail> persistenceFailure(StaffIdentityDataAccessException ignored) {
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "STAFF_IDENTITY_OPERATION_FAILED",
                 "The staff identity operation could not be completed.");
+    }
+
+    @ExceptionHandler(StaffDirectoryUnavailableException.class)
+    ResponseEntity<ProblemDetail> directoryUnavailable(StaffDirectoryUnavailableException ignored) {
+        return problem(HttpStatus.INTERNAL_SERVER_ERROR, "STAFF_DIRECTORY_UNAVAILABLE",
+                "The staff directory is temporarily unavailable.");
     }
 
     private ResponseEntity<ProblemDetail> problem(

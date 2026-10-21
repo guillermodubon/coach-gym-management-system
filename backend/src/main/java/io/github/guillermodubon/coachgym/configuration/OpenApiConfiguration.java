@@ -3,7 +3,10 @@ package io.github.guillermodubon.coachgym.configuration;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import java.util.Set;
+import org.springdoc.core.customizers.OpenApiCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -87,6 +90,7 @@ class OpenApiConfiguration {
                                         """))
                 .components(
                         new Components()
+                                .addSchemas("OpenApiNullValue", new Schema<>().types(Set.of("null")))
                                 .addSecuritySchemes(
                                         SESSION_SECURITY_SCHEME,
                                         new SecurityScheme()
@@ -109,5 +113,13 @@ class OpenApiConfiguration {
                                                 .type(SecurityScheme.Type.APIKEY)
                                                 .in(SecurityScheme.In.HEADER)
                                                 .description("Verified Stripe Test Mode webhook signature.")));
+    }
+
+    @Bean
+    OpenApiCustomizer explicitOpenApiNullSchema() {
+        return openApi -> {
+            Schema<?> nullValue = (Schema<?>) openApi.getComponents().getSchemas().get("OpenApiNullValue");
+            nullValue.setTypes(Set.of("null"));
+        };
     }
 }

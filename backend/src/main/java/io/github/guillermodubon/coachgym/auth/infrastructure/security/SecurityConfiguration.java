@@ -45,6 +45,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
         RequestBodyLimitProperties.class})
 class SecurityConfiguration {
 
+    private static final String CSRF_HEADER_NAME = "X-XSRF-TOKEN";
+    private static final String LEGACY_CSRF_HEADER_NAME = "X-CSRF-TOKEN";
+    private static final String CSRF_PARAMETER_NAME = "_csrf";
+
     @Bean
     PasswordEncoder passwordEncoder() {
         return PasswordEncoderFactories.createDelegatingPasswordEncoder();
@@ -67,6 +71,8 @@ class SecurityConfiguration {
     @Bean
     CookieCsrfTokenRepository csrfTokenRepository(CsrfCookieProperties properties) {
         CookieCsrfTokenRepository repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        repository.setHeaderName(CSRF_HEADER_NAME);
+        repository.setParameterName(CSRF_PARAMETER_NAME);
         repository.setCookiePath("/");
         repository.setCookieCustomizer(cookie -> cookie
                 .sameSite(properties.sameSite())
@@ -132,7 +138,8 @@ class SecurityConfiguration {
         configuration.setAllowedHeaders(List.of(
                 "Accept",
                 "Content-Type",
-                "X-XSRF-TOKEN",
+                CSRF_HEADER_NAME,
+                LEGACY_CSRF_HEADER_NAME,
                 CorrelationIdFilter.HEADER,
                 "X-Requested-With"));
         configuration.setExposedHeaders(List.of(
@@ -234,6 +241,15 @@ class SecurityConfiguration {
                         .hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/staff/*/role-scope")
                         .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/staff", "/api/v1/staff/*")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/v1/memberships")
+                        .hasAnyRole("ADMIN", "RECEPTIONIST")
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/memberships/*/periods",
+                                "/api/v1/memberships/*/periods/*")
+                        .hasAnyRole("ADMIN", "RECEPTIONIST")
                         .requestMatchers("/api/v1/auth/me", "/api/v1/auth/logout")
                         .authenticated()
                         .requestMatchers("/api/v1/me/branch-context/**")

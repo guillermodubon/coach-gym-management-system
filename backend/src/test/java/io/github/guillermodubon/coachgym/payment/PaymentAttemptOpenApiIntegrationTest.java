@@ -15,6 +15,7 @@ class PaymentAttemptOpenApiIntegrationTest extends AbstractPaymentApiIntegration
     void documentsAllPaymentAttemptAndWebhookRoutes() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/v1/payment-attempts'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/payment-attempts/stripe-checkout'].post").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/payment-attempts/{attemptId}'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/v1/payment-attempts/{attemptId}/cancel'].post").exists())
@@ -35,10 +36,16 @@ class PaymentAttemptOpenApiIntegrationTest extends AbstractPaymentApiIntegration
                         "$.paths['/api/v1/payment-attempts/{attemptId}/cancel'].post.security[0].sessionCookie")
                         .exists())
                 .andExpect(jsonPath(
+                        "$.paths['/api/v1/payment-attempts'].get.security[0].sessionCookie")
+                        .exists())
+                .andExpect(jsonPath(
                         "$.paths['/api/v1/payment-provider/stripe/webhook'].post.security[0].stripeWebhookSignature")
                         .exists())
                 .andExpect(jsonPath(
                         "$.paths['/api/v1/payment-attempts/stripe-checkout'].post.responses['201']")
+                        .exists())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/payment-attempts'].get.responses['200']")
                         .exists())
                 .andExpect(jsonPath(
                         "$.paths['/api/v1/payment-provider/stripe/webhook'].post.responses['204']")
@@ -46,6 +53,30 @@ class PaymentAttemptOpenApiIntegrationTest extends AbstractPaymentApiIntegration
                 .andExpect(jsonPath(
                         "$.components.schemas.StripeCheckoutResponse.properties.sandbox")
                         .exists());
+    }
+
+    @Test
+    void documentsRequiredPeriodFiltersOptionalStatusAndSafePageResponse() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/payment-attempts'].get.parameters[?(@.name=='membershipId')].required")
+                        .value(true))
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/payment-attempts'].get.parameters[?(@.name=='membershipPeriodId')].required")
+                        .value(true))
+                .andExpect(jsonPath(
+                        "$.paths['/api/v1/payment-attempts'].get.parameters[?(@.name=='status')]")
+                        .exists())
+                .andExpect(jsonPath(
+                        "$.components.schemas.PaymentAttemptPageResponse.properties.items")
+                        .exists())
+                .andExpect(jsonPath(
+                        "$.components.schemas.PaymentAttemptResponse.properties.checkoutReference")
+                        .doesNotExist())
+                .andExpect(jsonPath(
+                        "$.components.schemas.PaymentAttemptResponse.properties.checkoutUrl")
+                        .doesNotExist());
     }
 
     @Test

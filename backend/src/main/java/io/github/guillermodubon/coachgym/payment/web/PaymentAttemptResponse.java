@@ -12,21 +12,37 @@ import java.util.UUID;
 /** Safe HTTP projection of a payment attempt; provider references are intentionally omitted. */
 @Schema(description = "Payment-attempt state and server-owned pricing snapshot.")
 record PaymentAttemptResponse(
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         UUID id,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         UUID clientId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         UUID membershipId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         UUID membershipPeriodId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         PaymentProvider provider,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         PaymentAttemptStatus status,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         BigDecimal expectedAmount,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         String currency,
+        @Schema(nullable = true, requiredMode = Schema.RequiredMode.REQUIRED)
         PaymentAttemptFailureCode failureCode,
+        @Schema(nullable = true, requiredMode = Schema.RequiredMode.REQUIRED)
         UUID confirmedPaymentId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         UUID createdByUserId,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         Instant createdAt,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         Instant updatedAt,
+        @Schema(nullable = true, requiredMode = Schema.RequiredMode.REQUIRED)
         Instant completedAt,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         long version,
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED)
         UUID initiatedAtBranchId) {
 
     static PaymentAttemptResponse from(PaymentAttemptDetails details) {
