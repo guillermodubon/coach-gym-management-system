@@ -1,6 +1,8 @@
 package io.github.guillermodubon.coachgym.payment.web;
 
 import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptNotFoundException;
+import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptQueryUnavailableException;
+import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptQueryValidationException;
 import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptVersionConflictException;
 import io.github.guillermodubon.coachgym.payment.application.PaymentMembershipNotFoundException;
 import io.github.guillermodubon.coachgym.payment.application.PaymentPeriodMismatchException;
@@ -20,6 +22,24 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /** Stable, privacy-safe ProblemDetail mapping for staff attempt operations. */
 @RestControllerAdvice(assignableTypes = PaymentAttemptController.class)
 class PaymentAttemptProblemHandler {
+
+    @ExceptionHandler(PaymentAttemptQueryValidationException.class)
+    ResponseEntity<ProblemDetail> handleQueryValidation(
+            PaymentAttemptQueryValidationException exception) {
+        return problem(
+                HttpStatus.BAD_REQUEST,
+                "INVALID_REQUEST_PARAMETER",
+                exception.getMessage());
+    }
+
+    @ExceptionHandler(PaymentAttemptQueryUnavailableException.class)
+    ResponseEntity<ProblemDetail> handleQueryUnavailable(
+            PaymentAttemptQueryUnavailableException exception) {
+        return problem(
+                HttpStatus.INTERNAL_SERVER_ERROR,
+                "PAYMENT_ATTEMPT_QUERY_UNAVAILABLE",
+                "The payment-attempt page could not be returned.");
+    }
 
     @ExceptionHandler(PaymentAttemptValidationException.class)
     ResponseEntity<ProblemDetail> handleValidation(PaymentAttemptValidationException exception) {

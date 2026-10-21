@@ -9,10 +9,12 @@ import io.swagger.v3.oas.annotations.media.Schema;
         name = "MembershipPeriodCoverageResponse",
         description = "Immutable entitlement captured at sale or renewal; only scope and cardinality are exposed.")
 record MembershipPeriodCoverageResponse(
-        @Schema(description = "Coverage scope captured for this membership period.")
+        @Schema(description = "Coverage scope captured for this membership period.",
+                requiredMode = Schema.RequiredMode.REQUIRED)
         MembershipPlanBranchCoverageScope scopeSnapshot,
 
-        @Schema(description = "Number of branches in this period's immutable entitlement; branch IDs are not exposed.", minimum = "1")
+        @Schema(description = "Number of branches in this period's immutable entitlement; branch IDs are not exposed.",
+                minimum = "1", requiredMode = Schema.RequiredMode.REQUIRED)
         int coveredBranchCount) {
 
     static MembershipPeriodCoverageResponse from(MembershipPeriodCoverageSummary summary) {

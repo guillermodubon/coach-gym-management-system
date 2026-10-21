@@ -2,15 +2,23 @@ package io.github.guillermodubon.coachgym.payment.web;
 
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptDetails;
+import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatus;
 import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptApplicationService;
+import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptQueryApplicationService;
+import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptSearchQuery;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.UUID;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +26,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -31,9 +40,51 @@ import org.springframework.web.util.UriComponentsBuilder;
 class PaymentAttemptController {
 
     private final PaymentAttemptApplicationService paymentAttemptService;
+    private final PaymentAttemptQueryApplicationService paymentAttemptQueryService;
 
-    PaymentAttemptController(PaymentAttemptApplicationService paymentAttemptService) {
+    PaymentAttemptController(
+            PaymentAttemptApplicationService paymentAttemptService,
+            PaymentAttemptQueryApplicationService paymentAttemptQueryService) {
         this.paymentAttemptService = paymentAttemptService;
+        this.paymentAttemptQueryService = paymentAttemptQueryService;
+    }
+
+    @GetMapping
+    @Operation(
+            summary = "List payment attempts for a membership period",
+            description = "Returns the persisted attempt states for one membership and period. "
+                    + "Both filters are required; results and totals are restricted to the "
+                    + "authenticated staff member's active branch. This read does not contact "
+                    + "Stripe and never returns provider references or checkout URLs.")
+    @ApiResponse(responseCode = "200", description = "Payment-attempt page returned",
+            content = @Content(schema = @Schema(implementation = PaymentAttemptPageResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Missing or invalid search parameter")
+    @ApiResponse(responseCode = "401", description = "Authentication required")
+    @ApiResponse(responseCode = "403", description = "ADMIN or RECEPTIONIST role required")
+    @ApiResponse(responseCode = "404", description = "Membership or membership period not found")
+    @ApiResponse(responseCode = "409", description = "An active branch must be selected")
+    @ApiResponse(responseCode = "500", description = "Payment-attempt query unavailable")
+    ResponseEntity<PaymentAttemptPageResponse> findPage(
+            @Parameter(description = "Required membership identifier.")
+            @RequestParam UUID membershipId,
+            @Parameter(description = "Required membership-period identifier.")
+            @RequestParam UUID membershipPeriodId,
+            @Parameter(description = "Optional additional client filter.")
+            @RequestParam(required = false) UUID clientId,
+            @Parameter(description = "Optional payment-attempt lifecycle status.")
+            @RequestParam(required = false) PaymentAttemptStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            Authentication authentication) {
+        PaymentAttemptSearchQuery query = new PaymentAttemptSearchQuery(
+                membershipId, membershipPeriodId, clientId, status, page, size);
+        PaymentAttemptPageResponse body = PaymentAttemptPageResponse.from(
+                paymentAttemptQueryService.findPage(query, actor(authentication)));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .header(HttpHeaders.PRAGMA, "no-cache")
+                .header("Referrer-Policy", "no-referrer")
+                .body(body);
     }
 
     @PostMapping("/stripe-checkout")

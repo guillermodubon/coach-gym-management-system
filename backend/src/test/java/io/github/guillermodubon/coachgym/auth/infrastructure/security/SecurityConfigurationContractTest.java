@@ -19,7 +19,11 @@ class SecurityConfigurationContractTest {
     void csrfCookieSupportsCrossSiteFrontendOnlyWithSecureSameSiteNone() {
         CookieCsrfTokenRepository repository = new SecurityConfiguration()
                 .csrfTokenRepository(new CsrfCookieProperties("None", true));
+        var generatedToken = repository.generateToken(new MockHttpServletRequest());
         MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(generatedToken.getHeaderName()).isEqualTo("X-XSRF-TOKEN");
+        assertThat(generatedToken.getParameterName()).isEqualTo("_csrf");
 
         repository.saveToken(
                 new DefaultCsrfToken("X-XSRF-TOKEN", "_csrf", "synthetic-token"),
@@ -59,7 +63,8 @@ class SecurityConfigurationContractTest {
         assertThat(configuration.getAllowedOriginPatterns()).isNullOrEmpty();
         assertThat(configuration.getAllowCredentials()).isTrue();
         assertThat(configuration.getAllowedMethods()).contains("GET", "POST", "OPTIONS");
-        assertThat(configuration.getAllowedHeaders()).contains("X-XSRF-TOKEN", "Content-Type");
+        assertThat(configuration.getAllowedHeaders())
+                .contains("X-XSRF-TOKEN", "X-CSRF-TOKEN", "Content-Type");
         assertThat(configuration.getExposedHeaders())
                 .contains("Location", "Content-Disposition", "X-Correlation-ID");
         assertThat(configuration.checkOrigin("https://frontend.example"))

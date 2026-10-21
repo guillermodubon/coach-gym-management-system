@@ -8,6 +8,7 @@ import io.github.guillermodubon.coachgym.user.application.StaffPasswordChangeRes
 import io.github.guillermodubon.coachgym.user.application.StaffProfilePhotoContent;
 import io.github.guillermodubon.coachgym.user.application.StaffSelfProfileApplicationService;
 import io.github.guillermodubon.coachgym.user.application.UploadStaffProfilePhotoCommand;
+import io.github.guillermodubon.coachgym.shared.web.ApiProblemResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -20,6 +21,7 @@ import java.util.Locale;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -160,10 +162,26 @@ class StaffSelfProfileController {
                     + "confirmation, and CSRF. The current session requires reauthentication; "
                     + "password values are never returned.")
     @ApiResponse(responseCode = "200", description = "Password changed",
-            content = @Content(schema = @Schema(implementation = StaffPasswordChangeResponse.class)))
-    @ApiResponse(responseCode = "400", description = "Invalid password or confirmation")
-    @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "403", description = "Valid CSRF token required")
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = StaffPasswordChangeResponse.class)))
+    @ApiResponse(responseCode = "400", description = "Invalid password or confirmation",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Valid CSRF token required",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "404", description = "Authenticated staff profile or credential was not found",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "413", description = "Request body exceeds the configured limit",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "500", description = "Staff profile data could not be updated",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     StaffPasswordChangeResponse changePassword(
             @Valid @RequestBody ChangeStaffPasswordRequest request,
             Authentication authentication) {

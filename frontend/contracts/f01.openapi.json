@@ -15,22 +15,13 @@
       "get": {
         "tags": ["Authentication"],
         "summary": "Get a CSRF token for state-changing requests",
+        "description": "Returns a token for the caller to send in the configured CSRF header. The token is never accepted or transported in a query string.",
         "operationId": "csrf",
-        "parameters": [
-          {
-            "name": "csrfToken",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/CsrfToken"
-            }
-          }
-        ],
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "CSRF token returned",
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CsrfTokenResponse"
                 }
@@ -44,6 +35,7 @@
       "post": {
         "tags": ["Authentication"],
         "summary": "Create an authenticated server-side session",
+        "description": "Requires a valid CSRF token. Credentials are used only for this request and are never included in the response.",
         "operationId": "login",
         "requestBody": {
           "content": {
@@ -59,8 +51,55 @@
           "204": {
             "description": "Authentication succeeded"
           },
+          "400": {
+            "description": "Malformed or invalid login request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
           "401": {
-            "description": "Invalid credentials"
+            "description": "Invalid credentials",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid CSRF token required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the configured limit",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Login attempts are temporarily rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -69,14 +108,35 @@
       "get": {
         "tags": ["Authentication"],
         "summary": "Get the current authenticated staff account",
+        "description": "Returns the authenticated ADMIN or RECEPTIONIST identity and its server-resolved branch context. A missing active branch is represented as a present null value.",
         "operationId": "currentUser",
         "responses": {
           "200": {
-            "description": "OK",
+            "description": "Current staff account returned",
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CurrentUserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required or session expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Current branch context is unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
                 }
               }
             }
@@ -97,6 +157,26 @@
         "responses": {
           "204": {
             "description": "Session invalidated"
+          },
+          "401": {
+            "description": "Authentication required or session expired",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid CSRF token required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -126,7 +206,7 @@
           "200": {
             "description": "Password changed",
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StaffPasswordChangeResponse"
                 }
@@ -136,9 +216,9 @@
           "400": {
             "description": "Invalid password or confirmation",
             "content": {
-              "*/*": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StaffPasswordChangeResponse"
+                  "$ref": "#/components/schemas/ApiProblemResponse"
                 }
               }
             }
@@ -146,9 +226,9 @@
           "401": {
             "description": "Authentication required",
             "content": {
-              "*/*": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StaffPasswordChangeResponse"
+                  "$ref": "#/components/schemas/ApiProblemResponse"
                 }
               }
             }
@@ -156,9 +236,39 @@
           "403": {
             "description": "Valid CSRF token required",
             "content": {
-              "*/*": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StaffPasswordChangeResponse"
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authenticated staff profile or credential was not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the configured limit",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Staff profile data could not be updated",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
                 }
               }
             }
@@ -181,7 +291,7 @@
           "200": {
             "description": "Branch context returned",
             "content": {
-              "*/*": {
+              "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/StaffBranchContextResponse"
                 }
@@ -191,9 +301,19 @@
           "401": {
             "description": "Authentication required",
             "content": {
-              "*/*": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Password change required before reading operational context",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
                 }
               }
             }
@@ -201,9 +321,9 @@
           "409": {
             "description": "Selected branch is no longer available",
             "content": {
-              "*/*": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                  "$ref": "#/components/schemas/ApiProblemResponse"
                 }
               }
             }
@@ -219,52 +339,91 @@
   },
   "components": {
     "schemas": {
-      "CsrfToken": {
-        "type": "object",
-        "properties": {
-          "token": {
-            "type": "string"
-          },
-          "parameterName": {
-            "type": "string"
-          },
-          "headerName": {
-            "type": "string"
-          }
-        }
-      },
       "CsrfTokenResponse": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "token": {
-            "type": "string"
+            "type": "string",
+            "description": "Token value returned to the caller for the configured CSRF header."
           },
           "headerName": {
-            "type": "string"
+            "type": "string",
+            "description": "HTTP header name expected by the CSRF filter."
           },
           "parameterName": {
-            "type": "string"
+            "type": "string",
+            "description": "Form parameter name supported by the CSRF filter; this is not a query parameter."
           }
-        }
+        },
+        "required": ["headerName", "parameterName", "token"]
       },
       "LoginRequest": {
         "type": "object",
         "properties": {
           "identifier": {
             "type": "string",
+            "description": "Staff username or email address.",
             "maxLength": 254,
             "minLength": 0
           },
           "password": {
             "type": "string",
+            "description": "Staff account password.",
             "maxLength": 256,
-            "minLength": 0
+            "minLength": 0,
+            "writeOnly": true
           }
         },
         "required": ["identifier", "password"]
       },
+      "ApiProblemResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "RFC 9457 error response with stable Coach Gym code and timestamp extensions.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "Problem type identifier."
+          },
+          "title": {
+            "type": "string",
+            "description": "HTTP reason phrase."
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "description": "HTTP status code."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Safe problem description."
+          },
+          "instance": {
+            "type": "string",
+            "format": "uri",
+            "description": "Request URI when available."
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable application error code."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time the problem was created."
+          },
+          "correlationId": {
+            "type": "string",
+            "description": "Request correlation identifier when available."
+          }
+        },
+        "required": ["code", "detail", "status", "timestamp", "title", "type"]
+      },
       "CurrentUserResponse": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "id": {
             "type": "string",
@@ -278,6 +437,7 @@
           },
           "roles": {
             "type": "array",
+            "description": "Non-null staff role codes.",
             "items": {
               "type": "string"
             }
@@ -287,10 +447,12 @@
             "enum": ["ORGANIZATION", "BRANCH"]
           },
           "activeBranch": {
-            "$ref": "#/components/schemas/AuthorizedBranchSummary"
+            "$ref": "#/components/schemas/NullableAuthorizedBranchSummary",
+            "description": "Present with null when no active branch is selected or available."
           },
           "availableBranches": {
             "type": "array",
+            "description": "Non-null active branches available to the authenticated staff account.",
             "items": {
               "$ref": "#/components/schemas/AuthorizedBranchSummary"
             }
@@ -298,10 +460,31 @@
           "passwordChangeRequired": {
             "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "activeBranch",
+          "availableBranches",
+          "fullName",
+          "id",
+          "organizationScope",
+          "passwordChangeRequired",
+          "roles",
+          "username"
+        ]
+      },
+      "NullableAuthorizedBranchSummary": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AuthorizedBranchSummary"
+          },
+          {
+            "$ref": "#/components/schemas/OpenApiNullValue"
+          }
+        ]
       },
       "AuthorizedBranchSummary": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "id": {
             "type": "string",
@@ -323,7 +506,18 @@
           "initialBranch": {
             "type": "boolean"
           }
-        }
+        },
+        "required": [
+          "code",
+          "id",
+          "initialBranch",
+          "name",
+          "organizationId",
+          "timezone"
+        ]
+      },
+      "OpenApiNullValue": {
+        "type": "null"
       },
       "ChangeStaffPasswordRequest": {
         "type": "object",
@@ -331,15 +525,21 @@
         "properties": {
           "currentPassword": {
             "type": "string",
-            "minLength": 1
+            "description": "Current staff account password.",
+            "minLength": 1,
+            "writeOnly": true
           },
           "newPassword": {
             "type": "string",
-            "minLength": 1
+            "description": "New staff account password.",
+            "minLength": 1,
+            "writeOnly": true
           },
           "newPasswordConfirmation": {
             "type": "string",
-            "minLength": 1
+            "description": "Confirmation of the new password.",
+            "minLength": 1,
+            "writeOnly": true
           }
         },
         "required": [
@@ -350,6 +550,7 @@
       },
       "StaffPasswordChangeResponse": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "userId": {
             "type": "string",
@@ -362,10 +563,12 @@
           "reauthenticationRequired": {
             "type": "boolean"
           }
-        }
+        },
+        "required": ["profileVersion", "reauthenticationRequired", "userId"]
       },
       "StaffBranchContextResponse": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "organizationId": {
             "type": "string",
@@ -376,15 +579,23 @@
             "enum": ["ORGANIZATION", "BRANCH"]
           },
           "activeBranch": {
-            "$ref": "#/components/schemas/AuthorizedBranchSummary"
+            "$ref": "#/components/schemas/NullableAuthorizedBranchSummary",
+            "description": "Present with null when no active branch is selected."
           },
           "availableBranches": {
             "type": "array",
+            "description": "Non-null active branches available to the authenticated staff account.",
             "items": {
               "$ref": "#/components/schemas/AuthorizedBranchSummary"
             }
           }
-        }
+        },
+        "required": [
+          "activeBranch",
+          "availableBranches",
+          "organizationId",
+          "scopeType"
+        ]
       }
     },
     "securitySchemes": {

@@ -9,9 +9,11 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 
 import io.github.guillermodubon.coachgym.auth.CoachGymUserPrincipal;
 import io.github.guillermodubon.coachgym.payment.PaymentAttemptDetails;
@@ -20,6 +22,9 @@ import io.github.guillermodubon.coachgym.payment.PaymentAttemptStatus;
 import io.github.guillermodubon.coachgym.payment.PaymentProvider;
 import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptApplicationService;
 import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptCheckoutDetails;
+import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptPage;
+import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptQueryApplicationService;
+import io.github.guillermodubon.coachgym.payment.application.PaymentAttemptQueryUnavailableException;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -59,6 +64,56 @@ class PaymentAttemptControllerTest {
 
     @MockitoBean
     private PaymentAttemptApplicationService paymentAttemptService;
+
+    @MockitoBean
+    private PaymentAttemptQueryApplicationService paymentAttemptQueryService;
+
+    @Test
+    void listsSafeAttemptsForARequiredMembershipPeriodFilter() throws Exception {
+        when(paymentAttemptQueryService.findPage(any(), any()))
+                .thenReturn(new PaymentAttemptPage(
+                        List.of(details(PaymentAttemptStatus.PROCESSING)), 0, 25, 1, 1));
+
+        mockMvc.perform(get("/api/v1/payment-attempts")
+                        .with(authenticatedAs("RECEPTIONIST"))
+                        .param("membershipId", MEMBERSHIP_ID.toString())
+                        .param("membershipPeriodId", PERIOD_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.items[0].id").value(ATTEMPT_ID.toString()))
+                .andExpect(jsonPath("$.items[0].status").value("PROCESSING"))
+                .andExpect(jsonPath("$.items[0].checkoutReference").doesNotExist())
+                .andExpect(jsonPath("$.items[0].checkoutUrl").doesNotExist())
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
+    void rejectsInvalidPageParametersAndDoesNotInvokeQueryService() throws Exception {
+        mockMvc.perform(get("/api/v1/payment-attempts")
+                        .with(authenticatedAs("ADMIN"))
+                        .param("membershipId", MEMBERSHIP_ID.toString())
+                        .param("membershipPeriodId", PERIOD_ID.toString())
+                        .param("page", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST_PARAMETER"));
+
+        verifyNoInteractions(paymentAttemptQueryService);
+    }
+
+    @Test
+    void sanitizesUnexpectedPersistenceFailureForAttemptSearch() throws Exception {
+        when(paymentAttemptQueryService.findPage(any(), any()))
+                .thenThrow(new PaymentAttemptQueryUnavailableException(
+                        new IllegalStateException("SQL and provider reference details")));
+
+        mockMvc.perform(get("/api/v1/payment-attempts")
+                        .with(authenticatedAs("ADMIN"))
+                        .param("membershipId", MEMBERSHIP_ID.toString())
+                        .param("membershipPeriodId", PERIOD_ID.toString()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("PAYMENT_ATTEMPT_QUERY_UNAVAILABLE"))
+                .andExpect(content().string(not(containsString("SQL and provider"))));
+    }
 
     @Test
     void createsCheckoutWithServerOwnedFinancialSnapshot() throws Exception {

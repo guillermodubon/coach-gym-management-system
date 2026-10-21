@@ -5,6 +5,7 @@ import io.github.guillermodubon.coachgym.user.ActiveBranchContextResolver;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActorProvider;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.github.guillermodubon.coachgym.user.StaffBranchContext;
+import io.github.guillermodubon.coachgym.shared.web.ApiProblemResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -13,6 +14,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.Objects;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -47,9 +49,17 @@ class StaffBranchContextController {
                     + "branch and active branches available to the authenticated ADMIN or "
                     + "RECEPTIONIST. The selected branch never grants authorization by itself.")
     @ApiResponse(responseCode = "200", description = "Branch context returned",
-            content = @Content(schema = @Schema(implementation = StaffBranchContextResponse.class)))
-    @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "409", description = "Selected branch is no longer available")
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = StaffBranchContextResponse.class)))
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "403", description = "Password change required before reading operational context",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "409", description = "Selected branch is no longer available",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     StaffBranchContextResponse get(Authentication authentication) {
         return StaffBranchContextResponse.from(resolver.resolve(actor(authentication).id()));
     }
