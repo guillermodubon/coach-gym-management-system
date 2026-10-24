@@ -40,7 +40,7 @@ npm run types:generate
 npm run types:check
 ```
 
-Las salidas ignoradas y regenerables son `src/shared/api/generated/schema.d.ts` (F01) y `src/shared/api/generated/f02-schema.d.ts` (F02). `types:check` valida ambos alcances, resuelve solo referencias locales y compara las salidas existentes sin escribirlas. No consulta un servidor para validar vigencia: esa comprobación ocurre en el harness de integración.
+Las salidas ignoradas y regenerables son `src/shared/api/generated/schema.d.ts` (F01) y `src/shared/api/generated/f02-schema.d.ts` (F02). `types:check` valida ambos alcances y comprueba la generación reproducible en memoria, incluso en un checkout sin salidas generadas. Si una salida ya existe, debe coincidir; el comando no crea ni sobrescribe archivos. `typecheck`, que se ejecuta después en `npm run check`, genera las salidas para compilar TypeScript. Las pruebas del generador cubren ambos contratos en un directorio temporal sin salidas y comprueban que una salida desactualizada sigue fallando sin modificarse. No consulta un servidor para validar vigencia: esa comprobación ocurre en el harness de integración.
 
 El generador está en el workspace `tools/contracts/` porque `openapi-typescript@7.13.0` declara TypeScript `^5.x` como peer. Usa TypeScript 5.9.3 allí; la aplicación, Vite y MSW conservan TypeScript 6.0.3. El lockfile de `frontend/` incluye ambos sin forzar peers.
 

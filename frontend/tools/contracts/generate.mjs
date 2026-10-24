@@ -26,19 +26,23 @@ for (const contract of contracts) {
   const destination = new URL(contract.output, directory);
   const document = JSON.parse(await readFile(snapshotUrl, "utf8"));
   validateSnapshot(document, contract.scope);
-  const expected = astToString(await openapiTS(document)).replaceAll(
-    "\r\n",
-    "\n",
-  );
+  const generate = async () =>
+    astToString(await openapiTS(document)).replaceAll("\r\n", "\n");
+  const expected = await generate();
 
   if (checkOnly) {
+    if ((await generate()) !== expected) {
+      throw new Error(
+        `La generación de ${contract.scope.toUpperCase()} no es reproducible.`,
+      );
+    }
     const existing = await readFile(destination, "utf8").catch((error) => {
       if (error.code === "ENOENT") return undefined;
       throw error;
     });
-    if (existing !== expected) {
+    if (existing !== undefined && existing !== expected) {
       throw new Error(
-        `${contract.output} falta o no coincide. Ejecuta npm run types:generate.`,
+        `${contract.output} no coincide. Ejecuta npm run types:generate.`,
       );
     }
   } else {

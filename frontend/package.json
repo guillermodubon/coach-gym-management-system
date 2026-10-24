@@ -20,7 +20,7 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",
-    "test:run": "npm run types:generate && vitest run && node --test tools/contracts/scope.test.mjs tools/integration/process-command.test.mjs",
+    "test:run": "npm run types:generate && vitest run && node --test tools/contracts/scope.test.mjs tools/contracts/generate.test.mjs tools/integration/process-command.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:integration": "node tools/integration/run.mjs",
     "test:e2e:integration:browser": "playwright test --config=playwright.integration.config.ts",
