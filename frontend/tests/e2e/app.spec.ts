@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { waitForVisualTransitions } from "../helpers/visual-stability";
 
 const identity = {
   id: "00000000-0000-4000-8000-000000000003",
@@ -136,6 +137,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
     page.getByRole("button", { name: "Activar tema oscuro" }),
   ).toBeVisible();
 
+  await waitForVisualTransitions(page);
   const loginAccessibility = await new AxeBuilder({ page }).analyze();
   expect(loginAccessibility.violations).toEqual([]);
 
@@ -168,6 +170,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
   expect(csrfIssued).toBe(2);
   expect(avatarRequests).toBeGreaterThan(0);
 
+  await waitForVisualTransitions(page);
   const privateAccessibility = await new AxeBuilder({ page }).analyze();
   expect(privateAccessibility.violations).toEqual([]);
 
@@ -175,6 +178,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
   await page.keyboard.press("Enter");
   const logoutItem = page.getByRole("menuitem", { name: "Cerrar sesión" });
   await expect(logoutItem).toBeVisible();
+  await waitForVisualTransitions(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.keyboard.press("Escape");
   await expect(logoutItem).toBeHidden();
@@ -253,6 +257,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
   await accountTrigger.focus();
   await page.keyboard.press("Enter");
   await expect(logoutItem).toBeVisible();
+  await waitForVisualTransitions(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await logoutItem.click();
   await expect(
@@ -387,6 +392,7 @@ test("completes the required password change and returns to fresh login", async 
     page.getByLabel("Nueva contraseña", { exact: true }),
   ).toBeFocused();
 
+  await waitForVisualTransitions(page);
   const passwordAccessibility = await new AxeBuilder({ page }).analyze();
   expect(passwordAccessibility.violations).toEqual([]);
 

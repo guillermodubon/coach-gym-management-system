@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { waitForVisualTransitions } from "../helpers/visual-stability";
 
 const identity = {
   id: "00000000-0000-4000-8000-000000000003",
@@ -131,6 +132,7 @@ test("opens account settings, changes password, and logs in again with the new p
     page.getByRole("heading", { name: "Ajustes de mi cuenta" }),
   ).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await waitForVisualTransitions(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
   const themeToggle = page
@@ -160,6 +162,7 @@ test("opens account settings, changes password, and logs in again with the new p
     ).toBeLessThanOrEqual(1);
   }
 
+  await waitForVisualTransitions(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole("link", { name: "Cambiar contraseña" }).click();
   await expect(
@@ -173,12 +176,14 @@ test("opens account settings, changes password, and logs in again with the new p
     page.getByRole("button", { name: themeActionAfterToggle! }),
   ).toBeVisible();
   await expect(page.locator("img")).toHaveCount(0);
+  await waitForVisualTransitions(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
   await page.getByRole("button", { name: "Activar tema claro" }).click();
   updatedTheme = "light";
   themeActionAfterToggle = "Activar tema oscuro";
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await waitForVisualTransitions(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 
   await page.getByLabel("Contraseña actual").fill("synthetic-current-password");
