@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
+import { waitForVisualTransitions } from "../helpers/visual-stability";
 
 const identity = {
   id: "00000000-0000-4000-8000-000000000003",
@@ -28,6 +29,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
   let csrfIssued = 0;
   let identityRequests = 0;
   let branchContextRequests = 0;
+  let avatarRequests = 0;
   let profileRequests = 0;
   let holdIdentityRead = false;
   let loginRequests = 0;
@@ -67,6 +69,25 @@ test("requires a server session, logs in once, and explicitly logs out", async (
     await route.fulfill({
       status: 500,
       body: "Unexpected branch-context request",
+    });
+  });
+  await page.route("**/api/v1/me/profile", async (route) => {
+    avatarRequests += 1;
+    await route.fulfill({
+      status: 200,
+      json: {
+        userId: identity.id,
+        username: identity.username,
+        email: "operador@example.test",
+        firstName: "Operador",
+        lastName: "Prueba",
+        displayName: identity.fullName,
+        roles: identity.roles,
+        status: "ACTIVE",
+        photoPresent: false,
+        photoUrl: null,
+        version: 1,
+      },
     });
   });
   await page.route("**/api/v1/me/profile/**", async (route) => {
@@ -116,6 +137,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
     page.getByRole("button", { name: "Activar tema oscuro" }),
   ).toBeVisible();
 
+  await waitForVisualTransitions(page);
   const loginAccessibility = await new AxeBuilder({ page }).analyze();
   expect(loginAccessibility.violations).toEqual([]);
 
@@ -146,7 +168,9 @@ test("requires a server session, logs in once, and explicitly logs out", async (
   await expect(page.getByText("Sucursal de prueba")).toBeVisible();
   expect(loginRequests).toBe(1);
   expect(csrfIssued).toBe(2);
+  expect(avatarRequests).toBeGreaterThan(0);
 
+  await waitForVisualTransitions(page);
   const privateAccessibility = await new AxeBuilder({ page }).analyze();
   expect(privateAccessibility.violations).toEqual([]);
 
@@ -154,6 +178,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
   await page.keyboard.press("Enter");
   const logoutItem = page.getByRole("menuitem", { name: "Cerrar sesión" });
   await expect(logoutItem).toBeVisible();
+  await waitForVisualTransitions(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.keyboard.press("Escape");
   await expect(logoutItem).toBeHidden();
@@ -232,6 +257,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
   await accountTrigger.focus();
   await page.keyboard.press("Enter");
   await expect(logoutItem).toBeVisible();
+  await waitForVisualTransitions(page);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await logoutItem.click();
   await expect(
@@ -366,6 +392,7 @@ test("completes the required password change and returns to fresh login", async 
     page.getByLabel("Nueva contraseña", { exact: true }),
   ).toBeFocused();
 
+  await waitForVisualTransitions(page);
   const passwordAccessibility = await new AxeBuilder({ page }).analyze();
   expect(passwordAccessibility.violations).toEqual([]);
 

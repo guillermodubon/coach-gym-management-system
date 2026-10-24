@@ -1,0 +1,24 @@
+.cg-recovery-feedback {
+  margin-block-end: 20px;
+}
+
+.cg-recovery-link {
+  display: inline-flex;
+  min-block-size: 44px;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  padding: 8px;
+  color: var(--cg-color-text, #141414);
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.cg-recovery-link:hover {
+  color: var(--cg-color-text, #141414);
+}
+
+.cg-public-identity-logout {
+  margin-block-start: 20px;
+}

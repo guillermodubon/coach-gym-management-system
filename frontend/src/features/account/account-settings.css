@@ -1,0 +1,91 @@
+.cg-account-settings {
+  display: grid;
+  min-inline-size: 0;
+  gap: 20px;
+}
+
+.cg-account-settings > div:first-child .ant-typography {
+  overflow-wrap: anywhere;
+}
+
+.cg-account-settings-grid {
+  display: grid;
+  min-inline-size: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.cg-account-setting-card {
+  min-inline-size: 0;
+}
+
+.cg-account-setting-card .ant-card-body {
+  display: flex;
+  min-block-size: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cg-account-setting-icon {
+  color: var(--cg-color-text-secondary, #595959);
+  font-size: 1.25rem;
+}
+
+.cg-account-setting-card h2.ant-typography {
+  margin-block: 4px 0;
+  font-size: 1.125rem;
+  overflow-wrap: anywhere;
+}
+
+.cg-account-setting-card p.ant-typography {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.cg-account-setting-link.ant-btn {
+  display: inline-flex;
+  inline-size: 100%;
+  min-block-size: 44px;
+  align-items: center;
+  justify-content: center;
+  padding-block: 8px;
+  text-decoration: none;
+  white-space: normal;
+}
+
+.cg-account-setting-link.ant-btn-default,
+.cg-account-setting-link.ant-btn-default:hover {
+  border-color: var(--cg-border-color, #d4d4d8);
+  color: var(--cg-color-text, #141414);
+  background: var(--cg-container-background, #ffffff);
+}
+
+.cg-account-setting-link.ant-btn-primary,
+.cg-account-setting-link.ant-btn-primary:hover {
+  border-color: var(--cg-color-primary, #111111);
+  color: var(--cg-layout-background, #f4f4f5);
+  background: var(--cg-color-primary, #111111);
+}
+
+.cg-account-setting-theme {
+  display: flex;
+  min-inline-size: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  align-self: stretch;
+  padding-block: 8px;
+}
+
+@media (max-width: 900px) {
+  .cg-account-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575.98px) {
+  .cg-account-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

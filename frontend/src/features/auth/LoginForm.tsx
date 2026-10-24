@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { flushSync } from "react-dom";
 import { Alert, Button, Form, Input } from "antd";
+import { Link } from "react-router";
 import { ApiError } from "../../shared/api/errors";
 import { StatePanel } from "../../shared/ui/StatePanel";
 import { authErrorMessage, authNoticeMessage } from "./auth-messages";
@@ -144,6 +145,9 @@ export function LoginForm() {
           Iniciar sesión
         </Button>
       </Form>
+      <Link className="cg-recovery-link" to="/solicitar-recuperacion">
+        ¿Olvidaste tu contraseña?
+      </Link>
     </div>
   );
 }

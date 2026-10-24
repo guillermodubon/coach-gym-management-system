@@ -74,6 +74,11 @@ export default defineConfig({
       use: { browserName: "chromium" },
     },
     {
+      name: "f02",
+      testMatch: "f02.integration.spec.ts",
+      use: { browserName: "chromium" },
+    },
+    {
       name: "expiry",
       testMatch: "expiry.integration.spec.ts",
       use: { browserName: "chromium" },

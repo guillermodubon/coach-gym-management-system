@@ -12,7 +12,11 @@ const problems = {
   CURRENT_PASSWORD_INVALID: [400, "No se pudo verificar la contraseña actual."],
   STAFF_PROFILE_VALIDATION_FAILED: [
     400,
-    "Revisa los requisitos de la contraseña.",
+    "Revisa los datos del perfil o los requisitos de contraseña.",
+  ],
+  STAFF_IDENTITY_REQUEST_INVALID: [
+    400,
+    "Revisa los datos e inténtalo de nuevo.",
   ],
   INVALID_CREDENTIALS: [401, "No se pudo iniciar sesión con esos datos."],
   AUTHENTICATION_REQUIRED: [401, "Debes iniciar sesión para continuar."],
@@ -27,7 +31,34 @@ const problems = {
   ],
   STAFF_PROFILE_VERSION_CONFLICT: [
     409,
-    "La cuenta cambió. Actualiza su estado antes de continuar.",
+    "El perfil cambió. Actualiza su estado antes de continuar.",
+  ],
+  PASSWORD_RECOVERY_NOT_AVAILABLE: [
+    409,
+    "El enlace de recuperación ya no está disponible.",
+  ],
+  INVITATION_NOT_AVAILABLE: [
+    409,
+    "El enlace de invitación ya no está disponible.",
+  ],
+  STAFF_PROFILE_NOT_FOUND: [404, "El perfil no está disponible."],
+  STAFF_PROFILE_PHOTO_NOT_FOUND: [404, "No hay una foto disponible."],
+  STAFF_PROFILE_PHOTO_TOO_LARGE: [413, "La foto supera el límite permitido."],
+  STAFF_IDENTITY_OPERATION_FORBIDDEN: [
+    403,
+    "No se pudo completar esta operación de identidad.",
+  ],
+  STAFF_PROFILE_STORAGE_FAILED: [
+    500,
+    "No se pudo confirmar el cambio de foto. Comprueba el perfil antes de repetirlo.",
+  ],
+  STAFF_PROFILE_DATA_ACCESS_FAILED: [
+    500,
+    "No se pudo cargar o actualizar el perfil.",
+  ],
+  STAFF_IDENTITY_OPERATION_FAILED: [
+    500,
+    "No se pudo confirmar la operación. Comprueba su estado antes de repetirla.",
   ],
   AUTHENTICATION_RATE_LIMITED: [
     429,
@@ -38,17 +69,31 @@ const problems = {
 export type ProblemCode = keyof typeof problems;
 export type FormField =
   | "identifier"
+  | "firstName"
+  | "lastName"
+  | "email"
   | "password"
   | "currentPassword"
   | "newPassword"
-  | "newPasswordConfirmation";
+  | "newPasswordConfirmation"
+  | "passwordConfirmation"
+  | "token"
+  | "file"
+  | "version";
 
 const fields: readonly FormField[] = [
   "identifier",
+  "firstName",
+  "lastName",
+  "email",
   "password",
   "currentPassword",
   "newPassword",
   "newPasswordConfirmation",
+  "passwordConfirmation",
+  "token",
+  "file",
+  "version",
 ];
 
 const messages: Record<Exclude<ApiErrorKind, "http">, string> = {

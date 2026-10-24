@@ -33,6 +33,14 @@ export interface AuthController {
   beginCredentialAction(
     kind: "login" | "password",
   ): Promise<MutationTicket | null>;
+  beginPublicIdentityAction(
+    kind:
+      | "recovery-request"
+      | "recovery-complete"
+      | "invitation-inspect"
+      | "invitation-accept",
+  ): Promise<MutationTicket | null>;
+  finishPublicIdentityAction(ticket: MutationTicket): void;
   isTicketCurrent(ticket: MutationTicket): boolean;
   completeLogin(ticket: MutationTicket): Promise<void>;
   failLogin(ticket: MutationTicket, error: ApiError): Promise<void>;
@@ -429,25 +437,33 @@ export function createAuthController({
   async function beginCredentialAction(
     kind: "login" | "password",
   ): Promise<MutationTicket | null> {
+    const currentUser = stateUser(snapshot.state);
     if (
       snapshot.pendingAction !== null ||
       (kind === "login" && snapshot.state.kind !== "anonymous") ||
-      (kind === "password" && snapshot.state.kind !== "password-required") ||
+      (kind === "password" &&
+        snapshot.state.kind !== "password-required" &&
+        snapshot.state.kind !== "authenticated") ||
       (kind === "login" && now() < loginRetryAt) ||
       (kind === "password" && now() < passwordRetryAt)
     ) {
       return null;
     }
-    const expectedUserId =
-      kind === "password" && snapshot.state.kind === "password-required"
-        ? snapshot.state.user.id
+    const expectedUserId = kind === "password" ? currentUser?.id : undefined;
+    const passwordMode =
+      kind === "password"
+        ? snapshot.state.kind === "password-required"
+          ? "required"
+          : "voluntary"
         : undefined;
+    if (kind === "password" && (!expectedUserId || !passwordMode)) return null;
     invalidateRead();
     const ticket = Object.freeze({
       id: ++ticketSequence,
       kind,
       signal: new AbortController().signal,
       ...(expectedUserId ? { expectedUserId } : {}),
+      ...(passwordMode ? { passwordMode } : {}),
     });
     activeTicket = ticket;
     if (kind === "login") validatedUser = null;
@@ -459,6 +475,48 @@ export function createAuthController({
     });
     await clearPrivateData(queryClient, apiClient);
     return isTicketCurrent(ticket) ? ticket : null;
+  }
+
+  async function beginPublicIdentityAction(
+    kind: "recovery-request" | "recovery-complete",
+  ): Promise<MutationTicket | null> {
+    if (
+      snapshot.pendingAction !== null ||
+      snapshot.state.kind !== "anonymous"
+    ) {
+      return null;
+    }
+
+    invalidateRead();
+    const ticket: MutationTicket = Object.freeze({
+      id: ++ticketSequence,
+      kind: "public-identity",
+      publicAction: kind,
+      signal: new AbortController().signal,
+    });
+    activeTicket = ticket;
+    publish({
+      pendingAction: "public-identity",
+      error: null,
+      notice: null,
+      privacyCovered: false,
+    });
+    await clearPrivateData(queryClient, apiClient);
+    return isTicketCurrent(ticket) ? ticket : null;
+  }
+
+  function finishPublicIdentityAction(ticket: MutationTicket): void {
+    if (ticket.kind !== "public-identity" || !isTicketCurrent(ticket)) {
+      return;
+    }
+    activeTicket = undefined;
+    publish({
+      pendingAction: null,
+      error: null,
+      notice: null,
+      privacyCovered: false,
+    });
+    finishDeferredRevalidation();
   }
 
   function isTicketCurrent(ticket: MutationTicket): boolean {
@@ -564,6 +622,7 @@ export function createAuthController({
 
     if (
       !ticket.expectedUserId ||
+      !passwordTicketMatchesCurrentActor(ticket) ||
       result.userId !== ticket.expectedUserId ||
       result.reauthenticationRequired !== true
     ) {
@@ -619,6 +678,18 @@ export function createAuthController({
     sessionEvents.publish();
   }
 
+  function passwordTicketMatchesCurrentActor(ticket: MutationTicket): boolean {
+    const current = stateUser(snapshot.state);
+    return Boolean(
+      ticket.expectedUserId &&
+      current?.id === ticket.expectedUserId &&
+      ((ticket.passwordMode === "required" &&
+        snapshot.state.kind === "password-required") ||
+        (ticket.passwordMode === "voluntary" &&
+          snapshot.state.kind === "authenticated")),
+    );
+  }
+
   async function failPasswordChange(
     ticket: MutationTicket,
     error: ApiError,
@@ -660,7 +731,7 @@ export function createAuthController({
 
     if (recoverableFailure) {
       const currentState = snapshot.state;
-      if (currentState.kind !== "password-required") {
+      if (!passwordTicketMatchesCurrentActor(ticket)) {
         await finishPasswordChangeUnknown(ticket, error);
         return;
       }
@@ -850,6 +921,8 @@ export function createAuthController({
     start,
     revalidate,
     beginCredentialAction,
+    beginPublicIdentityAction,
+    finishPublicIdentityAction,
     isTicketCurrent,
     completeLogin,
     failLogin,

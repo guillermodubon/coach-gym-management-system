@@ -1,0 +1,916 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Coach Gym - F02 HTTP contracts",
+    "version": "v1",
+    "description": "Proyección de las diez operaciones H01-H10 de F02 desde Springdoc. El contrato conserva las respuestas reales del backend, incluida la respuesta H09 sin schema declarado."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "paths": {
+    "/api/v1/me/profile": {
+      "get": {
+        "tags": ["Staff self-profile"],
+        "summary": "Get the authenticated staff self-profile",
+        "description": "Returns only the authenticated ADMIN or RECEPTIONIST profile. Role, status, organization, branch, and permission fields are not editable here.",
+        "operationId": "findProfile",
+        "responses": {
+          "200": {
+            "description": "Profile returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "put": {
+        "tags": ["Staff self-profile"],
+        "summary": "Update the authenticated staff self-profile",
+        "description": "Only firstName and lastName may be changed. Requires the current profile version and a valid CSRF token.",
+        "operationId": "update_4",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateStaffSelfProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Profile updated",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid profile request",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid CSRF token required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Profile version conflict",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/profile/photo": {
+      "get": {
+        "tags": ["Staff self-profile"],
+        "summary": "Download the authenticated staff photo",
+        "description": "Returns the private photo through the application authorization boundary. The response is never publicly cacheable.",
+        "operationId": "downloadPhoto",
+        "responses": {
+          "200": {
+            "description": "Photo returned",
+            "content": {
+              "image/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Photo not found",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "byte"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "put": {
+        "tags": ["Staff self-profile"],
+        "summary": "Upload or replace the authenticated staff photo",
+        "description": "Accepts JPEG, PNG, or WebP files up to 5 MiB. The file signature and checksum are validated server-side. Requires the current profile version and CSRF.",
+        "operationId": "uploadPhoto",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "query",
+            "description": "Current profile version used for optimistic locking.",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "JPEG, PNG, or WebP image; maximum size 5 MiB."
+                  }
+                },
+                "required": ["file"]
+              },
+              "encoding": {
+                "file": {
+                  "contentType": "image/*"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Photo metadata returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffProfilePhotoDetails"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid photo or version",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffProfilePhotoDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffProfilePhotoDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid CSRF token required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffProfilePhotoDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Profile version conflict",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffProfilePhotoDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Photo is too large",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffProfilePhotoDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["Staff self-profile"],
+        "summary": "Remove the authenticated staff photo",
+        "description": "Clears the canonical photo metadata and removes the private object after the versioned database transition. Requires CSRF.",
+        "operationId": "removePhoto",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile returned without a photo",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid CSRF token required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Profile version conflict",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffSelfProfile"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/profile/password": {
+      "post": {
+        "tags": ["Staff self-profile"],
+        "summary": "Change the authenticated staff password",
+        "description": "Requires the current password, the configured password policy, confirmation, and CSRF. The current session requires reauthentication; password values are never returned.",
+        "operationId": "changePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeStaffPasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffPasswordChangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid password or confirmation",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid CSRF token required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Authenticated staff profile or credential was not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the configured limit",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Staff profile data could not be updated",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblemResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/password-recovery-requests": {
+      "post": {
+        "tags": ["Staff password recovery"],
+        "summary": "Request password recovery",
+        "description": "Always returns the same acknowledgement for eligible, ineligible, unknown, inactive, or throttled addresses. The one-time link is sent through the configured provider-neutral identity-email boundary. Abuse controls do not alter the public response. Requires CSRF.",
+        "operationId": "request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestPasswordRecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Generic acknowledgement",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordRecoveryAcknowledgement"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password-recovery/complete": {
+      "post": {
+        "tags": ["Staff password recovery"],
+        "summary": "Complete password recovery",
+        "description": "Consumes an unexpired, one-time recovery link and replaces the password. New passwords must be 12–256 characters. Invalid, expired, revoked, unavailable, or abuse-limited attempts share one generic conflict response. Requires CSRF.",
+        "operationId": "complete_1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompletePasswordRecoveryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Password updated"
+          },
+          "409": {
+            "description": "Recovery request is not available"
+          }
+        }
+      }
+    },
+    "/api/v1/staff-invitations/inspect": {
+      "post": {
+        "tags": ["Staff invitations"],
+        "summary": "Inspect an invitation link",
+        "description": "Public token-protected operation. Returns only a masked email, approved role/scope, branch summaries and expiry. Invalid, expired, revoked, unavailable, or abuse-limited attempts share one safe conflict response. Requires CSRF.",
+        "operationId": "inspect",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectStaffInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Safe invitation preview returned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invitation is not available",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/staff-invitations/accept": {
+      "post": {
+        "tags": ["Staff invitations"],
+        "summary": "Accept a staff invitation",
+        "description": "Public token-protected provisioning. The request allowlist is token, password, confirmation and profile names; passwords must be 12–256 characters. Email, role, scope, branches, status, permissions and actor identity are invitation/server controlled. Invalid, expired, revoked, unavailable, or abuse-limited attempts share one safe conflict response. Requires CSRF.",
+        "operationId": "accept",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptStaffInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Staff account provisioned",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffInvitationAcceptanceResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Invitation is not available",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffInvitationAcceptanceResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "StaffSelfProfile": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "username": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["ADMIN", "RECEPTIONIST"]
+            },
+            "uniqueItems": true
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "INACTIVE", "SUSPENDED", "DEACTIVATED"]
+          },
+          "photoPresent": {
+            "type": "boolean"
+          },
+          "photoUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "UpdateStaffSelfProfileRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "lastName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Current profile version used for optimistic locking."
+          }
+        },
+        "required": ["firstName", "lastName", "version"]
+      },
+      "StaffProfilePhotoDetails": {
+        "type": "object",
+        "properties": {
+          "photoId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ChangeStaffPasswordRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "Current staff account password.",
+            "minLength": 1,
+            "writeOnly": true
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "New staff account password.",
+            "minLength": 1,
+            "writeOnly": true
+          },
+          "newPasswordConfirmation": {
+            "type": "string",
+            "description": "Confirmation of the new password.",
+            "minLength": 1,
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword",
+          "newPasswordConfirmation"
+        ]
+      },
+      "StaffPasswordChangeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "profileVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "reauthenticationRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": ["profileVersion", "reauthenticationRequired", "userId"]
+      },
+      "ApiProblemResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "RFC 9457 error response with stable Coach Gym code and timestamp extensions.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "Problem type identifier."
+          },
+          "title": {
+            "type": "string",
+            "description": "HTTP reason phrase."
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "description": "HTTP status code."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Safe problem description."
+          },
+          "instance": {
+            "type": "string",
+            "format": "uri",
+            "description": "Request URI when available."
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable application error code."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time the problem was created."
+          },
+          "correlationId": {
+            "type": "string",
+            "description": "Request correlation identifier when available."
+          }
+        },
+        "required": ["code", "detail", "status", "timestamp", "title", "type"]
+      },
+      "RequestPasswordRecoveryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254,
+            "minLength": 0
+          }
+        },
+        "required": ["email"]
+      },
+      "PasswordRecoveryAcknowledgement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "CompletePasswordRecoveryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 0
+          },
+          "newPassword": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 12
+          },
+          "passwordConfirmation": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 12
+          }
+        },
+        "required": ["newPassword", "passwordConfirmation", "token"]
+      },
+      "InspectStaffInvitationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 0
+          }
+        },
+        "required": ["token"]
+      },
+      "AcceptStaffInvitationRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 0
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 12
+          },
+          "passwordConfirmation": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 12
+          },
+          "firstName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          },
+          "lastName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 0
+          }
+        },
+        "required": [
+          "firstName",
+          "lastName",
+          "password",
+          "passwordConfirmation",
+          "token"
+        ]
+      },
+      "StaffInvitationAcceptanceResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["ADMIN", "RECEPTIONIST"]
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["ORGANIZATION", "BRANCH"]
+          },
+          "branchIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "description": "Server-side authenticated\nsession established by\nPOST /api/v1/auth/login.\n",
+        "name": "JSESSIONID",
+        "in": "cookie"
+      }
+    }
+  }
+}

@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { hash } from "bcryptjs";
 import { Pool } from "pg";
 import { expect, test as base } from "@playwright/test";
@@ -20,9 +20,23 @@ export interface StaffFixtureOptions {
 export interface StaffFixture {
   id: string;
   username: string;
+  email: string;
   password: string;
   fullName: string;
   branchIds: string[];
+}
+
+export interface InvitationFixtureOptions {
+  inviterUserId: string;
+  role: StaffRole;
+  scope: StaffScope;
+  branchIds: string[];
+}
+
+export interface OneTimeTokenFixture {
+  id: string;
+  /** Raw token remains in the Node process memory and is never persisted. */
+  token: string;
 }
 
 interface WorkerFixtures {
@@ -161,7 +175,7 @@ export async function createStaffFixture(
     client.release();
   }
 
-  return Object.freeze({ id, username, password, fullName, branchIds });
+  return Object.freeze({ id, username, email, password, fullName, branchIds });
 }
 
 export async function invalidateFixtureSecurityVersion(
@@ -180,4 +194,102 @@ export async function invalidateFixtureSecurityVersion(
       "The synthetic account could not be advanced for the security check.",
     );
   }
+}
+
+function tokenFingerprint(
+  token: string,
+  purpose: "invitation" | "recovery",
+): string {
+  const separator =
+    purpose === "invitation"
+      ? "coach-gym:staff-invitation:v1:"
+      : "coach-gym:staff-password-recovery:v1:";
+  return createHash("sha256")
+    .update(`${separator}${token}`, "ascii")
+    .digest("hex");
+}
+
+/** Creates only a synthetic recovery row using the backend's purpose-separated fingerprint. */
+export async function createPasswordRecoveryFixture(
+  database: Pool,
+  userId: string,
+): Promise<OneTimeTokenFixture> {
+  const id = randomUUID();
+  const token = randomBytes(32).toString("base64url");
+  await database.query(
+    `INSERT INTO gym.staff_password_recovery_tokens
+        (id, user_id, token_fingerprint, token_scheme, requested_at, expires_at)
+     VALUES ($1, $2, $3, 'staff-password-recovery-sha256-v1',
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '20 minutes')`,
+    [id, userId, tokenFingerprint(token, "recovery")],
+  );
+  return Object.freeze({ id, token });
+}
+
+/** Creates a backend-valid invitation while returning its raw token only in memory. */
+export async function createInvitationFixture(
+  database: Pool,
+  options: InvitationFixtureOptions,
+): Promise<OneTimeTokenFixture & { email: string }> {
+  const branchIds = [...new Set(options.branchIds)];
+  if (
+    (options.role === "RECEPTIONIST" && options.scope !== "BRANCH") ||
+    (options.scope === "ORGANIZATION" && branchIds.length !== 0) ||
+    (options.scope === "BRANCH" && branchIds.length === 0)
+  ) {
+    throw new Error("The requested synthetic invitation proposal is invalid.");
+  }
+
+  const id = randomUUID();
+  const token = randomBytes(32).toString("base64url");
+  const email = `invitation-${id}@example.test`;
+  const client = await database.connect();
+  try {
+    await client.query("BEGIN");
+    const organization = await client.query(
+      `SELECT id
+         FROM gym.organizations
+        WHERE is_canonical = TRUE
+          AND status = 'ACTIVE'`,
+    );
+    if (organization.rowCount !== 1) {
+      throw new Error(
+        "The fixture database has no unique active organization.",
+      );
+    }
+
+    await client.query(
+      `INSERT INTO gym.staff_invitations
+          (id, organization_id, email_normalized, proposed_role, proposed_scope,
+           token_fingerprint, token_scheme, created_at, last_sent_at, expires_at,
+           invited_by_user_id, version)
+       VALUES ($1, $2, $3, $4, $5, $6, 'staff-invitation-sha256-v1',
+               CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+               CURRENT_TIMESTAMP + ($7::integer * INTERVAL '1 hour'), $8, 0)`,
+      [
+        id,
+        organization.rows[0].id,
+        email,
+        options.role,
+        options.scope,
+        tokenFingerprint(token, "invitation"),
+        options.role === "ADMIN" ? 20 : 40,
+        options.inviterUserId,
+      ],
+    );
+    for (const branchId of branchIds) {
+      await client.query(
+        `INSERT INTO gym.staff_invitation_branches (invitation_id, branch_id)
+         VALUES ($1, $2)`,
+        [id, branchId],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+  return Object.freeze({ id, token, email });
 }

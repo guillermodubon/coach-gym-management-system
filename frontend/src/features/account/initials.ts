@@ -7,10 +7,11 @@ function firstLetter(word: string | undefined): string | null {
 }
 
 export function getAccountInitials(user: CurrentUser): string {
-  const words = getAccountDisplayName(user)
-    .trim()
-    .split(/\s+/u)
-    .filter(Boolean);
+  return getInitialsForName(getAccountDisplayName(user));
+}
+
+export function getInitialsForName(displayName: string): string {
+  const words = displayName.trim().split(/\s+/u).filter(Boolean);
   const letteredWords = words
     .map((word) => firstLetter(word))
     .filter((letter): letter is string => letter !== null);

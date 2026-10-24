@@ -1,18 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import { LogoutOutlined } from "@ant-design/icons";
-import { Avatar, Button, Dropdown } from "antd";
+import {
+  LogoutOutlined,
+  SettingOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
+import { Button, Dropdown } from "antd";
 import type { MenuProps } from "antd";
+import { Link } from "react-router";
 import type { CurrentUser } from "../../shared/api/contracts";
 import { getAccountDisplayName, getAuthorityLabel } from "./account-labels";
 import { getAccountInitials } from "./initials";
+import { AccountAvatar } from "./AccountAvatar";
 import "./account-menu.css";
 
 export interface AccountMenuProps {
   user: CurrentUser;
+  photoUrl?: string | null;
   onLogout(): void;
 }
 
-export function AccountMenu({ user, onLogout }: AccountMenuProps) {
+export function AccountMenu({
+  user,
+  photoUrl = null,
+  onLogout,
+}: AccountMenuProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const name = getAccountDisplayName(user);
@@ -46,6 +57,16 @@ export function AccountMenu({ user, onLogout }: AccountMenuProps) {
       },
       { type: "divider" },
       {
+        key: "profile",
+        icon: <UserOutlined aria-hidden="true" />,
+        label: <Link to="/mi-perfil">Mi perfil</Link>,
+      },
+      {
+        key: "settings",
+        icon: <SettingOutlined aria-hidden="true" />,
+        label: <Link to="/mi-cuenta">Ajustes de mi cuenta</Link>,
+      },
+      {
         key: "logout",
         icon: <LogoutOutlined aria-hidden="true" />,
         label: "Cerrar sesión",
@@ -78,10 +99,10 @@ export function AccountMenu({ user, onLogout }: AccountMenuProps) {
         aria-label={`Menú de cuenta de ${name}`}
         className="cg-account-trigger"
         icon={
-          <Avatar
-            aria-hidden="true"
+          <AccountAvatar
             className="cg-account-avatar"
-            data-initials={initials}
+            initials={initials}
+            photoUrl={photoUrl}
             size={32}
           />
         }
