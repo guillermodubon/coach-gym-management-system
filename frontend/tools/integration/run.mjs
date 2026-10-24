@@ -1,12 +1,21 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createServer as createTcpServer } from "node:net";
-import { access, mkdir, readFile, realpath, rm, stat } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
-import { projectF01 } from "../contracts/scope.mjs";
+import prettier from "prettier";
+import { projectF01, projectF02 } from "../contracts/scope.mjs";
 import { seedExecutionBranch } from "./seed.mjs";
 import { startBuiltServer } from "./serve-built.mjs";
 import {
@@ -34,6 +43,16 @@ const JAVA_BASE_ARGUMENTS = [
   `--coach-gym.security.cors.allowed-origins=http://127.0.0.1:${FRONTEND_PORT}`,
   "--logging.level.root=WARN",
 ];
+const captureF02Contract = process.argv
+  .slice(2)
+  .includes("--capture-f02-contract");
+if (
+  process.argv
+    .slice(2)
+    .some((argument) => argument !== "--capture-f02-contract")
+) {
+  throw new Error("Unknown integration harness argument.");
+}
 
 class HarnessFailure extends Error {
   constructor(safeMessage) {
@@ -279,7 +298,7 @@ function canonicalize(value) {
   return value;
 }
 
-async function assertLiveContract(document) {
+async function assertLiveContracts(document) {
   const snapshotPath = resolve(FRONTEND_ROOT, "contracts/f01.openapi.json");
   const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
   let projected;
@@ -296,6 +315,26 @@ async function assertLiveContract(document) {
   ) {
     throw new HarnessFailure(
       "The live F01 OpenAPI projection differs from its reviewed snapshot; the snapshot was not changed.",
+    );
+  }
+  if (captureF02Contract) return;
+
+  const f02SnapshotPath = resolve(FRONTEND_ROOT, "contracts/f02.openapi.json");
+  const f02Snapshot = JSON.parse(await readFile(f02SnapshotPath, "utf8"));
+  let f02Projected;
+  try {
+    f02Projected = projectF02(document);
+  } catch {
+    throw new HarnessFailure(
+      "The live backend is missing a reviewed F02 HTTP operation or schema.",
+    );
+  }
+  if (
+    JSON.stringify(canonicalize(f02Projected)) !==
+    JSON.stringify(canonicalize(f02Snapshot))
+  ) {
+    throw new HarnessFailure(
+      "The live F02 OpenAPI projection differs from its reviewed snapshot; the snapshot was not changed.",
     );
   }
 }
@@ -388,7 +427,7 @@ function readSafeReporterResult(reportFile) {
                 ].includes(source),
               ))) &&
           (result.failureLocation === undefined ||
-            /^(auth\.integration\.spec\.ts|expiry\.integration\.spec\.ts|fixtures\.ts):\d+$/.test(
+            /^(auth\.integration\.spec\.ts|expiry\.integration\.spec\.ts|f02\.integration\.spec\.ts|fixtures\.ts):\d+$/.test(
               result.failureLocation,
             )),
       ) ||
@@ -576,29 +615,31 @@ async function main() {
     ...hostEnvironment,
     CG_F01_VITE_ENV_DIR: isolatedViteEnvironment,
   };
-  console.log(
-    "F01 integration: type-checking and building frontend into an isolated directory.",
-  );
-  await runCommand(process.execPath, [npmCli, "run", "typecheck"], {
-    cwd: FRONTEND_ROOT,
-    env: browserBuildEnvironment,
-    label: "Frontend typecheck",
-  });
-  await runCommand(
-    process.execPath,
-    [
-      resolve(FRONTEND_ROOT, "node_modules/vite/bin/vite.js"),
-      "build",
-      "--outDir",
-      isolatedBuild,
-      "--emptyOutDir",
-    ],
-    {
+  if (!captureF02Contract) {
+    console.log(
+      "F01 integration: type-checking and building frontend into an isolated directory.",
+    );
+    await runCommand(process.execPath, [npmCli, "run", "typecheck"], {
       cwd: FRONTEND_ROOT,
       env: browserBuildEnvironment,
-      label: "Isolated frontend production build",
-    },
-  );
+      label: "Frontend typecheck",
+    });
+    await runCommand(
+      process.execPath,
+      [
+        resolve(FRONTEND_ROOT, "node_modules/vite/bin/vite.js"),
+        "build",
+        "--outDir",
+        isolatedBuild,
+        "--emptyOutDir",
+      ],
+      {
+        cwd: FRONTEND_ROOT,
+        env: browserBuildEnvironment,
+        label: "Isolated frontend production build",
+      },
+    );
+  }
 
   console.log(
     "F01 integration: compiling the backend with its repository wrapper.",
@@ -631,6 +672,10 @@ async function main() {
     DATABASE_URL: `jdbc:postgresql://${database.host}:${database.port}/${database.database}`,
     DATABASE_USERNAME: database.user,
     DATABASE_PASSWORD: database.password,
+    STAFF_PROFILE_PHOTOS_DIRECTORY: resolve(
+      runtimeDirectory,
+      "staff-profile-photos",
+    ),
   };
 
   console.log(
@@ -645,9 +690,24 @@ async function main() {
     backendProcess,
     "normal session policy",
   );
-  await assertLiveContract(liveDocument);
+  await assertLiveContracts(liveDocument);
   console.log(
     "F01 integration: live F01 OpenAPI projection matches the reviewed snapshot.",
+  );
+  if (captureF02Contract) {
+    const snapshot = projectF02(liveDocument);
+    await writeFile(
+      resolve(FRONTEND_ROOT, "contracts/f02.openapi.json"),
+      await prettier.format(JSON.stringify(snapshot), { parser: "json" }),
+      "utf8",
+    );
+    console.log(
+      "F02 contract captured from the isolated backend. Review the snapshot before accepting it.",
+    );
+    return;
+  }
+  console.log(
+    "F02 integration: live F02 OpenAPI projection matches the reviewed snapshot.",
   );
 
   // Flyway creates and seeds the authoritative fixture schema during backend
@@ -675,6 +735,7 @@ async function main() {
     CG_E2E_SECOND_BRANCH_NAME: branches.secondBranchName,
   };
   await runBrowserProject("normal", runtimeDirectory, browserEnvironment);
+  await runBrowserProject("f02", runtimeDirectory, browserEnvironment);
 
   console.log(
     "F01 integration: restarting only the owned backend for PT15S expiry coverage.",
@@ -690,7 +751,7 @@ async function main() {
   await runBrowserProject("expiry", runtimeDirectory, browserEnvironment);
 
   console.log(
-    "F01 integration: real backend, PostgreSQL, Chromium, CSRF, and expiry checks passed.",
+    "F01 and F02 integration: real backend, PostgreSQL, Chromium, CSRF, profile-photo storage, identity-token, and expiry checks passed.",
   );
 }
 

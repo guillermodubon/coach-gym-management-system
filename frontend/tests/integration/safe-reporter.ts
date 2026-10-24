@@ -117,6 +117,7 @@ export default class SafeReporter implements Reporter {
         [
           "auth.integration.spec.ts",
           "expiry.integration.spec.ts",
+          "f02.integration.spec.ts",
           "fixtures.ts",
         ].includes(basename(file)) &&
         Number.isSafeInteger(error.location?.line)
