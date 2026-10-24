@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 import type { CurrentUser } from "../../shared/api/contracts";
 import { identityFixture } from "../../test/identity-fixtures";
@@ -7,11 +8,19 @@ import { AccountMenu } from "./AccountMenu";
 
 const userFixture = structuredClone(identityFixture) as CurrentUser;
 
+function renderAccountMenu(onLogout = vi.fn()) {
+  return render(
+    <MemoryRouter>
+      <AccountMenu onLogout={onLogout} user={userFixture} />
+    </MemoryRouter>,
+  );
+}
+
 describe("AccountMenu", () => {
   it("shows only account identity and the real logout action", async () => {
     const user = userEvent.setup();
     const onLogout = vi.fn();
-    render(<AccountMenu onLogout={onLogout} user={userFixture} />);
+    renderAccountMenu(onLogout);
 
     const trigger = screen.getByRole("button", {
       name: "Menú de cuenta de Operador de prueba",
@@ -27,18 +36,21 @@ describe("AccountMenu", () => {
     expect(
       await screen.findByText("Administrador · Organización"),
     ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("link", { name: "Mi perfil" }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("link", { name: "Ajustes de mi cuenta" }),
+    ).toHaveAttribute("href", "/mi-cuenta");
     const logoutItem = screen.getByRole("menuitem", { name: "Cerrar sesión" });
     expect(logoutItem).toBeInTheDocument();
-    expect(
-      screen.queryByRole("menuitem", { name: /perfil|ajustes/i }),
-    ).toBeNull();
     fireEvent.click(logoutItem);
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
 
   it("opens from the keyboard and returns focus after Escape", async () => {
     const user = userEvent.setup();
-    render(<AccountMenu onLogout={vi.fn()} user={userFixture} />);
+    renderAccountMenu();
     const trigger = screen.getByRole("button", {
       name: "Menú de cuenta de Operador de prueba",
     });

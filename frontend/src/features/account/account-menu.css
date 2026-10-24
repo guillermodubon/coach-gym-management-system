@@ -12,6 +12,10 @@
   background: var(--cg-color-primary, #111111);
 }
 
+.cg-account-avatar img {
+  object-fit: cover;
+}
+
 .cg-account-avatar::after {
   display: grid;
   block-size: 100%;

@@ -1,6 +1,4 @@
 import { Card, Typography } from "antd";
-import { AppLayout } from "../../app/layouts/AppLayout";
-import { AccountMenu } from "../account/AccountMenu";
 import { useAuth } from "../auth/useAuth";
 import { getAccountDisplayName } from "../account/account-labels";
 import { BranchContextSummary } from "./BranchContextSummary";
@@ -13,12 +11,7 @@ export function HomePage() {
   const name = getAccountDisplayName(user);
 
   return (
-    <AppLayout
-      accountSlot={
-        <AccountMenu onLogout={() => void auth.logout()} user={user} />
-      }
-      contextSlot={<BranchContextSummary mode="header" user={user} />}
-    >
+    <div className="cg-home-page">
       <Typography.Title id="main-heading" level={1} tabIndex={-1}>
         Inicio
       </Typography.Title>
@@ -34,6 +27,6 @@ export function HomePage() {
         onRefresh={() => void auth.revalidate()}
         user={user}
       />
-    </AppLayout>
+    </div>
   );
 }

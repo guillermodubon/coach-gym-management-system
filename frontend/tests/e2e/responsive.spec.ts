@@ -25,6 +25,24 @@ for (const mode of ["light", "dark"] as const) {
     await page.route("**/api/v1/auth/me", (route) =>
       route.fulfill({ status: 200, json: responsiveIdentity }),
     );
+    await page.route("**/api/v1/me/profile", (route) =>
+      route.fulfill({
+        status: 200,
+        json: {
+          userId: responsiveIdentity.id,
+          username: responsiveIdentity.username,
+          email: "responsive@example.test",
+          firstName: "Administradora",
+          lastName: "Regional",
+          displayName: responsiveIdentity.fullName,
+          roles: responsiveIdentity.roles,
+          status: "ACTIVE",
+          photoPresent: false,
+          photoUrl: null,
+          version: 1,
+        },
+      }),
+    );
     await page.goto("/");
     await expect(
       page.getByRole("heading", { level: 1, name: "Inicio" }),

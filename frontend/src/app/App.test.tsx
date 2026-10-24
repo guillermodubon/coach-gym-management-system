@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
-import { MemoryRouter } from "react-router";
+import { RouterProvider } from "react-router";
 import { describe, expect, it } from "vitest";
 import { AppProviders } from "./AppProviders";
-import { App } from "./App";
+import { createMemoryAppRouter } from "./router/AppRoutes";
 import { server } from "../test/server";
 
 describe("application entry point", () => {
@@ -17,12 +17,11 @@ describe("application entry point", () => {
       ),
     );
 
+    const router = createMemoryAppRouter(["/"]);
     render(
-      <MemoryRouter initialEntries={["/"]}>
-        <AppProviders>
-          <App />
-        </AppProviders>
-      </MemoryRouter>,
+      <AppProviders>
+        <RouterProvider router={router} />
+      </AppProviders>,
     );
 
     expect(

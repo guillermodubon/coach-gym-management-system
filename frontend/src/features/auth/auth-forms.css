@@ -17,3 +17,26 @@
 .cg-password-logout {
   margin-block-start: 16px;
 }
+.cg-password-back.ant-btn {
+  display: inline-flex;
+  inline-size: 100%;
+  min-block-size: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-block-start: 12px;
+  padding-block: 8px;
+  text-decoration: none;
+  white-space: normal;
+}
+
+.cg-password-back.ant-btn-default,
+.cg-password-back.ant-btn-default:hover {
+  border-color: var(--cg-border-color, #d4d4d8);
+  color: var(--cg-color-text, #141414);
+  background: var(--cg-container-background, #ffffff);
+}
+
+.cg-password-back[aria-disabled="true"] {
+  pointer-events: none;
+}

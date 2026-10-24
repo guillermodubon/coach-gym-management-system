@@ -4,7 +4,13 @@ import { App } from "./app/App";
 import { AppProviders } from "./app/AppProviders";
 import "./styles.css";
 import { applyInitialTheme } from "./shared/theme/theme-preference";
-import { BrowserRouter } from "react-router";
+import { capturePublicIdentityRuntime } from "./features/identity/public-identity-runtime";
+
+// Capture and remove one-time identity secrets before React or the router starts.
+const publicIdentityRuntime = capturePublicIdentityRuntime(
+  window.location,
+  window.history,
+);
 
 applyInitialTheme();
 
@@ -16,10 +22,8 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <BrowserRouter>
-      <AppProviders>
-        <App />
-      </AppProviders>
-    </BrowserRouter>
+    <AppProviders publicIdentityRuntime={publicIdentityRuntime}>
+      <App />
+    </AppProviders>
   </StrictMode>,
 );

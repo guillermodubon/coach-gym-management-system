@@ -2,8 +2,7 @@ import { createContext, useEffect, useMemo, useState } from "react";
 import { useSyncExternalStore } from "react";
 import type { PropsWithChildren } from "react";
 import type { QueryClient } from "@tanstack/react-query";
-import { createApiClient } from "../../shared/api/client";
-import { createIdentityApi } from "../../shared/api/identity";
+import { useApiServices } from "../../shared/api/ApiServicesProvider";
 import type {
   ChangePasswordRequest,
   LoginRequest,
@@ -23,6 +22,14 @@ export interface AuthContextValue extends AuthSnapshot {
   completeLogin(ticket: MutationTicket): Promise<void>;
   failLogin(ticket: MutationTicket, error: ApiError): Promise<void>;
   beginPasswordChange(): Promise<MutationTicket | null>;
+  beginPublicIdentityAction(
+    kind:
+      | "recovery-request"
+      | "recovery-complete"
+      | "invitation-inspect"
+      | "invitation-accept",
+  ): Promise<MutationTicket | null>;
+  finishPublicIdentityAction(ticket: MutationTicket): void;
   sendPasswordChange(
     ticket: MutationTicket,
     credentials: ChangePasswordRequest,
@@ -42,9 +49,8 @@ export function AuthProvider({
   children,
   queryClient,
 }: PropsWithChildren<{ queryClient: QueryClient }>) {
-  const [services] = useState(() => {
-    const apiClient = createApiClient();
-    const identityApi = createIdentityApi(apiClient);
+  const { apiClient, identityApi } = useApiServices();
+  const [controller] = useState(() => {
     const controller = createAuthController({
       apiClient,
       identityApi,
@@ -53,9 +59,8 @@ export function AuthProvider({
       visibilityEvents: createBrowserVisibilityEvents(),
       sessionEvents: createBrowserSessionEvents(),
     });
-    return { controller, identityApi };
+    return controller;
   });
-  const { controller, identityApi } = services;
   const snapshot = useSyncExternalStore(
     controller.subscribe,
     controller.getSnapshot,
@@ -73,6 +78,10 @@ export function AuthProvider({
       completeLogin: (ticket) => controller.completeLogin(ticket),
       failLogin: (ticket, error) => controller.failLogin(ticket, error),
       beginPasswordChange: () => controller.beginCredentialAction("password"),
+      beginPublicIdentityAction: (kind) =>
+        controller.beginPublicIdentityAction(kind),
+      finishPublicIdentityAction: (ticket) =>
+        controller.finishPublicIdentityAction(ticket),
       sendPasswordChange: (ticket, credentials) => {
         if (ticket.kind !== "password" || !controller.isTicketCurrent(ticket)) {
           return Promise.resolve(null);

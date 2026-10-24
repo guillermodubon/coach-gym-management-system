@@ -28,6 +28,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
   let csrfIssued = 0;
   let identityRequests = 0;
   let branchContextRequests = 0;
+  let avatarRequests = 0;
   let profileRequests = 0;
   let holdIdentityRead = false;
   let loginRequests = 0;
@@ -67,6 +68,25 @@ test("requires a server session, logs in once, and explicitly logs out", async (
     await route.fulfill({
       status: 500,
       body: "Unexpected branch-context request",
+    });
+  });
+  await page.route("**/api/v1/me/profile", async (route) => {
+    avatarRequests += 1;
+    await route.fulfill({
+      status: 200,
+      json: {
+        userId: identity.id,
+        username: identity.username,
+        email: "operador@example.test",
+        firstName: "Operador",
+        lastName: "Prueba",
+        displayName: identity.fullName,
+        roles: identity.roles,
+        status: "ACTIVE",
+        photoPresent: false,
+        photoUrl: null,
+        version: 1,
+      },
     });
   });
   await page.route("**/api/v1/me/profile/**", async (route) => {
@@ -146,6 +166,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
   await expect(page.getByText("Sucursal de prueba")).toBeVisible();
   expect(loginRequests).toBe(1);
   expect(csrfIssued).toBe(2);
+  expect(avatarRequests).toBeGreaterThan(0);
 
   const privateAccessibility = await new AxeBuilder({ page }).analyze();
   expect(privateAccessibility.violations).toEqual([]);

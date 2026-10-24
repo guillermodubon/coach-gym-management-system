@@ -39,7 +39,8 @@ export type AuthNotice =
 
 export interface AuthSnapshot {
   readonly state: AuthState;
-  readonly pendingAction: "login" | "logout" | "password" | null;
+  readonly pendingAction:
+    "login" | "logout" | "password" | "public-identity" | null;
   readonly error: ApiError | null;
   readonly notice: AuthNotice;
   readonly privacyCovered: boolean;
@@ -48,9 +49,15 @@ export interface AuthSnapshot {
 
 export interface MutationTicket {
   readonly id: number;
-  readonly kind: "login" | "password";
+  readonly kind: "login" | "password" | "public-identity";
   readonly signal: AbortSignal;
   readonly expectedUserId?: string;
+  readonly passwordMode?: "required" | "voluntary";
+  readonly publicAction?:
+    | "recovery-request"
+    | "recovery-complete"
+    | "invitation-inspect"
+    | "invitation-accept";
 }
 
 export type AuthorityValidation =

@@ -1,20 +1,19 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { MemoryRouter } from "react-router";
+import { RouterProvider } from "react-router";
 import { describe, expect, it, vi } from "vitest";
-import { App } from "../../app/App";
 import { AppProviders } from "../../app/AppProviders";
+import { createMemoryAppRouter } from "../../app/router/AppRoutes";
 import { identityFixture } from "../../test/identity-fixtures";
 import { server } from "../../test/server";
 
 function renderApplication(entry = "/") {
+  const router = createMemoryAppRouter([entry]);
   return render(
-    <MemoryRouter initialEntries={[entry]}>
-      <AppProviders>
-        <App />
-      </AppProviders>
-    </MemoryRouter>,
+    <AppProviders>
+      <RouterProvider router={router} />
+    </AppProviders>,
   );
 }
 
@@ -390,4 +389,198 @@ describe("B04 browser session flows with MSW", () => {
     expect(passwordChangeRequests).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Contraseña actual")).toHaveValue("x");
   });
+});
+
+describe("B05 account settings and voluntary password changes", () => {
+  it("routes anonymous and mandatory-password users through the existing gates", async () => {
+    const anonymousProfileReads = vi.fn();
+    server.use(
+      http.get("/api/v1/auth/me", () => anonymousResponse()),
+      http.get("/api/v1/me/profile", () => {
+        anonymousProfileReads();
+        return HttpResponse.json({});
+      }),
+    );
+
+    const anonymousView = renderApplication("/mi-cuenta/contrasena");
+    expect(
+      await screen.findByRole("heading", { name: "Iniciar sesión" }),
+    ).toBeVisible();
+    expect(anonymousProfileReads).not.toHaveBeenCalled();
+    anonymousView.unmount();
+
+    const mandatoryProfileReads = vi.fn();
+    server.use(
+      http.get("/api/v1/auth/me", () =>
+        HttpResponse.json({
+          ...identityFixture,
+          passwordChangeRequired: true,
+        }),
+      ),
+      http.get("/api/v1/me/profile", () => {
+        mandatoryProfileReads();
+        return HttpResponse.json({});
+      }),
+    );
+
+    renderApplication("/mi-cuenta");
+    expect(
+      await screen.findByRole("heading", { name: "Actualiza tu contraseña" }),
+    ).toBeVisible();
+    expect(mandatoryProfileReads).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("heading", { name: "Ajustes de mi cuenta" }),
+    ).not.toBeInTheDocument();
+  }, 15_000);
+
+  it("uses the shared H06 form, clears private UI, and requires a new login", async () => {
+    const user = userEvent.setup();
+    let loggedIn = true;
+    let releasePasswordResponse: ((response: Response) => void) | undefined;
+    const passwordRequestStarted = vi.fn();
+    const passwordRequests = vi.fn();
+    const logoutRequests = vi.fn();
+    const newPassword = "synthetic-new-password-value";
+    const profile = {
+      userId: identityFixture.id,
+      username: identityFixture.username,
+      email: "operator@example.test",
+      firstName: "Ana",
+      lastName: "Ríos",
+      displayName: "Ana Ríos",
+      roles: ["ADMIN"],
+      status: "ACTIVE",
+      photoPresent: false,
+      photoUrl: null,
+      version: 4,
+    };
+
+    server.use(
+      http.get("/api/v1/auth/me", () =>
+        loggedIn ? HttpResponse.json(identityFixture) : anonymousResponse(),
+      ),
+      http.get("/api/v1/auth/csrf", () => csrfResponse()),
+      http.get("/api/v1/me/profile", () => HttpResponse.json(profile)),
+      http.post("/api/v1/auth/logout", () => {
+        logoutRequests();
+        loggedIn = false;
+        return new HttpResponse(null, { status: 204 });
+      }),
+      http.post("/api/v1/me/profile/password", async ({ request }) => {
+        passwordRequests();
+        passwordRequestStarted();
+        expect(request.headers.get("X-XSRF-TOKEN")).toBe(
+          "synthetic-csrf-token",
+        );
+        const body = await request.json();
+        expect(Object.keys(body as object).sort()).toEqual([
+          "currentPassword",
+          "newPassword",
+          "newPasswordConfirmation",
+        ]);
+        expect(body).toEqual({
+          currentPassword: "synthetic-current-password",
+          newPassword,
+          newPasswordConfirmation: newPassword,
+        });
+        loggedIn = false;
+        return await new Promise<Response>((resolve) => {
+          releasePasswordResponse = resolve;
+        });
+      }),
+      http.post("/api/v1/auth/login", async ({ request }) => {
+        const body = (await request.json()) as { password?: string };
+        expect(body.password).toBe(newPassword);
+        loggedIn = true;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    renderApplication("/");
+    await screen.findByRole("heading", { name: "Inicio" });
+    await user.click(
+      screen.getByRole("button", {
+        name: "Menú de cuenta de Operador de prueba",
+      }),
+    );
+    await user.click(
+      await screen.findByRole("link", { name: "Ajustes de mi cuenta" }),
+    );
+    await screen.findByRole("heading", { name: "Ajustes de mi cuenta" });
+
+    const themeControls = screen.getAllByRole("button", {
+      name: /Activar tema (claro|oscuro)/,
+    });
+    const initialThemeAction = themeControls[0]?.getAttribute("aria-label");
+    await user.click(themeControls[1] ?? themeControls[0]!);
+    const nextThemeAction = screen
+      .getAllByRole("button", {
+        name: /Activar tema (claro|oscuro)/,
+      })[0]
+      ?.getAttribute("aria-label");
+    expect(nextThemeAction).not.toBe(initialThemeAction);
+
+    await user.click(screen.getByRole("link", { name: "Cambiar contraseña" }));
+    await screen.findByRole("heading", { name: "Cambiar contraseña" });
+    await user.type(
+      screen.getByLabelText("Contraseña actual"),
+      "synthetic-current-password",
+    );
+    await user.type(screen.getByLabelText("Nueva contraseña"), newPassword);
+    await user.type(
+      screen.getByLabelText("Confirmar nueva contraseña"),
+      newPassword,
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Cambiar contraseña" }),
+    );
+
+    await waitFor(() => expect(passwordRequestStarted).toHaveBeenCalledOnce());
+    expect(
+      screen.getByRole("heading", { name: "Cambiar contraseña" }),
+    ).toBeVisible();
+    expect(document.querySelector("img")).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: "Menú de cuenta de Operador de prueba",
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Contraseña actual")).toHaveValue("");
+    expect(screen.getByLabelText("Nueva contraseña")).toHaveValue("");
+    expect(screen.getByLabelText("Confirmar nueva contraseña")).toHaveValue("");
+    expect(
+      screen.getByRole("button", { name: nextThemeAction ?? "" }),
+    ).toBeInTheDocument();
+    expect(passwordRequests).toHaveBeenCalledTimes(1);
+
+    releasePasswordResponse?.(
+      HttpResponse.json({
+        userId: identityFixture.id,
+        profileVersion: 8,
+        reauthenticationRequired: true,
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Iniciar sesión" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Contraseña actualizada. Inicia sesión de nuevo."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: nextThemeAction ?? "" }),
+    ).toBeInTheDocument();
+    expect(logoutRequests).not.toHaveBeenCalled();
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Usuario o correo" }),
+      "synthetic-user",
+    );
+    await user.type(screen.getByLabelText("Contraseña"), newPassword);
+    await user.click(screen.getByRole("button", { name: "Iniciar sesión" }));
+    expect(
+      await screen.findByRole("heading", { name: "Inicio" }),
+    ).toBeVisible();
+    expect(logoutRequests).not.toHaveBeenCalled();
+  }, 20_000);
 });

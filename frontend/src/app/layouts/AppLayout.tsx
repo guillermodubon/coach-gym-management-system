@@ -15,6 +15,7 @@ import "./app-layout.css";
 export interface AppLayoutProps extends PropsWithChildren {
   accountSlot?: ReactNode;
   contextSlot?: ReactNode;
+  title?: string;
 }
 
 function useDesktopLayout(): boolean {
@@ -57,6 +58,7 @@ export function AppLayout({
   children,
   accountSlot,
   contextSlot,
+  title = "Inicio",
 }: AppLayoutProps) {
   const isDesktop = useDesktopLayout();
   const location = useLocation();
@@ -128,7 +130,7 @@ export function AppLayout({
               onClick={() => setDrawerOpen(true)}
               type="text"
             />
-            <strong>Inicio</strong>
+            <strong>{title}</strong>
           </div>
           <div className="cg-header-actions">
             {contextSlot ? (

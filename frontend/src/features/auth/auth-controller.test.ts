@@ -320,6 +320,31 @@ describe("auth controller", () => {
     harness.dispose();
   });
 
+  it("reserves one actor-bound voluntary password ticket from an authenticated session", async () => {
+    const harness = makeHarness();
+    const stop = await start(harness.controller);
+
+    const firstPromise = harness.controller.beginCredentialAction("password");
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "authenticated", user: { id: identityFixture.id } },
+      pendingAction: "password",
+      privacyCovered: true,
+    });
+    await expect(
+      harness.controller.beginCredentialAction("password"),
+    ).resolves.toBeNull();
+
+    const ticket = await firstPromise;
+    expect(ticket).toMatchObject({
+      kind: "password",
+      expectedUserId: identityFixture.id,
+      passwordMode: "voluntary",
+    });
+    expect(harness.currentUser).toHaveBeenCalledTimes(1);
+    stop();
+    harness.dispose();
+  });
+
   it("requires a new login after a valid password-change response", async () => {
     const harness = makeHarness();
     const stop = await startPasswordRequired(harness);
@@ -369,6 +394,84 @@ describe("auth controller", () => {
       harness.dispose();
     },
   );
+
+  it.each([
+    [400, "CURRENT_PASSWORD_INVALID"],
+    [400, "STAFF_PROFILE_VALIDATION_FAILED"],
+    [409, "STAFF_PROFILE_VERSION_CONFLICT"],
+    [403, "CSRF_TOKEN_INVALID"],
+    [429, "AUTHENTICATION_RATE_LIMITED"],
+  ] as const)(
+    "keeps voluntary mode after recoverable %i %s",
+    async (status, code) => {
+      const harness = makeHarness();
+      const stop = await start(harness.controller);
+      const ticket = await harness.controller.beginCredentialAction("password");
+      const error = httpError(
+        status,
+        code,
+        status === 429 ? { retryAfterSeconds: 2 } : {},
+      );
+      await harness.controller.failPasswordChange(ticket!, error);
+
+      expect(harness.controller.getSnapshot()).toMatchObject({
+        state: { kind: "authenticated", user: { id: identityFixture.id } },
+        pendingAction: null,
+        error: { code },
+        privacyCovered: false,
+      });
+      expect(harness.currentUser).toHaveBeenCalledTimes(1);
+      stop();
+      harness.dispose();
+    },
+  );
+
+  it("requires fresh authentication after a voluntary password change without logout", async () => {
+    const harness = makeHarness();
+    const stop = await start(harness.controller);
+    const ticket = await harness.controller.beginCredentialAction("password");
+
+    await harness.controller.completePasswordChange(ticket!, {
+      userId: identityFixture.id,
+      profileVersion: 8,
+      reauthenticationRequired: true,
+    });
+
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "anonymous" },
+      pendingAction: null,
+      notice: "password-changed-login-again",
+    });
+    expect(harness.currentUser).toHaveBeenCalledTimes(1);
+    expect(harness.logoutRequest).not.toHaveBeenCalled();
+    expect(harness.sessionEvents.publish).toHaveBeenCalledTimes(1);
+    stop();
+    harness.dispose();
+  });
+
+  it("keeps uncertain voluntary password changes manual until session revalidation", async () => {
+    const harness = makeHarness();
+    const stop = await start(harness.controller);
+    const ticket = await harness.controller.beginCredentialAction("password");
+    await harness.controller.failPasswordChange(
+      ticket!,
+      new ApiError("timeout"),
+    );
+
+    expect(harness.controller.getSnapshot().state).toMatchObject({
+      kind: "unavailable",
+      reason: "password-unknown",
+    });
+    harness.focus();
+    harness.externalSessionChange();
+    expect(harness.currentUser).toHaveBeenCalledTimes(1);
+
+    await harness.controller.revalidate("manual");
+    expect(harness.controller.getSnapshot().state.kind).toBe("authenticated");
+    expect(harness.currentUser).toHaveBeenCalledTimes(2);
+    stop();
+    harness.dispose();
+  });
 
   it.each([
     [400, "CURRENT_PASSWORD_INVALID"],
@@ -735,4 +838,73 @@ describe("auth controller", () => {
     stop();
     harness.dispose();
   });
+
+  it("issues one coordinated public identity ticket only for anonymous sessions", async () => {
+    const harness = makeHarness();
+    const stop = await startAnonymous(harness);
+
+    const ticket =
+      await harness.controller.beginPublicIdentityAction("invitation-inspect");
+    expect(ticket).toMatchObject({
+      kind: "public-identity",
+      publicAction: "invitation-inspect",
+    });
+    expect(harness.controller.getSnapshot().pendingAction).toBe(
+      "public-identity",
+    );
+    await expect(
+      harness.controller.beginPublicIdentityAction("invitation-accept"),
+    ).resolves.toBeNull();
+
+    harness.controller.finishPublicIdentityAction(ticket!);
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "anonymous" },
+      pendingAction: null,
+    });
+    stop();
+    harness.dispose();
+  });
+
+  it("defers focus and cross-tab checks while a public action is in flight", async () => {
+    const harness = makeHarness();
+    const stop = await startAnonymous(harness);
+    const ticket =
+      await harness.controller.beginPublicIdentityAction("recovery-complete");
+    harness.currentUser.mockResolvedValueOnce(user());
+
+    harness.focus();
+    harness.externalSessionChange();
+    expect(ticket?.signal.aborted).toBe(false);
+    expect(harness.currentUser).toHaveBeenCalledTimes(1);
+
+    harness.controller.finishPublicIdentityAction(ticket!);
+    await vi.waitFor(() =>
+      expect(harness.controller.getSnapshot().state.kind).toBe("authenticated"),
+    );
+    expect(harness.currentUser).toHaveBeenCalledTimes(2);
+
+    stop();
+    harness.dispose();
+  });
+
+  it.each(["authenticated", "password-required"] as const)(
+    "does not issue a public identity ticket for a %s session",
+    async (sessionKind) => {
+      const harness = makeHarness();
+      if (sessionKind === "password-required") {
+        harness.currentUser.mockResolvedValueOnce(
+          user({ passwordChangeRequired: true }),
+        );
+      }
+      const stop = await start(harness.controller);
+
+      await expect(
+        harness.controller.beginPublicIdentityAction("recovery-complete"),
+      ).resolves.toBeNull();
+      expect(harness.controller.getSnapshot().pendingAction).toBeNull();
+
+      stop();
+      harness.dispose();
+    },
+  );
 });

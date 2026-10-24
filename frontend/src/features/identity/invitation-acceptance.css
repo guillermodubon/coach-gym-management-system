@@ -1,0 +1,76 @@
+.cg-invitation-feedback {
+  margin-block-end: 20px;
+}
+
+.cg-invitation-summary {
+  display: grid;
+  gap: 16px;
+  margin-block: 20px;
+  padding: 16px;
+  border: 1px solid var(--cg-color-border, #d9d9d9);
+  border-radius: 12px;
+  background: var(--cg-color-surface, #fff);
+}
+
+.cg-invitation-summary-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 0;
+}
+
+.cg-invitation-summary-list > div {
+  min-inline-size: 0;
+}
+
+.cg-invitation-summary-list dt {
+  margin-block-end: 4px;
+  color: var(--cg-color-text-secondary, #666);
+  font-size: 0.875rem;
+}
+
+.cg-invitation-summary-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.cg-invitation-branches ul {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cg-invitation-branches li {
+  display: flex;
+  min-inline-size: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+
+.cg-invitation-branches li > span {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.cg-invitation-organization-note {
+  margin: 0;
+}
+
+.cg-invitation-summary + .ant-typography {
+  margin-block-start: 20px;
+}
+
+@media (max-width: 480px) {
+  .cg-invitation-summary-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cg-invitation-summary {
+    padding: 12px;
+  }
+}
