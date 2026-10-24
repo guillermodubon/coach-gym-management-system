@@ -145,6 +145,8 @@ describe("single HTTP transport", () => {
           path: url,
           method: "POST",
           expectedStatus: 204,
+          responseType: "empty",
+          bodyType: "json",
           parse: () => undefined,
           body: credentials,
         }),
@@ -153,16 +155,72 @@ describe("single HTTP transport", () => {
     },
   );
 
-  it("rejects a verb outside F01 before sending credentials", async () => {
+  it("rejects a verb outside the reviewed F01/F02 scope before sending credentials", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await expect(
       client.request({
         path: "/api/v1/me/branch-context",
         method: "POST",
         expectedStatus: 204,
+        responseType: "empty",
+        bodyType: "none",
         parse: () => undefined,
       }),
     ).rejects.toMatchObject({ kind: "invalid-request" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects extra version query keys before CSRF or fetch", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const extraQuery = { version: 4, token: "synthetic-private-value" };
+    await expect(
+      client.request({
+        path: "/api/v1/me/profile/photo",
+        method: "DELETE",
+        query: extraQuery,
+        bodyType: "none",
+        responseType: "json",
+        expectedStatus: 200,
+        parse: (body) => body,
+      }),
+    ).rejects.toMatchObject({ kind: "invalid-request" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects payload, status, or response modes that do not match the reviewed operation", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const invalidRequests: unknown[] = [
+      {
+        path: "/api/v1/auth/me",
+        method: "GET",
+        responseType: "binary",
+        expectedStatus: 200,
+        parse: (body: Blob) => body,
+      },
+      {
+        path: "/api/v1/auth/login",
+        method: "POST",
+        bodyType: "json",
+        body: { identifier: "synthetic-user", password: "synthetic-secret" },
+        responseType: "empty",
+        expectedStatus: 200,
+        parse: () => undefined,
+      },
+      {
+        path: "/api/v1/me/profile/photo",
+        method: "DELETE",
+        query: { version: 4 },
+        bodyType: "none",
+        responseType: "json",
+        expectedStatus: 204,
+        parse: (body: unknown) => body,
+      },
+    ];
+    for (const options of invalidRequests) {
+      await expect(client.request(options as never)).rejects.toMatchObject({
+        kind: "invalid-request",
+      });
+    }
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

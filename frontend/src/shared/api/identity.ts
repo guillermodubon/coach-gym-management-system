@@ -17,6 +17,7 @@ export function createIdentityApi(client: ApiClient) {
       client.request({
         path: "/api/v1/auth/me",
         method: "GET",
+        responseType: "json",
         expectedStatus: 200,
         parse: parseCurrentUser,
         ...control,
@@ -25,6 +26,7 @@ export function createIdentityApi(client: ApiClient) {
       client.request({
         path: "/api/v1/me/branch-context",
         method: "GET",
+        responseType: "json",
         expectedStatus: 200,
         parse: parseBranchContext,
         ...control,
@@ -34,6 +36,8 @@ export function createIdentityApi(client: ApiClient) {
         path: "/api/v1/auth/login",
         method: "POST",
         expectedStatus: 204,
+        responseType: "empty",
+        bodyType: "json",
         body: {
           identifier: credentials.identifier,
           password: credentials.password,
@@ -46,6 +50,8 @@ export function createIdentityApi(client: ApiClient) {
         path: "/api/v1/auth/logout",
         method: "POST",
         expectedStatus: 204,
+        responseType: "empty",
+        bodyType: "none",
         parse: () => undefined,
         ...control,
       }),
@@ -56,6 +62,8 @@ export function createIdentityApi(client: ApiClient) {
       client.request({
         path: "/api/v1/me/profile/password",
         method: "POST",
+        responseType: "json",
+        bodyType: "json",
         expectedStatus: 200,
         body: {
           currentPassword: credentials.currentPassword,

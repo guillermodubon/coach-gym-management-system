@@ -13,12 +13,22 @@ describe("safe ProblemDetail conversion", () => {
     [400, "MALFORMED_REQUEST"],
     [400, "CURRENT_PASSWORD_INVALID"],
     [400, "STAFF_PROFILE_VALIDATION_FAILED"],
+    [400, "STAFF_IDENTITY_REQUEST_INVALID"],
     [401, "INVALID_CREDENTIALS"],
     [401, "AUTHENTICATION_REQUIRED"],
     [403, "CSRF_TOKEN_INVALID"],
     [403, "ACCESS_DENIED"],
+    [403, "STAFF_IDENTITY_OPERATION_FORBIDDEN"],
+    [404, "STAFF_PROFILE_NOT_FOUND"],
+    [404, "STAFF_PROFILE_PHOTO_NOT_FOUND"],
     [409, "ACTIVE_BRANCH_UNAVAILABLE"],
     [409, "STAFF_PROFILE_VERSION_CONFLICT"],
+    [409, "PASSWORD_RECOVERY_NOT_AVAILABLE"],
+    [409, "INVITATION_NOT_AVAILABLE"],
+    [413, "STAFF_PROFILE_PHOTO_TOO_LARGE"],
+    [500, "STAFF_PROFILE_STORAGE_FAILED"],
+    [500, "STAFF_PROFILE_DATA_ACCESS_FAILED"],
+    [500, "STAFF_IDENTITY_OPERATION_FAILED"],
     [429, "AUTHENTICATION_RATE_LIMITED"],
   ])("distinguishes HTTP %s and %s", async (status, code) => {
     server.use(
@@ -87,11 +97,19 @@ describe("safe ProblemDetail conversion", () => {
         password: privateValue,
         role: privateValue,
         identifier: privateValue,
+        firstName: privateValue,
+        email: privateValue,
+        token: privateValue,
+        file: privateValue,
       },
     });
     expect(error.fieldErrors).toEqual({
       password: "Revisa este campo.",
       identifier: "Revisa este campo.",
+      firstName: "Revisa este campo.",
+      email: "Revisa este campo.",
+      token: "Revisa este campo.",
+      file: "Revisa este campo.",
     });
     expect(error.correlationId).toBe("test-correlation-123");
     expect(error.message).not.toContain(privateValue);
