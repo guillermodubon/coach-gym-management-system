@@ -31,11 +31,17 @@
   white-space: nowrap;
 }
 
-.cg-account-popup {
-  inline-size: min(20rem, calc(100vw - 24px));
-  max-inline-size: calc(100vw - 24px);
+.cg-account-popup.ant-dropdown {
+  position: fixed;
+  inline-size: min(20rem, calc(100% - 24px));
+  max-inline-size: calc(100% - 24px);
   max-block-size: calc(100dvh - 24px);
   overflow-y: auto;
+}
+
+.cg-account-popup .ant-dropdown-menu-root {
+  max-block-size: none;
+  overflow-y: visible;
 }
 
 .cg-account-menu-summary {

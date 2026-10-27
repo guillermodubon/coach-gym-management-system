@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -32,6 +32,11 @@ describe("AccountMenu", () => {
     );
     await user.click(trigger);
     expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(
+        await screen.findByRole("region", { name: "Opciones de cuenta" }),
+      ).getByRole("menu", { name: "Cuenta" }),
+    ).toBeInTheDocument();
 
     expect(
       await screen.findByText("Administrador · Organización"),

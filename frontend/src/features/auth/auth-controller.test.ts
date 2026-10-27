@@ -730,18 +730,191 @@ describe("auth controller", () => {
     harness.dispose();
   });
 
+  it("keeps a confirmed visible session mounted while focus revalidation is pending", async () => {
+    const harness = makeHarness();
+    const stop = await start(harness.controller);
+    let resolveRead!: (identity: CurrentUser) => void;
+    harness.currentUser.mockReturnValueOnce(
+      new Promise<CurrentUser>((resolve) => {
+        resolveRead = resolve;
+      }),
+    );
+
+    const check = harness.controller.revalidate("focus");
+    await vi.waitFor(() =>
+      expect(harness.currentUser).toHaveBeenCalledTimes(2),
+    );
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "authenticated", user: { id: identityFixture.id } },
+      privacyCovered: false,
+    });
+
+    resolveRead(user());
+    await check;
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "authenticated", user: { id: identityFixture.id } },
+      privacyCovered: false,
+    });
+    stop();
+    harness.dispose();
+  });
+
+  it.each([
+    ["expired", httpError(401, "AUTHENTICATION_REQUIRED"), "anonymous"],
+    ["forbidden", httpError(403, "ACCESS_DENIED"), "restricted"],
+    ["unreachable", new ApiError("network"), "unavailable"],
+  ] as const)(
+    "covers and clears an %s session after a focus read fails",
+    async (_name, error, expectedState) => {
+      const harness = makeHarness();
+      const stop = await start(harness.controller);
+      let rejectRead!: (error: ApiError) => void;
+      harness.currentUser.mockReturnValueOnce(
+        new Promise<CurrentUser>((_resolve, reject) => {
+          rejectRead = reject;
+        }),
+      );
+      harness.queryClient.setQueryData(["private", "synthetic-profile"], {
+        marker: true,
+      });
+      harness.reset.mockImplementation(() => {
+        expect(harness.controller.getSnapshot()).toMatchObject({
+          state: { kind: "checking" },
+          privacyCovered: true,
+        });
+      });
+
+      const check = harness.controller.revalidate("focus");
+      rejectRead(error);
+      await check;
+      expect(harness.reset).toHaveBeenCalled();
+      expect(harness.controller.getSnapshot().state.kind).toBe(expectedState);
+      expect(
+        harness.queryClient.getQueryData(["private", "synthetic-profile"]),
+      ).toBeUndefined();
+      stop();
+      harness.dispose();
+    },
+  );
+
+  it("covers the old actor before clearing data when a focus read confirms another actor", async () => {
+    const harness = makeHarness();
+    const stop = await start(harness.controller);
+    let resolveRead!: (identity: CurrentUser) => void;
+    harness.currentUser.mockReturnValueOnce(
+      new Promise<CurrentUser>((resolve) => {
+        resolveRead = resolve;
+      }),
+    );
+    harness.reset.mockImplementation(() => {
+      expect(harness.controller.getSnapshot()).toMatchObject({
+        state: { kind: "checking" },
+        privacyCovered: true,
+      });
+    });
+
+    const check = harness.controller.revalidate("focus");
+    resolveRead(
+      user({
+        id: "00000000-0000-4000-8000-000000000099",
+        username: "synthetic-next-actor",
+      }),
+    );
+    await check;
+    expect(harness.reset).toHaveBeenCalled();
+    expect(harness.controller.getSnapshot().state).toMatchObject({
+      kind: "authenticated",
+      user: { id: "00000000-0000-4000-8000-000000000099" },
+    });
+    stop();
+    harness.dispose();
+  });
+
+  it("starts a fresh blocking manual check while focus is pending", async () => {
+    const harness = makeHarness();
+    const stop = await start(harness.controller);
+    let resolveRead!: (identity: CurrentUser) => void;
+    harness.currentUser.mockReturnValueOnce(
+      new Promise<CurrentUser>((resolve) => {
+        resolveRead = resolve;
+      }),
+    );
+
+    const focus = harness.controller.revalidate("focus");
+    let resolveManual!: (identity: CurrentUser) => void;
+    harness.currentUser.mockReturnValueOnce(
+      new Promise<CurrentUser>((resolve) => {
+        resolveManual = resolve;
+      }),
+    );
+    const manual = harness.controller.revalidate("manual");
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "checking" },
+      privacyCovered: true,
+    });
+    resolveManual(user());
+    await manual;
+    resolveRead(user({ id: "00000000-0000-4000-8000-000000000099" }));
+    await Promise.all([focus, manual]);
+    expect(harness.currentUser).toHaveBeenCalledTimes(3);
+    expect(harness.controller.getSnapshot().state).toMatchObject({
+      kind: "authenticated",
+      user: { id: identityFixture.id },
+    });
+    stop();
+    harness.dispose();
+  });
+
+  it("restarts a pending focus read after an external session change and ignores its stale response", async () => {
+    const harness = makeHarness();
+    const stop = await start(harness.controller);
+    let resolveStaleRead!: (identity: CurrentUser) => void;
+    let resolveFreshRead!: (identity: CurrentUser) => void;
+    harness.currentUser.mockReturnValueOnce(
+      new Promise<CurrentUser>((resolve) => {
+        resolveStaleRead = resolve;
+      }),
+    );
+    const focus = harness.controller.revalidate("focus");
+    harness.currentUser.mockReturnValueOnce(
+      new Promise<CurrentUser>((resolve) => {
+        resolveFreshRead = resolve;
+      }),
+    );
+
+    harness.externalSessionChange();
+    await vi.waitFor(() =>
+      expect(harness.currentUser).toHaveBeenCalledTimes(3),
+    );
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "checking" },
+      privacyCovered: true,
+    });
+    const external = harness.controller.revalidate("manual");
+    resolveFreshRead(user());
+    await external;
+    resolveStaleRead(user({ id: "00000000-0000-4000-8000-000000000099" }));
+    await focus;
+    expect(harness.controller.getSnapshot().state).toMatchObject({
+      kind: "authenticated",
+      user: { id: identityFixture.id },
+    });
+    stop();
+    harness.dispose();
+  });
+
   it("applies focus throttling and always revalidates after returning visible", async () => {
     const harness = makeHarness();
     const stop = await start(harness.controller);
     harness.focus();
-    await harness.controller.revalidate("manual");
+    await harness.controller.revalidate("focus");
     expect(harness.currentUser).toHaveBeenCalledTimes(2);
     harness.setTime(12_000);
     harness.focus();
     expect(harness.currentUser).toHaveBeenCalledTimes(2);
     harness.setTime(15_000);
     harness.focus();
-    await harness.controller.revalidate("manual");
+    await harness.controller.revalidate("focus");
     expect(harness.currentUser).toHaveBeenCalledTimes(3);
 
     harness.setVisible(false);
@@ -754,37 +927,40 @@ describe("auth controller", () => {
     harness.dispose();
   });
 
-  it("ignores a late identity response after returning from a hidden tab", async () => {
-    const harness = makeHarness();
-    const stop = await start(harness.controller);
-    let resolveLateRead!: (identity: CurrentUser) => void;
-    const lateRead = new Promise<CurrentUser>((resolve) => {
-      resolveLateRead = resolve;
-    });
-    harness.currentUser.mockReturnValueOnce(lateRead);
+  it.each(["manual", "focus"] as const)(
+    "ignores a late %s identity response after returning from a hidden tab",
+    async (reason) => {
+      const harness = makeHarness();
+      const stop = await start(harness.controller);
+      let resolveLateRead!: (identity: CurrentUser) => void;
+      const lateRead = new Promise<CurrentUser>((resolve) => {
+        resolveLateRead = resolve;
+      });
+      harness.currentUser.mockReturnValueOnce(lateRead);
 
-    const staleRead = harness.controller.revalidate("manual");
-    await vi.waitFor(() =>
-      expect(harness.currentUser).toHaveBeenCalledTimes(2),
-    );
-    harness.setVisible(false);
-    harness.setVisible(true);
-    await harness.controller.revalidate("manual");
-    resolveLateRead(
-      user({
-        id: "00000000-0000-4000-8000-000000000099",
-        username: "synthetic-stale-account",
-      }),
-    );
-    await staleRead;
+      const staleRead = harness.controller.revalidate(reason);
+      await vi.waitFor(() =>
+        expect(harness.currentUser).toHaveBeenCalledTimes(2),
+      );
+      harness.setVisible(false);
+      harness.setVisible(true);
+      await harness.controller.revalidate("manual");
+      resolveLateRead(
+        user({
+          id: "00000000-0000-4000-8000-000000000099",
+          username: "synthetic-stale-account",
+        }),
+      );
+      await staleRead;
 
-    expect(harness.controller.getSnapshot().state).toMatchObject({
-      kind: "authenticated",
-      user: { id: identityFixture.id },
-    });
-    stop();
-    harness.dispose();
-  });
+      expect(harness.controller.getSnapshot().state).toMatchObject({
+        kind: "authenticated",
+        user: { id: identityFixture.id },
+      });
+      stop();
+      harness.dispose();
+    },
+  );
 
   it("revalidates a confirmed session after a cross-tab event without echoing it", async () => {
     const harness = makeHarness();
