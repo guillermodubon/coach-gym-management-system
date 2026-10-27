@@ -81,7 +81,7 @@ export function AccountMenu({
     <Dropdown
       classNames={{ root: "cg-account-popup" }}
       destroyOnHidden
-      getPopupContainer={(trigger) => trigger.parentElement ?? document.body}
+      getPopupContainer={(trigger) => trigger.ownerDocument.body}
       menu={menu}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
@@ -91,6 +91,9 @@ export function AccountMenu({
       }}
       open={open}
       placement="bottomRight"
+      popupRender={(content) => (
+        <section aria-label="Opciones de cuenta">{content}</section>
+      )}
       trigger={["click"]}
     >
       <Button

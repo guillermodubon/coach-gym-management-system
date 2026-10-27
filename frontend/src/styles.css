@@ -57,12 +57,13 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* Preserve zero-duration component motion while popups measure their size. */
   *,
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
+    animation-duration: 0s !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0s !important;
   }
 }
