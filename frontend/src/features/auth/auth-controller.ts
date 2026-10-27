@@ -171,6 +171,7 @@ export function createAuthController({
   let queryEpoch = 0;
   let readAbort: AbortController | undefined;
   let readPromise: Promise<void> | undefined;
+  let backgroundFocusRead = false;
   let ticketSequence = 0;
   let activeTicket: MutationTicket | undefined;
   let logoutSequence = 0;
@@ -198,11 +199,22 @@ export function createAuthController({
     for (const listener of listeners) listener();
   }
 
+  function coverPrivateStateForCheck(): void {
+    if (hasPrivateState(snapshot.state)) {
+      publish({
+        state: { kind: "checking" },
+        privacyCovered: true,
+        error: null,
+      });
+    }
+  }
+
   function invalidateRead(): void {
     readGeneration++;
     readAbort?.abort();
     readAbort = undefined;
     readPromise = undefined;
+    backgroundFocusRead = false;
     void queryClient.cancelQueries({ queryKey: identityKey });
   }
 
@@ -249,6 +261,7 @@ export function createAuthController({
     generation?: number,
     broadcast = false,
   ): Promise<void> {
+    coverPrivateStateForCheck();
     await clearPrivateData(queryClient, apiClient);
     if (generation !== undefined && !generationIsCurrent(generation)) return;
     hasConfirmedSession = false;
@@ -270,6 +283,7 @@ export function createAuthController({
     reason: RevalidationReason | "after-login",
   ): Promise<void> {
     if (!generationIsCurrent(generation) || isCancelled(error)) return;
+    coverPrivateStateForCheck();
     const apiError = safeApiError(error);
 
     if (apiError?.clientReason === "unsupported-authority") {
@@ -363,6 +377,7 @@ export function createAuthController({
 
     const previousUser = validatedUser ?? stateUser(snapshot.state);
     if (previousUser && !sameIdentity(previousUser, user)) {
+      coverPrivateStateForCheck();
       await clearPrivateData(queryClient, apiClient);
       if (!generationIsCurrent(generation)) return;
     }
@@ -407,26 +422,39 @@ export function createAuthController({
       deferredRevalidation = true;
       return Promise.resolve();
     }
+    if (readPromise) {
+      if (reason === "focus" || !backgroundFocusRead) return readPromise;
+      invalidateRead();
+    }
     if (reason === "focus") {
       const currentTime = now();
       if (currentTime - lastFocusAt < focusThrottleMs) return Promise.resolve();
       lastFocusAt = currentTime;
     }
-    if (readPromise) return readPromise;
-
     const generation = ++readGeneration;
     const controller = new AbortController();
     readAbort = controller;
-    publish({
-      state: { kind: "checking" },
-      privacyCovered: true,
-      error: null,
-    });
+    // Focus from DevTools must not unmount an already confirmed, visible UI.
+    const keepVisibleSession =
+      reason === "focus" &&
+      !hidden &&
+      hasConfirmedSession &&
+      snapshot.state.kind === "authenticated" &&
+      !snapshot.privacyCovered;
+    backgroundFocusRead = keepVisibleSession;
+    if (!keepVisibleSession) {
+      publish({
+        state: { kind: "checking" },
+        privacyCovered: true,
+        error: null,
+      });
+    }
     const promise = runRead(generation, controller.signal, reason).finally(
       () => {
         if (readGeneration === generation) {
           readAbort = undefined;
           readPromise = undefined;
+          backgroundFocusRead = false;
         }
       },
     );
@@ -884,6 +912,8 @@ export function createAuthController({
       return;
     }
     if (hasPrivateState(snapshot.state)) publish({ privacyCovered: true });
+    // An external change may postdate the response of an in-flight focus read.
+    invalidateRead();
     void revalidate("external");
   }
 
