@@ -3,6 +3,7 @@ package io.github.guillermodubon.coachgym.organization.web;
 import io.github.guillermodubon.coachgym.organization.OrganizationDetails;
 import io.github.guillermodubon.coachgym.organization.OrganizationSummary;
 import io.github.guillermodubon.coachgym.organization.application.OrganizationApplicationService;
+import io.github.guillermodubon.coachgym.shared.web.ApiProblemResponse;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActorProvider;
 import io.swagger.v3.oas.annotations.Operation;
@@ -41,7 +42,8 @@ class OrganizationController {
                     + "administrative detail projection; RECEPTIONIST receives the safe summary. "
                     + "No organization identifier or tenant selector is accepted.")
     @ApiResponse(responseCode = "200", description = "Organization returned",
-            content = @Content(schema = @Schema(implementation = OrganizationResponse.class)))
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = OrganizationResponse.class)))
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "The authenticated role is not allowed")
     @ApiResponse(responseCode = "404", description = "Canonical organization not found")
@@ -57,16 +59,29 @@ class OrganizationController {
     @PutMapping
     @Operation(
             summary = "Update the canonical organization",
-            description = "ADMIN only. Updates the allowlisted identity, contact, timezone and "
-                    + "currency fields with an expected optimistic-lock version. Code, status, "
-                    + "actor and timestamps are server controlled. A valid CSRF token is required.")
+            description = "Requires an authenticated, active ADMIN whose current persisted staff "
+                    + "scope is ORGANIZATION, a matching server principal, and a valid CSRF token. "
+                    + "Updates the allowlisted identity, contact, timezone and currency fields "
+                    + "with an expected optimistic-lock version. Code, status, actor and timestamps "
+                    + "are server controlled. No active branch selection is required.")
     @ApiResponse(responseCode = "200", description = "Organization updated",
-            content = @Content(schema = @Schema(implementation = OrganizationResponse.class)))
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = OrganizationResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid organization request")
-    @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "403", description = "ADMIN role or valid CSRF token required")
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "403",
+            description = "Active ADMIN with persisted ORGANIZATION scope and valid CSRF are required. "
+                    + "Stable codes: ACCESS_DENIED, CSRF_TOKEN_INVALID.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     @ApiResponse(responseCode = "404", description = "Canonical organization not found")
     @ApiResponse(responseCode = "409", description = "Version or lifecycle conflict")
+    @ApiResponse(responseCode = "500",
+            description = "The operation failed or persisted administration authority could not be verified.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     OrganizationResponse update(
             @Valid @RequestBody UpdateOrganizationRequest request,
             Authentication authentication) {
