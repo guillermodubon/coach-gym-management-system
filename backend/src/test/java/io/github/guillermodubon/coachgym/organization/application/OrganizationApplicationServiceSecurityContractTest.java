@@ -28,13 +28,13 @@ class OrganizationApplicationServiceSecurityContractTest {
         assertAuthorization(
                 OrganizationApplicationService.class,
                 "update",
-                "hasRole('ADMIN')",
+                "hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p1)",
                 UpdateOrganizationCommand.class,
                 AuthenticatedActor.class);
         assertAuthorization(
                 OrganizationApplicationService.class,
                 "changeStatus",
-                "hasRole('ADMIN')",
+                "hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p1)",
                 ChangeOrganizationStatusCommand.class,
                 AuthenticatedActor.class);
     }
@@ -54,20 +54,20 @@ class OrganizationApplicationServiceSecurityContractTest {
         assertAuthorization(
                 GymBranchApplicationService.class,
                 "create",
-                "hasRole('ADMIN')",
+                "hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p1)",
                 CreateGymBranchCommand.class,
                 AuthenticatedActor.class);
         assertAuthorization(
                 GymBranchApplicationService.class,
                 "update",
-                "hasRole('ADMIN')",
+                "hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p2)",
                 java.util.UUID.class,
                 UpdateGymBranchCommand.class,
                 AuthenticatedActor.class);
         assertAuthorization(
                 GymBranchApplicationService.class,
                 "changeStatus",
-                "hasRole('ADMIN')",
+                "hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p2)",
                 java.util.UUID.class,
                 ChangeGymBranchStatusCommand.class,
                 AuthenticatedActor.class);

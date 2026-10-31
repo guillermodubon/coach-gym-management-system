@@ -6,7 +6,6 @@ import io.github.guillermodubon.coachgym.organization.GymBranchCreated;
 import io.github.guillermodubon.coachgym.organization.GymBranchDetails;
 import io.github.guillermodubon.coachgym.organization.GymBranchStatusChanged;
 import io.github.guillermodubon.coachgym.organization.GymBranchUpdated;
-import io.github.guillermodubon.coachgym.organization.GymBranchValidationException;
 import io.github.guillermodubon.coachgym.organization.OrganizationDetails;
 import io.github.guillermodubon.coachgym.organization.UpdateGymBranchCommand;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
@@ -29,6 +28,7 @@ public class GymBranchApplicationService {
     private final GymBranchQuery branchQuery;
     private final GymBranchStore branchStore;
     private final OrganizationQuery organizationQuery;
+    private final OrganizationAdministrationAuthorization authorization;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
@@ -36,11 +36,13 @@ public class GymBranchApplicationService {
             GymBranchQuery branchQuery,
             GymBranchStore branchStore,
             OrganizationQuery organizationQuery,
+            OrganizationAdministrationAuthorization authorization,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this.branchQuery = Objects.requireNonNull(branchQuery);
         this.branchStore = Objects.requireNonNull(branchStore);
         this.organizationQuery = Objects.requireNonNull(organizationQuery);
+        this.authorization = Objects.requireNonNull(authorization);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.clock = Objects.requireNonNull(clock);
     }
@@ -60,12 +62,12 @@ public class GymBranchApplicationService {
     }
 
     @Transactional
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p1)")
     public GymBranchDetails create(
             CreateGymBranchCommand command,
             AuthenticatedActor actor) {
+        authorization.requireOrganizationAdministrator(actor);
         Objects.requireNonNull(command, "Branch creation command is required.");
-        requireActor(actor);
         OrganizationDetails organization = organizationQuery.findCanonical()
                 .orElseThrow(OrganizationNotFoundException::new);
         CreateGymBranchCommand resolved = withDefaultTimezone(command, organization);
@@ -82,13 +84,13 @@ public class GymBranchApplicationService {
     }
 
     @Transactional
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p2)")
     public GymBranchDetails update(
             UUID id,
             UpdateGymBranchCommand command,
             AuthenticatedActor actor) {
+        authorization.requireOrganizationAdministrator(actor);
         Objects.requireNonNull(command, "Branch update command is required.");
-        requireActor(actor);
         GymBranchDetails current = findRequired(id);
         requireExpectedVersion(current.version(), command.expectedVersion());
         Set<String> changedFields = changedFields(current, command);
@@ -110,13 +112,13 @@ public class GymBranchApplicationService {
     }
 
     @Transactional
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p2)")
     public GymBranchDetails changeStatus(
             UUID id,
             ChangeGymBranchStatusCommand command,
             AuthenticatedActor actor) {
+        authorization.requireOrganizationAdministrator(actor);
         Objects.requireNonNull(command, "Branch status command is required.");
-        requireActor(actor);
         GymBranchDetails current = findRequired(id);
         requireExpectedVersion(current.version(), command.expectedVersion());
 
@@ -202,10 +204,4 @@ public class GymBranchApplicationService {
         }
     }
 
-    private static void requireActor(AuthenticatedActor actor) {
-        if (actor == null || actor.id() == null
-                || actor.username() == null || actor.username().isBlank()) {
-            throw new GymBranchValidationException("Authenticated actor is required.");
-        }
-    }
 }

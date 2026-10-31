@@ -19,10 +19,16 @@ import io.github.guillermodubon.coachgym.organization.OrganizationDetails;
 import io.github.guillermodubon.coachgym.organization.OrganizationStatus;
 import io.github.guillermodubon.coachgym.organization.UpdateGymBranchCommand;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
+import io.github.guillermodubon.coachgym.user.RoleCode;
+import io.github.guillermodubon.coachgym.user.StaffAccountStatus;
+import io.github.guillermodubon.coachgym.user.StaffAuthorizationContext;
+import io.github.guillermodubon.coachgym.user.StaffScopeQuery;
+import io.github.guillermodubon.coachgym.user.StaffScopeType;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,14 +62,21 @@ class GymBranchApplicationServiceTest {
     private OrganizationQuery organizationQuery;
 
     @Mock
+    private StaffScopeQuery scopeQuery;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private GymBranchApplicationService service;
 
     @BeforeEach
     void setUp() {
+        when(scopeQuery.findAuthorizationContext(ACTOR_ID)).thenReturn(Optional.of(
+                new StaffAuthorizationContext(ACTOR_ID, Set.of(RoleCode.ADMIN),
+                        StaffAccountStatus.ACTIVE, StaffScopeType.ORGANIZATION, Set.of())));
         service = new GymBranchApplicationService(
-                branchQuery, branchStore, organizationQuery, eventPublisher, CLOCK);
+                branchQuery, branchStore, organizationQuery,
+                new OrganizationAdministrationAuthorization(scopeQuery), eventPublisher, CLOCK);
     }
 
     @Test
