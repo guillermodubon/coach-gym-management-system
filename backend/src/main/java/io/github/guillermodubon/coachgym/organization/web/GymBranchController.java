@@ -6,6 +6,7 @@ import io.github.guillermodubon.coachgym.organization.application.GymBranchPage;
 import io.github.guillermodubon.coachgym.organization.application.GymBranchSearchQuery;
 import io.github.guillermodubon.coachgym.organization.application.GymBranchSortDirection;
 import io.github.guillermodubon.coachgym.organization.application.GymBranchSortField;
+import io.github.guillermodubon.coachgym.shared.web.ApiProblemResponse;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActorProvider;
 import io.swagger.v3.oas.annotations.Operation;
@@ -48,16 +49,29 @@ class GymBranchController {
     @PostMapping
     @Operation(
             summary = "Create a gym branch",
-            description = "ADMIN only. Creates an ACTIVE branch under the server-selected "
-                    + "canonical organization. Organization, status, initial marker, actor and "
-                    + "timestamps are server controlled. Requires CSRF.")
+            description = "Requires an authenticated, active ADMIN whose current persisted staff "
+                    + "scope is ORGANIZATION, a matching server principal, and a valid CSRF token. "
+                    + "Creates an ACTIVE branch under the server-selected canonical organization. "
+                    + "Organization, status, initial marker, actor and timestamps are server "
+                    + "controlled. No active branch selection or branch assignment is required.")
     @ApiResponse(responseCode = "201", description = "Branch created",
-            content = @Content(schema = @Schema(implementation = BranchResponse.class)))
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = BranchResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid branch request")
-    @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "403", description = "ADMIN role or valid CSRF token required")
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "403",
+            description = "Active ADMIN with persisted ORGANIZATION scope and valid CSRF are required. "
+                    + "Stable codes: ACCESS_DENIED, CSRF_TOKEN_INVALID.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     @ApiResponse(responseCode = "404", description = "Canonical organization not found")
     @ApiResponse(responseCode = "409", description = "Branch code conflict")
+    @ApiResponse(responseCode = "500",
+            description = "The operation failed or persisted administration authority could not be verified.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     ResponseEntity<BranchResponse> create(
             @Valid @RequestBody CreateBranchRequest request,
             Authentication authentication,
@@ -77,7 +91,8 @@ class GymBranchController {
                     + "sort is allowlisted and page size is limited to 100. ADMIN and RECEPTIONIST "
                     + "may read. No organization selector or branch scope is accepted.")
     @ApiResponse(responseCode = "200", description = "Branch page returned",
-            content = @Content(schema = @Schema(implementation = BranchPageResponse.class)))
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = BranchPageResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid filter, pagination or sort")
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "The authenticated role is not allowed")
@@ -115,7 +130,8 @@ class GymBranchController {
             description = "Returns one canonical branch. ADMIN and RECEPTIONIST may read; "
                     + "the branch identifier is not a tenant or assignment selector.")
     @ApiResponse(responseCode = "200", description = "Branch returned",
-            content = @Content(schema = @Schema(implementation = BranchResponse.class)))
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = BranchResponse.class)))
     @ApiResponse(responseCode = "401", description = "Authentication required")
     @ApiResponse(responseCode = "403", description = "The authenticated role is not allowed")
     @ApiResponse(responseCode = "404", description = "Branch not found")
@@ -126,16 +142,29 @@ class GymBranchController {
     @PutMapping("/{id}")
     @Operation(
             summary = "Update a gym branch",
-            description = "ADMIN only. Updates allowlisted detail and contact fields with an "
-                    + "expected optimistic-lock version. Code, organization, status, initial marker, "
-                    + "actor and timestamps are server controlled. Requires CSRF.")
+            description = "Requires an authenticated, active ADMIN whose current persisted staff "
+                    + "scope is ORGANIZATION, a matching server principal, and a valid CSRF token. "
+                    + "Updates allowlisted detail and contact fields with an expected optimistic-lock "
+                    + "version. Code, organization, status, initial marker, actor and timestamps are "
+                    + "server controlled. No active branch selection is required.")
     @ApiResponse(responseCode = "200", description = "Branch updated",
-            content = @Content(schema = @Schema(implementation = BranchResponse.class)))
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = BranchResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid branch request")
-    @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "403", description = "ADMIN role or valid CSRF token required")
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "403",
+            description = "Active ADMIN with persisted ORGANIZATION scope and valid CSRF are required. "
+                    + "Stable codes: ACCESS_DENIED, CSRF_TOKEN_INVALID.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     @ApiResponse(responseCode = "404", description = "Branch not found")
     @ApiResponse(responseCode = "409", description = "Version conflict")
+    @ApiResponse(responseCode = "500",
+            description = "The operation failed or persisted administration authority could not be verified.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     BranchResponse update(
             @PathVariable UUID id,
             @Valid @RequestBody UpdateBranchRequest request,
@@ -146,14 +175,28 @@ class GymBranchController {
     @PostMapping("/{id}/activate")
     @Operation(
             summary = "Activate a gym branch",
-            description = "ADMIN only. Requires a reason, expected version and CSRF. The target "
-                    + "status is server selected; the initial branch invariant remains enforced.")
-    @ApiResponse(responseCode = "200", description = "Branch activated")
+            description = "Requires an authenticated, active ADMIN whose current persisted staff "
+                    + "scope is ORGANIZATION, a matching server principal, and a valid CSRF token. "
+                    + "Requires a reason and expected version. The target status is selected by this "
+                    + "route; the initial-branch invariant remains enforced.")
+    @ApiResponse(responseCode = "200", description = "Branch activated",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = BranchResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid lifecycle request")
-    @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "403", description = "ADMIN role or valid CSRF token required")
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "403",
+            description = "Active ADMIN with persisted ORGANIZATION scope and valid CSRF are required. "
+                    + "Stable codes: ACCESS_DENIED, CSRF_TOKEN_INVALID.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     @ApiResponse(responseCode = "404", description = "Branch not found")
     @ApiResponse(responseCode = "409", description = "Version or lifecycle conflict")
+    @ApiResponse(responseCode = "500",
+            description = "The operation failed or persisted administration authority could not be verified.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     BranchResponse activate(
             @PathVariable UUID id,
             @Valid @RequestBody BranchStatusChangeRequest request,
@@ -165,14 +208,28 @@ class GymBranchController {
     @PostMapping("/{id}/deactivate")
     @Operation(
             summary = "Deactivate a gym branch",
-            description = "ADMIN only. Requires a reason, expected version and CSRF. The only "
-                    + "active initial branch cannot be deactivated.")
-    @ApiResponse(responseCode = "200", description = "Branch deactivated")
+            description = "Requires an authenticated, active ADMIN whose current persisted staff "
+                    + "scope is ORGANIZATION, a matching server principal, and a valid CSRF token. "
+                    + "Requires a reason and expected version. The target status is selected by this "
+                    + "route; the only active initial branch cannot be deactivated.")
+    @ApiResponse(responseCode = "200", description = "Branch deactivated",
+            content = @Content(mediaType = "application/json",
+                    schema = @Schema(implementation = BranchResponse.class)))
     @ApiResponse(responseCode = "400", description = "Invalid lifecycle request")
-    @ApiResponse(responseCode = "401", description = "Authentication required")
-    @ApiResponse(responseCode = "403", description = "ADMIN role or valid CSRF token required")
+    @ApiResponse(responseCode = "401", description = "Authentication required",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
+    @ApiResponse(responseCode = "403",
+            description = "Active ADMIN with persisted ORGANIZATION scope and valid CSRF are required. "
+                    + "Stable codes: ACCESS_DENIED, CSRF_TOKEN_INVALID.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     @ApiResponse(responseCode = "404", description = "Branch not found")
     @ApiResponse(responseCode = "409", description = "Version or lifecycle conflict")
+    @ApiResponse(responseCode = "500",
+            description = "The operation failed or persisted administration authority could not be verified.",
+            content = @Content(mediaType = "application/problem+json",
+                    schema = @Schema(implementation = ApiProblemResponse.class)))
     BranchResponse deactivate(
             @PathVariable UUID id,
             @Valid @RequestBody BranchStatusChangeRequest request,

@@ -4,7 +4,6 @@ import io.github.guillermodubon.coachgym.organization.ChangeOrganizationStatusCo
 import io.github.guillermodubon.coachgym.organization.OrganizationDetails;
 import io.github.guillermodubon.coachgym.organization.OrganizationSummary;
 import io.github.guillermodubon.coachgym.organization.OrganizationUpdated;
-import io.github.guillermodubon.coachgym.organization.OrganizationValidationException;
 import io.github.guillermodubon.coachgym.organization.UpdateOrganizationCommand;
 import io.github.guillermodubon.coachgym.user.AuthenticatedActor;
 import java.time.Clock;
@@ -23,16 +22,19 @@ public class OrganizationApplicationService {
 
     private final OrganizationQuery organizationQuery;
     private final OrganizationStore organizationStore;
+    private final OrganizationAdministrationAuthorization authorization;
     private final ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public OrganizationApplicationService(
             OrganizationQuery organizationQuery,
             OrganizationStore organizationStore,
+            OrganizationAdministrationAuthorization authorization,
             ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this.organizationQuery = Objects.requireNonNull(organizationQuery);
         this.organizationStore = Objects.requireNonNull(organizationStore);
+        this.authorization = Objects.requireNonNull(authorization);
         this.eventPublisher = Objects.requireNonNull(eventPublisher);
         this.clock = Objects.requireNonNull(clock);
     }
@@ -52,12 +54,12 @@ public class OrganizationApplicationService {
     }
 
     @Transactional
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p1)")
     public OrganizationDetails update(
             UpdateOrganizationCommand command,
             AuthenticatedActor actor) {
+        authorization.requireOrganizationAdministrator(actor);
         Objects.requireNonNull(command, "Organization update command is required.");
-        requireActor(actor);
         OrganizationDetails current = requireCurrent();
         requireExpectedVersion(current.version(), command.expectedVersion());
         Set<String> changedFields = changedFields(current, command);
@@ -72,12 +74,12 @@ public class OrganizationApplicationService {
     }
 
     @Transactional
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN') and @organizationAdministrationAuthorization.matchesPrincipal(authentication, #p1)")
     public OrganizationDetails changeStatus(
             ChangeOrganizationStatusCommand command,
             AuthenticatedActor actor) {
+        authorization.requireOrganizationAdministrator(actor);
         Objects.requireNonNull(command, "Organization status command is required.");
-        requireActor(actor);
         OrganizationDetails current = requireCurrent();
         requireExpectedVersion(current.version(), command.expectedVersion());
 
@@ -138,11 +140,4 @@ public class OrganizationApplicationService {
         }
     }
 
-    private static void requireActor(
-            AuthenticatedActor actor) {
-        if (actor == null || actor.id() == null
-                || actor.username() == null || actor.username().isBlank()) {
-            throw new OrganizationValidationException("Authenticated actor is required.");
-        }
-    }
 }

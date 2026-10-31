@@ -9,6 +9,7 @@ import io.github.guillermodubon.coachgym.organization.application.GymBranchDataA
 import io.github.guillermodubon.coachgym.organization.application.GymBranchNotFoundException;
 import io.github.guillermodubon.coachgym.organization.application.GymBranchVersionConflictException;
 import io.github.guillermodubon.coachgym.organization.application.OrganizationDataAccessException;
+import io.github.guillermodubon.coachgym.organization.application.OrganizationAdministrationUnavailableException;
 import io.github.guillermodubon.coachgym.organization.application.OrganizationNotFoundException;
 import io.github.guillermodubon.coachgym.organization.application.OrganizationVersionConflictException;
 import io.github.guillermodubon.coachgym.shared.web.ApiProblemFactory;
@@ -66,6 +67,14 @@ class OrganizationProblemHandler {
     ResponseEntity<ProblemDetail> handleOrganizationData(OrganizationDataAccessException exception) {
         return problem(HttpStatus.INTERNAL_SERVER_ERROR, "ORGANIZATION_DATA_ACCESS_FAILED",
                 "The organization operation could not be completed.");
+    }
+
+    @ExceptionHandler(OrganizationAdministrationUnavailableException.class)
+    ResponseEntity<ProblemDetail> handleAdministrationUnavailable(
+            OrganizationAdministrationUnavailableException exception) {
+        return problem(HttpStatus.INTERNAL_SERVER_ERROR,
+                "ORGANIZATION_ADMINISTRATION_UNAVAILABLE",
+                "Administrative authority could not be verified.");
     }
 
     @ExceptionHandler(GymBranchNotFoundException.class)
