@@ -55,6 +55,12 @@ const initialBranchId = () =>
 const secondBranchId = () =>
   requiredEnvironmentValue("CG_E2E_SECOND_BRANCH_ID");
 
+export const integrationBranchIds = Object.freeze({
+  initial: initialBranchId,
+  second: secondBranchId,
+  inactive: () => requiredEnvironmentValue("CG_E2E_INACTIVE_BRANCH_ID"),
+});
+
 export const test = base.extend<object, WorkerFixtures>({
   database: [
     // Playwright requires destructuring even when a fixture has no dependencies.

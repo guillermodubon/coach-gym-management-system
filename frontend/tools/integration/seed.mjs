@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-const FIXTURE_DATABASE = "coach_gym_f01_e2e";
+const FIXTURE_DATABASE = "coach_gym_frontend_e2e";
 
 /**
  * Seed the one additional branch used by this isolated integration run.
@@ -65,6 +65,26 @@ export async function seedExecutionBranch(pool, databaseName) {
       throw new Error("The synthetic branch was not created.");
     }
 
+    const inactiveBranchId = randomUUID();
+    const inactiveBranchCode = `F03_E2E_${inactiveBranchId.replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+    const inactiveBranchName = `Sucursal F03 ${inactiveBranchId.slice(0, 8)}`;
+    const inactiveInserted = await client.query(
+      `INSERT INTO gym.gym_branches
+          (id, organization_id, code, name, country_code, timezone,
+           status, is_initial_branch, version)
+       VALUES ($1, $2, $3, $4, 'SV', 'America/El_Salvador', 'INACTIVE', FALSE, 0)
+       RETURNING id`,
+      [
+        inactiveBranchId,
+        organizationId,
+        inactiveBranchCode,
+        inactiveBranchName,
+      ],
+    );
+    if (inactiveInserted.rowCount !== 1) {
+      throw new Error("The synthetic inactive branch was not created.");
+    }
+
     await client.query("COMMIT");
     return Object.freeze({
       organizationId,
@@ -72,6 +92,9 @@ export async function seedExecutionBranch(pool, databaseName) {
       secondBranchId,
       secondBranchCode: code,
       secondBranchName: name,
+      inactiveBranchId,
+      inactiveBranchCode,
+      inactiveBranchName,
     });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);

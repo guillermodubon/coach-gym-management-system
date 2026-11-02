@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { Pool } from "pg";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import prettier from "prettier";
-import { projectF01, projectF02 } from "../contracts/scope.mjs";
+import { projectF01, projectF02, projectF03 } from "../contracts/scope.mjs";
 import { seedExecutionBranch } from "./seed.mjs";
 import { startBuiltServer } from "./serve-built.mjs";
 import {
@@ -29,8 +29,8 @@ const BACKEND_ROOT = resolve(REPOSITORY_ROOT, "backend");
 const RUNTIME_ROOT = resolve(FRONTEND_ROOT, ".integration-runtime");
 const FRONTEND_PORT = 5183;
 const BACKEND_PORT = 18082;
-const FIXTURE_DATABASE = "coach_gym_f01_e2e";
-const FIXTURE_USER = "f01_fixture";
+const FIXTURE_DATABASE = "coach_gym_frontend_e2e";
+const FIXTURE_USER = "frontend_fixture";
 const JAVA_BASE_ARGUMENTS = [
   "--server.address=127.0.0.1",
   `--server.port=${BACKEND_PORT}`,
@@ -43,16 +43,22 @@ const JAVA_BASE_ARGUMENTS = [
   `--coach-gym.security.cors.allowed-origins=http://127.0.0.1:${FRONTEND_PORT}`,
   "--logging.level.root=WARN",
 ];
-const captureF02Contract = process.argv
-  .slice(2)
-  .includes("--capture-f02-contract");
+const captureArguments = process.argv.slice(2);
+const captureOptions = {
+  "--capture-f02-contract": "f02",
+  "--capture-f03-contract": "f03",
+};
 if (
-  process.argv
-    .slice(2)
-    .some((argument) => argument !== "--capture-f02-contract")
+  captureArguments.some(
+    (argument) => !Object.hasOwn(captureOptions, argument),
+  ) ||
+  captureArguments.length > 1
 ) {
   throw new Error("Unknown integration harness argument.");
 }
+const captureScope = captureArguments.length
+  ? captureOptions[captureArguments[0]]
+  : undefined;
 
 class HarnessFailure extends Error {
   constructor(safeMessage) {
@@ -117,7 +123,7 @@ process.once("SIGTERM", stopOnSignal);
 function throwIfInterrupted() {
   if (abortController.signal.aborted) {
     throw new HarnessFailure(
-      "F01 integration was interrupted; owned resources are being closed.",
+      "Frontend integration was interrupted; owned resources are being closed.",
     );
   }
 }
@@ -161,7 +167,7 @@ function waitForChild(child, label = "Integration process") {
         finish(
           rejectWait,
           new HarnessFailure(
-            "F01 integration was interrupted; owned resources are being closed.",
+            "Frontend integration was interrupted; owned resources are being closed.",
           ),
         ),
       );
@@ -276,7 +282,9 @@ async function waitForBackend(child, phase) {
       // Readiness errors can include response details; only a phase is reported.
     }
     if (Date.now() >= nextProgressAt) {
-      console.log(`F01 integration: waiting for isolated backend (${phase}).`);
+      console.log(
+        `Frontend integration: waiting for isolated backend (${phase}).`,
+      );
       nextProgressAt = Date.now() + 10_000;
     }
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
@@ -299,43 +307,34 @@ function canonicalize(value) {
 }
 
 async function assertLiveContracts(document) {
-  const snapshotPath = resolve(FRONTEND_ROOT, "contracts/f01.openapi.json");
-  const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
-  let projected;
-  try {
-    projected = projectF01(document);
-  } catch {
-    throw new HarnessFailure(
-      "The live backend is missing a reviewed F01 HTTP operation or schema.",
+  const scopes = {
+    f01: projectF01,
+    f02: projectF02,
+    f03: projectF03,
+  };
+  for (const [scope, project] of Object.entries(scopes)) {
+    if (captureScope === scope) continue;
+    const snapshotPath = resolve(
+      FRONTEND_ROOT,
+      `contracts/${scope}.openapi.json`,
     );
-  }
-  if (
-    JSON.stringify(canonicalize(projected)) !==
-    JSON.stringify(canonicalize(snapshot))
-  ) {
-    throw new HarnessFailure(
-      "The live F01 OpenAPI projection differs from its reviewed snapshot; the snapshot was not changed.",
-    );
-  }
-  if (captureF02Contract) return;
-
-  const f02SnapshotPath = resolve(FRONTEND_ROOT, "contracts/f02.openapi.json");
-  const f02Snapshot = JSON.parse(await readFile(f02SnapshotPath, "utf8"));
-  let f02Projected;
-  try {
-    f02Projected = projectF02(document);
-  } catch {
-    throw new HarnessFailure(
-      "The live backend is missing a reviewed F02 HTTP operation or schema.",
-    );
-  }
-  if (
-    JSON.stringify(canonicalize(f02Projected)) !==
-    JSON.stringify(canonicalize(f02Snapshot))
-  ) {
-    throw new HarnessFailure(
-      "The live F02 OpenAPI projection differs from its reviewed snapshot; the snapshot was not changed.",
-    );
+    const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
+    let projected;
+    try {
+      projected = project(document);
+    } catch {
+      throw new HarnessFailure(
+        `The live backend is missing a reviewed ${scope.toUpperCase()} HTTP operation or schema.`,
+      );
+    }
+    if (
+      JSON.stringify(canonicalize(projected)) !==
+      JSON.stringify(canonicalize(snapshot))
+    ) {
+      throw new HarnessFailure(
+        `The live ${scope.toUpperCase()} OpenAPI projection differs from its reviewed snapshot; the snapshot was not changed.`,
+      );
+    }
   }
 }
 
@@ -346,7 +345,7 @@ async function createPool({ host, port, database, user, password }) {
     database,
     user,
     password,
-    application_name: "coach-gym-f01-e2e-harness",
+    application_name: "coach-gym-frontend-e2e-harness",
     connectionTimeoutMillis: 5_000,
     max: 2,
   });
@@ -427,7 +426,7 @@ function readSafeReporterResult(reportFile) {
                 ].includes(source),
               ))) &&
           (result.failureLocation === undefined ||
-            /^(auth\.integration\.spec\.ts|expiry\.integration\.spec\.ts|f02\.integration\.spec\.ts|fixtures\.ts):\d+$/.test(
+            /^(auth\.integration\.spec\.ts|expiry\.integration\.spec\.ts|f02\.integration\.spec\.ts|f03\.integration\.spec\.ts|fixtures\.ts):\d+$/.test(
               result.failureLocation,
             )),
       ) ||
@@ -454,7 +453,7 @@ async function runBrowserProject(project, runDirectory, childEnvironment) {
     CG_E2E_REPORT_FILE: reportFile,
     CG_E2E_BASE_URL: `http://127.0.0.1:${FRONTEND_PORT}`,
   };
-  console.log(`F01 integration: running Chromium project ${project}.`);
+  console.log(`Frontend integration: running Chromium project ${project}.`);
   const npmCli = process.env.npm_execpath;
   if (!npmCli || !isAbsolute(npmCli)) {
     throw new HarnessFailure(
@@ -509,7 +508,7 @@ async function runBrowserProject(project, runDirectory, childEnvironment) {
     );
   }
   console.log(
-    `F01 integration: ${project} ${report.counts.passed}/${report.expected} passed; ` +
+    `Frontend integration: ${project} ${report.counts.passed}/${report.expected} passed; ` +
       `${report.counts.failed} failed, ${report.counts.skipped} skipped.`,
   );
 
@@ -567,7 +566,7 @@ async function cleanup() {
 
 async function main() {
   console.log(
-    "F01 integration: checking Java, Docker, and owned loopback ports.",
+    "Frontend integration: checking Java, Docker, and owned loopback ports.",
   );
   const hostEnvironment = safeEnvironment();
   await verifyCommand(
@@ -615,9 +614,9 @@ async function main() {
     ...hostEnvironment,
     CG_F01_VITE_ENV_DIR: isolatedViteEnvironment,
   };
-  if (!captureF02Contract) {
+  if (!captureScope) {
     console.log(
-      "F01 integration: type-checking and building frontend into an isolated directory.",
+      "Frontend integration: type-checking and building frontend into an isolated directory.",
     );
     await runCommand(process.execPath, [npmCli, "run", "typecheck"], {
       cwd: FRONTEND_ROOT,
@@ -642,7 +641,7 @@ async function main() {
   }
 
   console.log(
-    "F01 integration: compiling the backend with its repository wrapper.",
+    "Frontend integration: compiling the backend with its repository wrapper.",
   );
   const gradle = gradleBuildInvocation();
   await runCommand(gradle.command, gradle.args, {
@@ -651,7 +650,9 @@ async function main() {
     label: "Backend compile and bootJar",
   });
 
-  console.log("F01 integration: starting an owned PostgreSQL 17 container.");
+  console.log(
+    "Frontend integration: starting an owned PostgreSQL 17 container.",
+  );
   const databasePassword = randomBytes(32).toString("base64url");
   postgres = await new PostgreSqlContainer("postgres:17-alpine")
     .withDatabase(FIXTURE_DATABASE)
@@ -679,7 +680,7 @@ async function main() {
   };
 
   console.log(
-    "F01 integration: starting the isolated backend with normal session policy.",
+    "Frontend integration: starting the isolated backend with normal session policy.",
   );
   backendProcess = await startBackend({
     javaEnvironment,
@@ -692,23 +693,23 @@ async function main() {
   );
   await assertLiveContracts(liveDocument);
   console.log(
-    "F01 integration: live F01 OpenAPI projection matches the reviewed snapshot.",
+    captureScope
+      ? `Frontend integration: prior contract scopes verified before capturing ${captureScope.toUpperCase()}.`
+      : "Frontend integration: live F01/F02/F03 OpenAPI projections match their reviewed snapshots.",
   );
-  if (captureF02Contract) {
-    const snapshot = projectF02(liveDocument);
+  if (captureScope) {
+    const project = { f02: projectF02, f03: projectF03 }[captureScope];
+    const snapshot = project(liveDocument);
     await writeFile(
-      resolve(FRONTEND_ROOT, "contracts/f02.openapi.json"),
+      resolve(FRONTEND_ROOT, `contracts/${captureScope}.openapi.json`),
       await prettier.format(JSON.stringify(snapshot), { parser: "json" }),
       "utf8",
     );
     console.log(
-      "F02 contract captured from the isolated backend. Review the snapshot before accepting it.",
+      `${captureScope.toUpperCase()} contract captured from the isolated backend. Review the snapshot before accepting it.`,
     );
     return;
   }
-  console.log(
-    "F02 integration: live F02 OpenAPI projection matches the reviewed snapshot.",
-  );
 
   // Flyway creates and seeds the authoritative fixture schema during backend
   // startup. Add the synthetic branch only after those migrations complete.
@@ -733,12 +734,15 @@ async function main() {
     CG_E2E_INITIAL_BRANCH_ID: branches.initialBranchId,
     CG_E2E_SECOND_BRANCH_ID: branches.secondBranchId,
     CG_E2E_SECOND_BRANCH_NAME: branches.secondBranchName,
+    CG_E2E_INACTIVE_BRANCH_ID: branches.inactiveBranchId,
+    CG_E2E_INACTIVE_BRANCH_NAME: branches.inactiveBranchName,
   };
   await runBrowserProject("normal", runtimeDirectory, browserEnvironment);
   await runBrowserProject("f02", runtimeDirectory, browserEnvironment);
+  await runBrowserProject("f03", runtimeDirectory, browserEnvironment);
 
   console.log(
-    "F01 integration: restarting only the owned backend for PT15S expiry coverage.",
+    "Frontend integration: restarting only the owned backend for PT15S expiry coverage.",
   );
   await stopChild(backendProcess);
   backendProcess = undefined;
@@ -751,7 +755,7 @@ async function main() {
   await runBrowserProject("expiry", runtimeDirectory, browserEnvironment);
 
   console.log(
-    "F01 and F02 integration: real backend, PostgreSQL, Chromium, CSRF, profile-photo storage, identity-token, and expiry checks passed.",
+    "F01, F02, and F03 integration: real backend, isolated PostgreSQL, Chromium, CSRF, branch context/lifecycle, profile-photo storage, identity-token, and expiry checks passed.",
   );
 }
 
@@ -761,7 +765,7 @@ try {
   const safeMessage =
     error instanceof HarnessFailure
       ? error.safeMessage
-      : "F01 integration failed; raw process and request details were suppressed.";
+      : "Frontend integration failed; raw process and request details were suppressed.";
   console.error(safeMessage);
   process.exitCode = 1;
 } finally {
