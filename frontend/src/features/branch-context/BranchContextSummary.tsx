@@ -1,37 +1,21 @@
 import { Button, Card, Typography } from "antd";
+import type { ReactNode } from "react";
 import type { CurrentUser } from "../../shared/api/contracts";
 import { getBranchContextView } from "./branch-context-view";
-import "./home.css";
+import "./branch-context.css";
 
 export interface BranchContextSummaryProps {
   user: CurrentUser;
-  mode?: "header" | "home";
+  selector?: ReactNode;
   onRefresh?: () => void;
 }
 
 export function BranchContextSummary({
   user,
-  mode = "home",
+  selector,
   onRefresh,
 }: BranchContextSummaryProps) {
   const view = getBranchContextView(user);
-
-  if (mode === "header") {
-    const label =
-      view.kind === "active-branch"
-        ? `${view.headline} · Código: ${view.code}`
-        : view.headline;
-    return (
-      <span
-        aria-label={label}
-        className="cg-context-header"
-        role="group"
-        title={label}
-      >
-        {label}
-      </span>
-    );
-  }
 
   return (
     <Card
@@ -43,9 +27,12 @@ export function BranchContextSummary({
       title={
         <div className="cg-context-card-heading">
           <Typography.Title level={2}>Contexto operativo</Typography.Title>
-          {onRefresh ? (
-            <Button onClick={onRefresh}>Actualizar contexto</Button>
-          ) : null}
+          <div className="cg-context-card-actions">
+            {selector}
+            {onRefresh ? (
+              <Button onClick={onRefresh}>Actualizar contexto</Button>
+            ) : null}
+          </div>
         </div>
       }
     >
@@ -61,7 +48,7 @@ export function BranchContextSummary({
         <Typography.Paragraph>{view.description}</Typography.Paragraph>
       )}
       {view.availableNames.length > 0 && view.kind !== "active-branch" ? (
-        <Typography.Paragraph>
+        <Typography.Paragraph className="cg-context-available-branches">
           Sucursales disponibles: {view.availableNames.join(", ")}
         </Typography.Paragraph>
       ) : null}

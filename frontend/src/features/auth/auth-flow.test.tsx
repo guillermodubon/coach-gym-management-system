@@ -48,6 +48,21 @@ describe("B04 browser session flows with MSW", () => {
             ?.value ?? null;
         return HttpResponse.json(identityFixture);
       }),
+      http.get("/api/v1/me/profile", () =>
+        HttpResponse.json({
+          userId: identityFixture.id,
+          username: identityFixture.username,
+          email: "operator@example.test",
+          firstName: "Ana",
+          lastName: "Ríos",
+          displayName: identityFixture.fullName,
+          roles: identityFixture.roles,
+          status: "ACTIVE",
+          photoPresent: false,
+          photoUrl: null,
+          version: 4,
+        }),
+      ),
       http.get("/api/v1/auth/csrf", () => csrfResponse()),
       http.post("/api/v1/auth/login", async ({ request }) => {
         loginRequests();
@@ -82,10 +97,10 @@ describe("B04 browser session flows with MSW", () => {
     ).toBeVisible();
     expect(screen.getByText(/Has iniciado sesión en Coach Gym/)).toBeVisible();
     expect(
-      screen.getByRole("group", {
+      screen.getAllByRole("group", {
         name: "Ámbito de organización · Sin sucursal activa",
       }),
-    ).toBeVisible();
+    ).toHaveLength(2);
     expect(passwordValueBeforeBootstrap).toBe("");
     expect(loginRequests).toHaveBeenCalledTimes(1);
 

@@ -1,0 +1,199 @@
+.cg-branch-context-control {
+  display: flex;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.cg-branch-context-control--header {
+  inline-size: 100%;
+}
+
+.cg-context-header-summary {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+  color: var(--cg-color-text, #141414);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cg-branch-context-actions {
+  display: flex;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cg-branch-context-field {
+  display: flex;
+  min-inline-size: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cg-branch-context-control--header .cg-branch-context-field {
+  flex: 0 1 16rem;
+  inline-size: min(16rem, 100%);
+}
+
+.cg-branch-context-control--home .cg-branch-context-field {
+  flex: 1 1 16rem;
+  inline-size: min(24rem, 100%);
+}
+
+.cg-branch-context-label {
+  color: var(--cg-color-text, #141414);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.cg-branch-context-select.ant-select {
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.cg-branch-context-select .ant-select-selector {
+  min-inline-size: 0;
+  min-block-size: 44px;
+  align-items: center;
+}
+
+.cg-branch-context-select .ant-select-content {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cg-branch-context-select .ant-select-selection-item,
+.cg-branch-context-select .ant-select-selection-placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cg-branch-context-select .ant-select-placeholder {
+  color: var(--cg-color-text-secondary, #52525b);
+}
+
+.cg-branch-context-clear.ant-btn {
+  min-block-size: 44px;
+  max-inline-size: 100%;
+  white-space: normal;
+}
+
+.cg-branch-context-feedback {
+  display: block;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  color: var(--cg-color-text, #141414);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.cg-branch-context-dropdown.ant-select-dropdown {
+  max-block-size: min(18rem, calc(100dvh - 24px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.cg-branch-context-dropdown .ant-select-item-option-content {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.cg-context-card-heading {
+  display: flex;
+  min-inline-size: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 16px;
+  white-space: normal;
+}
+
+.cg-context-card {
+  min-inline-size: 0;
+  margin-block-end: 20px;
+  overflow-wrap: anywhere;
+}
+
+.cg-context-card-header {
+  padding-inline: var(--cg-panel-padding);
+}
+
+.cg-context-card-heading h2.ant-typography {
+  min-inline-size: 0;
+  margin: 0;
+  font-size: 16px;
+}
+
+.cg-context-card-actions {
+  display: flex;
+  min-inline-size: 0;
+  flex: 1 1 22rem;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cg-context-card-actions > .ant-btn {
+  max-inline-size: 100%;
+  min-block-size: 44px;
+  block-size: auto;
+  padding-block: 8px;
+  white-space: normal;
+}
+
+.cg-context-headline {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.cg-context-available-branches {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767.98px) {
+  .cg-branch-context-control--header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cg-branch-context-control--header .cg-branch-context-actions {
+    inline-size: 100%;
+    max-inline-size: 100%;
+  }
+
+  .cg-branch-context-control--header .cg-branch-context-field {
+    flex: 1 1 auto;
+    inline-size: 100%;
+    max-inline-size: 100%;
+  }
+
+  .cg-context-card-actions {
+    align-items: stretch;
+    flex-basis: 100%;
+    flex-direction: column;
+  }
+
+  .cg-context-card-actions .cg-branch-context-control,
+  .cg-context-card-actions .cg-branch-context-actions,
+  .cg-context-card-actions .cg-branch-context-field,
+  .cg-context-card-actions .ant-select {
+    inline-size: 100%;
+  }
+
+  .cg-context-card-actions > .ant-btn {
+    inline-size: 100%;
+  }
+}

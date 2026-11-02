@@ -7,22 +7,26 @@ import { BranchContextSummary } from "./BranchContextSummary";
 const identity = structuredClone(identityFixture) as CurrentUser;
 
 describe("BranchContextSummary", () => {
-  it("keeps the authorized branch code accessible in the header", () => {
+  it("shows the confirmed business context and accepts a shared selector", () => {
     render(
       <BranchContextSummary
-        mode="header"
+        selector={<button>Sucursal operativa</button>}
         user={{ ...identity, activeBranch: branchFixture }}
       />,
     );
 
     expect(
-      screen.getByRole("group", {
-        name: "Sucursal: Sucursal de prueba · Código: TEST",
-      }),
+      screen.getByRole("heading", { level: 2, name: "Contexto operativo" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/Zona horaria de negocio:.*America\/El_Salvador/),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Sucursal operativa" }),
     ).toBeVisible();
   });
 
-  it("shows the business time zone and invokes a read-only refresh action", () => {
+  it("supports a read-only refresh action without owning context mutations", () => {
     const onRefresh = vi.fn();
     render(
       <BranchContextSummary
@@ -31,9 +35,6 @@ describe("BranchContextSummary", () => {
       />,
     );
 
-    expect(
-      screen.getByText(/Zona horaria de negocio:.*America\/El_Salvador/),
-    ).toBeVisible();
     fireEvent.click(
       screen.getByRole("button", { name: "Actualizar contexto" }),
     );

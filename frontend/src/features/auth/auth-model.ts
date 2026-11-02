@@ -1,5 +1,6 @@
 import type { CurrentUser } from "../../shared/api/contracts";
 import type { ApiError } from "../../shared/api/errors";
+import type { BranchContextTransitionSnapshot } from "../branch-context/branch-context-transition";
 
 export type AuthState =
   | { kind: "checking" }
@@ -22,6 +23,7 @@ export type AuthState =
         | "after-login"
         | "logout-unknown"
         | "password-unknown"
+        | "branch-context-unknown"
         | "invalid-response";
       sessionMayExist: boolean;
     }
@@ -40,10 +42,17 @@ export type AuthNotice =
 export interface AuthSnapshot {
   readonly state: AuthState;
   readonly pendingAction:
-    "login" | "logout" | "password" | "public-identity" | null;
+    | "login"
+    | "logout"
+    | "password"
+    | "public-identity"
+    | "branch-context"
+    | null;
   readonly error: ApiError | null;
   readonly notice: AuthNotice;
   readonly privacyCovered: boolean;
+  readonly contextEpoch: number;
+  readonly branchContextTransition: BranchContextTransitionSnapshot;
   readonly revision: number;
 }
 

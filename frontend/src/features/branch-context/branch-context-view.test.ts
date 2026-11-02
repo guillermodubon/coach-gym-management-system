@@ -8,7 +8,7 @@ function user(overrides: Partial<CurrentUser> = {}): CurrentUser {
 }
 
 describe("branch context view", () => {
-  it("shows the active branch, code and business time zone", () => {
+  it("shows the server-confirmed active branch, code and business time zone", () => {
     expect(getBranchContextView(user({ activeBranch: branchFixture }))).toEqual(
       {
         kind: "active-branch",
@@ -30,7 +30,7 @@ describe("branch context view", () => {
     ).toBe("organization-without-branches");
   });
 
-  it("does not infer a branch when the response has no active selection", () => {
+  it("does not infer a branch when the server reports no active selection", () => {
     const branchUser = user({
       organizationScope: "BRANCH",
       availableBranches: [branchFixture],
@@ -39,10 +39,13 @@ describe("branch context view", () => {
     const view = getBranchContextView(branchUser);
     expect(view.kind).toBe("branch-without-selection");
     expect(view.headline).toBe("Sin sucursal activa");
+    if (view.kind === "branch-without-selection") {
+      expect(view.description).toContain("Elige la sucursal operativa");
+    }
     expect(view.availableNames).toEqual(["Sucursal de prueba"]);
   });
 
-  it("renders an empty branch assignment as unavailable, never global access", () => {
+  it("renders no branch assignments as unavailable, never as global access", () => {
     expect(
       getBranchContextView(
         user({

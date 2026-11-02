@@ -61,6 +61,11 @@
   border-inline-end: 0;
 }
 
+.cg-sidebar .ant-menu .ant-menu-item > .ant-menu-title-content > a,
+.cg-mobile-drawer .ant-menu .ant-menu-item > .ant-menu-title-content > a {
+  color: var(--cg-color-text, #141414);
+}
+
 .cg-sidebar .ant-menu .ant-menu-item-selected > .ant-menu-title-content > a {
   color: var(--cg-color-text, #141414);
 }
@@ -103,9 +108,7 @@
 .cg-header-context {
   grid-area: 1 / 2;
   min-inline-size: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow: visible;
 }
 
 .cg-header-controls {
