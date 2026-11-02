@@ -31,6 +31,27 @@ export function createIdentityApi(client: ApiClient) {
         parse: parseBranchContext,
         ...control,
       }),
+    selectBranchContext: (branchId: string, control: RequestControl = {}) =>
+      client.request({
+        path: "/api/v1/me/branch-context",
+        method: "PUT",
+        responseType: "json",
+        expectedStatus: 200,
+        bodyType: "json",
+        body: { branchId },
+        parse: parseBranchContext,
+        ...control,
+      }),
+    clearBranchContext: (control: RequestControl = {}) =>
+      client.request({
+        path: "/api/v1/me/branch-context",
+        method: "DELETE",
+        responseType: "empty",
+        expectedStatus: 204,
+        bodyType: "none",
+        parse: () => undefined,
+        ...control,
+      }),
     login: (credentials: LoginRequest, control: RequestControl = {}) =>
       client.request({
         path: "/api/v1/auth/login",

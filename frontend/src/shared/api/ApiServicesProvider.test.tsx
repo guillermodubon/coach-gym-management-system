@@ -16,6 +16,7 @@ describe("shared API services provider", () => {
     expect(result.current).toBe(first);
     expect(result.current.apiClient).toBe(first.apiClient);
     expect(result.current.identityApi).toBe(first.identityApi);
+    expect(result.current.organizationApi).toBe(first.organizationApi);
     expect(result.current.profileApi).toBe(first.profileApi);
     expect(result.current.publicIdentityApi).toBe(first.publicIdentityApi);
   });

@@ -88,6 +88,42 @@ describe("single HTTP transport", () => {
     await expect(api.branchContext()).resolves.toEqual(context);
   });
 
+  it("selects a branch context with a strict body and the shared CSRF token", async () => {
+    const context = {
+      organizationId: branchFixture.organizationId,
+      scopeType: "BRANCH",
+      activeBranch: branchFixture,
+      availableBranches: [branchFixture],
+    };
+    server.use(
+      http.put(path("me/branch-context"), async ({ request }) => {
+        expect(request.headers.get(csrfFixture.headerName)).toBe(
+          csrfFixture.token,
+        );
+        expect(await request.json()).toEqual({ branchId: branchFixture.id });
+        return HttpResponse.json(context);
+      }),
+    );
+    await expect(api.selectBranchContext(branchFixture.id)).resolves.toEqual(
+      context,
+    );
+  });
+
+  it("clears branch context with an empty CSRF-protected DELETE and 204", async () => {
+    server.use(
+      http.delete(path("me/branch-context"), async ({ request }) => {
+        expect(new URL(request.url).search).toBe("");
+        expect(request.headers.get(csrfFixture.headerName)).toBe(
+          csrfFixture.token,
+        );
+        expect(await request.text()).toBe("");
+        expect(request.headers.has("Content-Type")).toBe(false);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    await expect(api.clearBranchContext()).resolves.toBeUndefined();
+  });
+
   it("sends only the password contract fields and validates the reauthentication result", async () => {
     const body = {
       currentPassword: " synthetic current ",
@@ -134,7 +170,7 @@ describe("single HTTP transport", () => {
     "/api/v1/%2e%2e/auth/login",
     "/api/v1/auth/login?password=synthetic",
     "/api/v1/auth/login#fragment",
-    "/api/v1/branches",
+    "/api/v1/organization",
     "auth/login",
   ])(
     "rejects an unapproved URL before fetching or obtaining CSRF: %s",
@@ -155,7 +191,7 @@ describe("single HTTP transport", () => {
     },
   );
 
-  it("rejects a verb outside the reviewed F01/F02 scope before sending credentials", async () => {
+  it("rejects a verb outside the reviewed F01/F02/F03 scopes before sending credentials", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     await expect(
       client.request({
@@ -167,6 +203,70 @@ describe("single HTTP transport", () => {
         parse: () => undefined,
       }),
     ).rejects.toMatchObject({ kind: "invalid-request" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects branch path injection and unsupported branch actions before fetch", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const branchId = "00000000-0000-4000-8000-000000000002";
+    for (const route of [
+      `/api/v1/branches/${branchId}/policies`,
+      `/api/v1/branches/${branchId}/activate/extra`,
+      `/api/v1/branches/${branchId}%2Factivate`,
+      `/api/v1/branches/${branchId}/activate/`,
+      "/api/v1/branches/not-a-uuid",
+    ]) {
+      await expect(
+        client.request({
+          path: route,
+          method: "GET",
+          responseType: "json",
+          expectedStatus: 200,
+          parse: (body) => body,
+        }),
+      ).rejects.toMatchObject({ kind: "invalid-request" });
+    }
+    await expect(
+      client.request({
+        path: `/api/v1/branches/${branchId}`,
+        method: "POST",
+        bodyType: "json",
+        body: {},
+        responseType: "json",
+        expectedStatus: 200,
+        parse: (body) => body,
+      }),
+    ).rejects.toMatchObject({ kind: "invalid-request" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("accepts only bounded branch catalog query keys and values", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const invalidQueries: unknown[] = [
+      { token: "synthetic-secret" },
+      { size: 101 },
+      { size: 0 },
+      { page: -1 },
+      { status: "PENDING" },
+      { sort: "organizationId" },
+      { direction: "SIDEWAYS" },
+      { countryCode: "USA" },
+      { search: "x".repeat(121) },
+      { city: "San\u0000Salvador" },
+      Object.assign({}, { page: 0 }, { [Symbol("unexpected")]: true }),
+    ];
+    for (const query of invalidQueries) {
+      await expect(
+        client.request({
+          path: "/api/v1/branches",
+          method: "GET",
+          query: query as never,
+          responseType: "json",
+          expectedStatus: 200,
+          parse: (body) => body,
+        }),
+      ).rejects.toMatchObject({ kind: "invalid-request" });
+    }
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

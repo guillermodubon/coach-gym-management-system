@@ -4,8 +4,10 @@ import { readFile } from "node:fs/promises";
 import {
   f01Operations,
   f02Operations,
+  f03Operations,
   projectF01,
   projectF02,
+  projectF03,
   validateSnapshot,
 } from "./scope.mjs";
 
@@ -18,6 +20,12 @@ const snapshot = JSON.parse(
 const f02Snapshot = JSON.parse(
   await readFile(
     new URL("../../contracts/f02.openapi.json", import.meta.url),
+    "utf8",
+  ),
+);
+const f03Snapshot = JSON.parse(
+  await readFile(
+    new URL("../../contracts/f03.openapi.json", import.meta.url),
     "utf8",
   ),
 );
@@ -117,4 +125,48 @@ test("F02 projection excludes unrelated operations and rejects unresolved refere
     $ref: "https://untrusted.invalid/schema.json",
   };
   assert.throws(() => projectF02(unresolved));
+});
+
+test("the F03 snapshot contains the ten reviewed operations across six paths", () => {
+  validateSnapshot(f03Snapshot, "f03");
+  assert.deepEqual(Object.keys(f03Snapshot.paths), Object.keys(f03Operations));
+  assert.equal(
+    Object.values(f03Snapshot.paths).reduce(
+      (count, path) => count + Object.keys(path).length,
+      0,
+    ),
+    10,
+  );
+  assert.deepEqual(Object.keys(f03Snapshot.paths["/api/v1/branches"]), [
+    "get",
+    "post",
+  ]);
+  assert.deepEqual(
+    Object.keys(f03Snapshot.paths["/api/v1/me/branch-context"]),
+    ["get", "put", "delete"],
+  );
+});
+
+test("F03 shares H08 exactly with F01 and excludes future administration paths", () => {
+  assert.deepEqual(
+    f03Snapshot.paths["/api/v1/me/branch-context"].get,
+    snapshot.paths["/api/v1/me/branch-context"].get,
+  );
+  const expanded = structuredClone(f03Snapshot);
+  expanded.paths["/api/v1/organization"].put = { responses: {} };
+  expanded.paths["/api/v1/access-policies"] = { get: { responses: {} } };
+  assert.deepEqual(projectF03(expanded), f03Snapshot);
+  assert.throws(() => validateSnapshot(expanded, "f03"));
+});
+
+test("F03 projection rejects missing operations and unresolved references", () => {
+  const missing = structuredClone(f03Snapshot);
+  delete missing.paths["/api/v1/branches/{id}/activate"];
+  assert.throws(() => projectF03(missing));
+
+  const unresolved = structuredClone(f03Snapshot);
+  unresolved.components.schemas.BranchResponse.properties.id = {
+    $ref: "https://untrusted.invalid/schema.json",
+  };
+  assert.throws(() => projectF03(unresolved));
 });
