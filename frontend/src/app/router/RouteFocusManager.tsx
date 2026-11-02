@@ -11,6 +11,9 @@ const titles: Record<string, string> = {
   "/mi-perfil": "Mi perfil · Coach Gym",
   "/mi-cuenta": "Ajustes de mi cuenta · Coach Gym",
   "/mi-cuenta/contrasena": "Cambiar contraseña · Coach Gym",
+  "/organizacion": "Organización · Coach Gym",
+  "/sucursales/nueva": "Nueva sucursal · Coach Gym",
+  "/sucursales": "Sucursales · Coach Gym",
 };
 
 export function RouteFocusManager() {
@@ -18,7 +21,12 @@ export function RouteFocusManager() {
 
   useEffect(() => {
     document.title =
-      titles[location.pathname] ?? "Página no encontrada · Coach Gym";
+      titles[location.pathname] ??
+      (location.pathname.endsWith("/editar")
+        ? "Editar sucursal · Coach Gym"
+        : location.pathname.startsWith("/sucursales/")
+          ? "Detalle de sucursal · Coach Gym"
+          : "Página no encontrada · Coach Gym");
     const frame = window.requestAnimationFrame(() => {
       const target =
         document.getElementById("main-heading") ??
