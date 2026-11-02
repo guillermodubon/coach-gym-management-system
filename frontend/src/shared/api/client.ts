@@ -1,6 +1,7 @@
 import type { CsrfToken } from "./contracts";
 import { parseCsrf } from "./contracts";
 import { ApiError, httpError, isRecord } from "./errors";
+import type { BranchCatalogQuery } from "./organization-contracts";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 type MutationMethod = "POST" | "PUT" | "DELETE";
@@ -10,7 +11,7 @@ interface OperationContract {
   requestBody: BodyKind;
   responseType: ResponseKind;
   expectedStatus: 200 | 201 | 202 | 204;
-  query?: "version";
+  query?: "version" | "branch-catalog";
 }
 
 const operations: Readonly<
@@ -30,6 +31,20 @@ const operations: Readonly<
   },
   "/api/v1/me/branch-context": {
     GET: { requestBody: "none", responseType: "json", expectedStatus: 200 },
+    PUT: { requestBody: "json", responseType: "json", expectedStatus: 200 },
+    DELETE: { requestBody: "none", responseType: "empty", expectedStatus: 204 },
+  },
+  "/api/v1/organization": {
+    GET: { requestBody: "none", responseType: "json", expectedStatus: 200 },
+  },
+  "/api/v1/branches": {
+    GET: {
+      requestBody: "none",
+      responseType: "json",
+      expectedStatus: 200,
+      query: "branch-catalog",
+    },
+    POST: { requestBody: "json", responseType: "json", expectedStatus: 201 },
   },
   "/api/v1/me/profile": {
     GET: { requestBody: "none", responseType: "json", expectedStatus: 200 },
@@ -87,7 +102,7 @@ type RequestBase = {
 type RequestOptions<T> =
   | (RequestBase & {
       method: "GET";
-      query?: never;
+      query?: BranchCatalogQuery;
       body?: never;
       bodyType?: never;
     } & (JsonResponse<T> | BinaryResponse<T>))
@@ -121,6 +136,143 @@ type RequestOptions<T> =
       bodyType: "none";
       body?: never;
     } & JsonResponse<T>);
+type EmptyDeleteRequest<T> = RequestBase & {
+  method: "DELETE";
+  query?: never;
+  bodyType: "none";
+  body?: never;
+  responseType: "empty";
+  expectedStatus: 204;
+  parse: (body: undefined) => T;
+};
+
+type AnyRequestOptions<T> = RequestOptions<T> | EmptyDeleteRequest<T>;
+
+const branchRoutePattern =
+  /^\/api\/v1\/branches\/([\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12})(?:\/(activate|deactivate))?$/;
+const branchListQueryKeys = [
+  "status",
+  "search",
+  "city",
+  "countryCode",
+  "page",
+  "size",
+  "sort",
+  "direction",
+] as const;
+const branchStatusValues = new Set(["ACTIVE", "INACTIVE"]);
+const branchSortValues = new Set([
+  "CODE",
+  "NAME",
+  "CITY",
+  "CREATED_AT",
+  "UPDATED_AT",
+]);
+const branchDirectionValues = new Set(["ASC", "DESC"]);
+
+function hasControlCharacters(value: string): boolean {
+  for (const character of value) {
+    const codePoint = character.codePointAt(0);
+    if (
+      codePoint !== undefined &&
+      (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function resolveOperationContract(
+  path: string,
+  method: HttpMethod,
+): OperationContract | undefined {
+  if (typeof path !== "string") return undefined;
+  const exact = operations[path]?.[method];
+  if (exact) return exact;
+  const match = branchRoutePattern.exec(path);
+  if (!match) return undefined;
+  const action = match[2]?.toLowerCase();
+  if (action === "activate" || action === "deactivate") {
+    return method === "POST"
+      ? { requestBody: "json", responseType: "json", expectedStatus: 200 }
+      : undefined;
+  }
+  if (method === "GET")
+    return { requestBody: "none", responseType: "json", expectedStatus: 200 };
+  if (method === "PUT")
+    return { requestBody: "json", responseType: "json", expectedStatus: 200 };
+  return undefined;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    isRecord(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype ||
+      Object.getPrototypeOf(value) === null)
+  );
+}
+
+function branchCatalogParameters(
+  query: BranchCatalogQuery | undefined,
+): URLSearchParams {
+  const parameters = new URLSearchParams();
+  if (query === undefined) return parameters;
+  if (!isPlainRecord(query)) throw new ApiError("invalid-request");
+  const keys = Reflect.ownKeys(query);
+  if (
+    keys.some(
+      (key) =>
+        typeof key !== "string" ||
+        !(branchListQueryKeys as readonly string[]).includes(key),
+    )
+  ) {
+    throw new ApiError("invalid-request");
+  }
+  for (const key of branchListQueryKeys) {
+    if (!Object.hasOwn(query, key)) continue;
+    const value = query[key];
+    if (value === undefined) throw new ApiError("invalid-request");
+    if (key === "status") {
+      if (typeof value !== "string" || !branchStatusValues.has(value))
+        throw new ApiError("invalid-request");
+    } else if (key === "sort") {
+      if (typeof value !== "string" || !branchSortValues.has(value))
+        throw new ApiError("invalid-request");
+    } else if (key === "direction") {
+      if (typeof value !== "string" || !branchDirectionValues.has(value))
+        throw new ApiError("invalid-request");
+    } else if (key === "countryCode") {
+      if (typeof value !== "string" || !/^[a-z]{2}$/i.test(value))
+        throw new ApiError("invalid-request");
+    } else if (key === "search" || key === "city") {
+      if (
+        typeof value !== "string" ||
+        value.length > 120 ||
+        hasControlCharacters(value)
+      )
+        throw new ApiError("invalid-request");
+    } else if (key === "page") {
+      if (
+        typeof value !== "number" ||
+        !Number.isSafeInteger(value) ||
+        value < 0 ||
+        value > 2_147_483_647
+      )
+        throw new ApiError("invalid-request");
+    } else if (
+      key === "size" &&
+      (typeof value !== "number" ||
+        !Number.isSafeInteger(value) ||
+        value < 1 ||
+        value > 100)
+    ) {
+      throw new ApiError("invalid-request");
+    }
+    parameters.set(key, String(value));
+  }
+  return parameters;
+}
 
 const maximumPhotoBytes = 5 * 1024 * 1024;
 const photoContentTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -154,8 +306,8 @@ function isMutation(method: string): method is MutationMethod {
   return method === "POST" || method === "PUT" || method === "DELETE";
 }
 
-function validateRequestShape<T>(options: RequestOptions<T>): void {
-  const contract = operations[options.path]?.[options.method];
+function validateRequestShape<T>(options: AnyRequestOptions<T>): void {
+  const contract = resolveOperationContract(options.path, options.method);
   if (
     !contract ||
     options.responseType !== contract.responseType ||
@@ -316,21 +468,25 @@ export function createApiClient({
   function checkedUrl(
     path: string,
     method: HttpMethod,
-    query?: Readonly<{ version: number }>,
+    query?: Readonly<{ version: number }> | BranchCatalogQuery,
   ): URL {
-    const contract = operations[path]?.[method];
+    const contract = resolveOperationContract(path, method);
     if (!contract) throw new ApiError("invalid-request");
-    const versionedPhotoDelete = contract.query === "version";
-    if (versionedPhotoDelete) {
+    const queryKind = contract.query;
+    let branchParameters: URLSearchParams | undefined;
+    if (queryKind === "version") {
       if (
-        !isRecord(query) ||
-        Object.keys(query).length !== 1 ||
+        !isPlainRecord(query) ||
+        Reflect.ownKeys(query).length !== 1 ||
         !Object.hasOwn(query, "version") ||
         typeof query.version !== "number" ||
         !Number.isSafeInteger(query.version) ||
         query.version < 0
       )
         throw new ApiError("invalid-request");
+    } else if (queryKind === "branch-catalog") {
+      if (method !== "GET") throw new ApiError("invalid-request");
+      branchParameters = branchCatalogParameters(query as BranchCatalogQuery);
     } else if (query !== undefined) {
       throw new ApiError("invalid-request");
     }
@@ -345,13 +501,21 @@ export function createApiClient({
     ) {
       throw new ApiError("invalid-request");
     }
-    if (versionedPhotoDelete)
-      url.searchParams.set("version", String(query?.version));
+    if (queryKind === "version")
+      url.searchParams.set(
+        "version",
+        String((query as Readonly<{ version: number }>).version),
+      );
+    if (branchParameters) {
+      for (const [key, value] of branchParameters) {
+        url.searchParams.set(key, value);
+      }
+    }
     return url;
   }
 
   async function send<T>(
-    options: RequestOptions<T>,
+    options: AnyRequestOptions<T>,
     signal: AbortSignal,
     token?: CsrfToken,
   ): Promise<T> {
@@ -477,7 +641,7 @@ export function createApiClient({
     return run((ownSignal) => abortable(csrfBootstrap(), ownSignal), signal);
   }
 
-  async function request<T>(options: RequestOptions<T>): Promise<T> {
+  async function request<T>(options: AnyRequestOptions<T>): Promise<T> {
     validateRequestShape(options);
     checkedUrl(
       options.path,

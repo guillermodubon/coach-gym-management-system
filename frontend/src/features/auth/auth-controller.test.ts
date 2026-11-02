@@ -1,13 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ApiClient } from "../../shared/api/client";
-import type { CurrentUser } from "../../shared/api/contracts";
+import type { BranchContext, CurrentUser } from "../../shared/api/contracts";
 import { ApiError } from "../../shared/api/errors";
 import { createQueryClient } from "../../shared/api/query-client";
+import { createContextChangeGuard } from "../branch-context/context-change-guard";
 import { branchFixture, identityFixture } from "../../test/identity-fixtures";
 import { createAuthController } from "./auth-controller";
 import type { AuthController } from "./auth-controller";
 import { validateAuthority } from "./auth-model";
 import type { SessionEvents, VisibilityEvents } from "./session-events";
+
+type IdentityApi = ReturnType<
+  typeof import("../../shared/api/identity").createIdentityApi
+>;
 
 function user(overrides: Partial<CurrentUser> = {}): CurrentUser {
   return structuredClone({ ...identityFixture, ...overrides }) as CurrentUser;
@@ -67,11 +72,26 @@ function makeHarness() {
   const currentUser = vi.fn(async () => user());
   const login = vi.fn(async () => undefined);
   const logoutRequest = vi.fn(async () => undefined);
+  const contextChangeGuard = createContextChangeGuard();
+  const branchContext: BranchContext = {
+    organizationId: branchFixture.organizationId,
+    scopeType: "ORGANIZATION" as const,
+    activeBranch: branchFixture,
+    availableBranches: [branchFixture],
+  };
+  const selectBranchContext = vi.fn<IdentityApi["selectBranchContext"]>(
+    async () => branchContext,
+  );
+  const clearBranchContext = vi.fn<IdentityApi["clearBranchContext"]>(
+    async () => undefined,
+  );
   const identityApi = {
     currentUser,
     login,
     logout: logoutRequest,
-    branchContext: vi.fn(),
+    branchContext: vi.fn(async () => branchContext),
+    selectBranchContext,
+    clearBranchContext,
     changePassword: vi.fn(),
   } as unknown as ReturnType<
     typeof import("../../shared/api/identity").createIdentityApi
@@ -84,14 +104,18 @@ function makeHarness() {
     now: () => currentTime,
     visibilityEvents,
     sessionEvents,
+    contextChangeGuard,
   });
 
   return {
     controller,
+    contextChangeGuard,
     apiClient,
     getCsrf,
     currentUser,
     identityApi,
+    selectBranchContext,
+    clearBranchContext,
     login,
     logoutRequest,
     queryClient,
@@ -906,16 +930,23 @@ describe("auth controller", () => {
   it("applies focus throttling and always revalidates after returning visible", async () => {
     const harness = makeHarness();
     const stop = await start(harness.controller);
+    const beforeFirstFocus = harness.controller.getSnapshot().revision;
     harness.focus();
     await harness.controller.revalidate("focus");
+    await vi.waitFor(() =>
+      expect(harness.controller.getSnapshot().revision).toBeGreaterThan(
+        beforeFirstFocus,
+      ),
+    );
     expect(harness.currentUser).toHaveBeenCalledTimes(2);
     harness.setTime(12_000);
     harness.focus();
     expect(harness.currentUser).toHaveBeenCalledTimes(2);
-    harness.setTime(15_000);
-    harness.focus();
+    harness.setTime(15_001);
     await harness.controller.revalidate("focus");
-    expect(harness.currentUser).toHaveBeenCalledTimes(3);
+    await vi.waitFor(() =>
+      expect(harness.currentUser).toHaveBeenCalledTimes(3),
+    );
 
     harness.setVisible(false);
     expect(harness.controller.getSnapshot().privacyCovered).toBe(true);
@@ -977,6 +1008,17 @@ describe("auth controller", () => {
       user: { username: "synthetic-updated-account" },
     });
     expect(harness.sessionEvents.publish).not.toHaveBeenCalled();
+    stop();
+    harness.dispose();
+  });
+
+  it("publishes a metadata-free session signal for an external status change", async () => {
+    const harness = makeHarness();
+    const stop = await start(harness.controller);
+
+    harness.controller.notifySessionChange();
+
+    expect(harness.sessionEvents.publish).toHaveBeenCalledTimes(1);
     stop();
     harness.dispose();
   });
@@ -1083,4 +1125,358 @@ describe("auth controller", () => {
       harness.dispose();
     },
   );
+});
+
+describe("auth controller branch context coordination", () => {
+  const branchA = branchFixture;
+  const branchB = {
+    ...branchFixture,
+    id: "00000000-0000-4000-8000-000000000004",
+    code: "SECOND",
+    name: "Second synthetic branch",
+    initialBranch: false,
+  };
+  const branchC = {
+    ...branchFixture,
+    id: "00000000-0000-4000-8000-000000000005",
+    code: "THIRD",
+    name: "Third synthetic branch",
+    initialBranch: false,
+  };
+
+  it("does not send the already active selection", async () => {
+    const harness = makeHarness();
+    harness.currentUser.mockResolvedValueOnce(user({ activeBranch: branchA }));
+    const stop = await start(harness.controller);
+
+    await harness.controller.selectBranchContext(branchA.id);
+
+    expect(harness.selectBranchContext).not.toHaveBeenCalled();
+    expect(harness.currentUser).toHaveBeenCalledTimes(1);
+    expect(harness.controller.getSnapshot().branchContextTransition).toEqual({
+      status: "idle",
+      notice: "context-unchanged",
+      error: null,
+    });
+    stop();
+    harness.dispose();
+  });
+
+  it("serializes one switch, cancels old private reads and accepts only fresh identity", async () => {
+    const harness = makeHarness();
+    const availableBranches = [branchA, branchB];
+    harness.currentUser.mockResolvedValueOnce(
+      user({ activeBranch: branchA, availableBranches }),
+    );
+    const stop = await start(harness.controller);
+    const originalEpoch = harness.controller.getSnapshot().contextEpoch;
+    let querySignal: AbortSignal | undefined;
+    let finishStaleQuery: ((value: string) => void) | undefined;
+    const staleRead = harness.queryClient
+      .fetchQuery({
+        queryKey: ["private", "synthetic-branch-read", branchA.id],
+        queryFn: ({ signal }) => {
+          querySignal = signal;
+          return new Promise<string>((resolve) => {
+            finishStaleQuery = resolve;
+          });
+        },
+      })
+      .catch(() => undefined);
+    await vi.waitFor(() => expect(querySignal).toBeDefined());
+
+    harness.selectBranchContext.mockResolvedValueOnce({
+      organizationId: branchA.organizationId,
+      scopeType: "BRANCH",
+      activeBranch: branchB,
+      availableBranches,
+    });
+    harness.currentUser.mockResolvedValueOnce(
+      user({ activeBranch: branchB, availableBranches }),
+    );
+
+    const switchRequest = harness.controller.selectBranchContext(branchB.id);
+    await vi.waitFor(() =>
+      expect(harness.controller.getSnapshot().pendingAction).toBe(
+        "branch-context",
+      ),
+    );
+    await harness.controller.selectBranchContext(branchA.id);
+    expect(querySignal?.aborted).toBe(true);
+    finishStaleQuery?.("stale branch data");
+    await staleRead;
+    await vi.waitFor(() =>
+      expect(harness.selectBranchContext).toHaveBeenCalledTimes(1),
+    );
+    await switchRequest;
+
+    const snapshot = harness.controller.getSnapshot();
+    expect(snapshot.state).toMatchObject({
+      kind: "authenticated",
+      user: { activeBranch: { id: branchB.id } },
+    });
+    expect(snapshot.contextEpoch).toBe(originalEpoch + 1);
+    expect(snapshot.branchContextTransition).toMatchObject({
+      status: "idle",
+      notice: "context-confirmed",
+    });
+    expect(
+      harness.queryClient.getQueryData([
+        "private",
+        "synthetic-branch-read",
+        branchA.id,
+      ]),
+    ).toBeUndefined();
+    stop();
+    harness.dispose();
+  });
+
+  it("keeps the server-effective branch when another selection wins the race", async () => {
+    const harness = makeHarness();
+    const availableBranches = [branchA, branchB, branchC];
+    harness.currentUser.mockResolvedValueOnce(
+      user({ activeBranch: branchA, availableBranches }),
+    );
+    const stop = await start(harness.controller);
+    harness.currentUser.mockResolvedValueOnce(
+      user({ activeBranch: branchC, availableBranches }),
+    );
+
+    await harness.controller.selectBranchContext(branchB.id);
+
+    expect(harness.controller.getSnapshot().state).toMatchObject({
+      kind: "authenticated",
+      user: { activeBranch: { id: branchC.id } },
+    });
+    expect(
+      harness.controller.getSnapshot().branchContextTransition,
+    ).toMatchObject({
+      status: "idle",
+      notice: "effective-context-differs",
+    });
+    stop();
+    harness.dispose();
+  });
+
+  it("accepts a different actor only from the fresh reconciliation and advances the context epoch", async () => {
+    const harness = makeHarness();
+    const availableBranches = [branchA, branchB];
+    harness.currentUser.mockResolvedValueOnce(
+      user({ activeBranch: branchA, availableBranches }),
+    );
+    const stop = await start(harness.controller);
+    const originalEpoch = harness.controller.getSnapshot().contextEpoch;
+    const nextActor = user({
+      id: "00000000-0000-4000-8000-000000000099",
+      username: "synthetic-next-actor",
+      activeBranch: branchB,
+      availableBranches,
+    });
+    harness.currentUser.mockResolvedValueOnce(nextActor);
+
+    await harness.controller.selectBranchContext(branchB.id);
+
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: {
+        kind: "authenticated",
+        user: {
+          id: nextActor.id,
+          username: nextActor.username,
+          activeBranch: { id: branchB.id },
+        },
+      },
+      contextEpoch: originalEpoch + 1,
+      branchContextTransition: {
+        status: "idle",
+        notice: "context-reconciled",
+      },
+    });
+    expect(harness.selectBranchContext).toHaveBeenCalledTimes(1);
+    stop();
+    harness.dispose();
+  });
+
+  it("clears a one-branch preference without assuming the effective branch becomes null", async () => {
+    const harness = makeHarness();
+    harness.currentUser.mockResolvedValueOnce(user({ activeBranch: branchA }));
+    const stop = await start(harness.controller);
+    harness.currentUser.mockResolvedValueOnce(user({ activeBranch: branchA }));
+
+    await harness.controller.clearBranchContext();
+
+    expect(harness.identityApi.clearBranchContext).toHaveBeenCalledTimes(1);
+    expect(harness.controller.getSnapshot().state).toMatchObject({
+      kind: "authenticated",
+      user: { activeBranch: { id: branchA.id } },
+    });
+    expect(
+      harness.controller.getSnapshot().branchContextTransition,
+    ).toMatchObject({
+      status: "idle",
+      notice: "context-reconciled",
+    });
+    stop();
+    harness.dispose();
+  });
+
+  it("does not admit a transition while a profile owner reports a dirty draft", async () => {
+    const harness = makeHarness();
+    harness.currentUser.mockResolvedValueOnce(
+      user({ availableBranches: [branchA, branchB] }),
+    );
+    const stop = await start(harness.controller);
+    const unregister = harness.contextChangeGuard.registerBlocker(() => true);
+
+    await harness.controller.selectBranchContext(branchB.id);
+
+    expect(harness.selectBranchContext).not.toHaveBeenCalled();
+    expect(harness.controller.getSnapshot().branchContextTransition).toEqual({
+      status: "blocked",
+      notice: null,
+      error: null,
+      reason: "unsaved-changes",
+    });
+    unregister();
+    stop();
+    harness.dispose();
+  });
+
+  it("keeps uncertain writes covered until a manual read and never replays the mutation", async () => {
+    const harness = makeHarness();
+    const availableBranches = [branchA, branchB];
+    harness.currentUser.mockResolvedValueOnce(
+      user({ activeBranch: branchA, availableBranches }),
+    );
+    const stop = await start(harness.controller);
+    harness.selectBranchContext.mockRejectedValueOnce(new ApiError("timeout"));
+
+    await harness.controller.selectBranchContext(branchB.id);
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "unavailable", reason: "branch-context-unknown" },
+      branchContextTransition: { status: "uncertain" },
+    });
+    expect(harness.currentUser).toHaveBeenCalledTimes(1);
+
+    harness.currentUser.mockResolvedValueOnce(
+      user({ activeBranch: branchB, availableBranches }),
+    );
+    await harness.controller.reconcileBranchContext();
+
+    expect(harness.selectBranchContext).toHaveBeenCalledTimes(1);
+    expect(harness.currentUser).toHaveBeenCalledTimes(2);
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: {
+        kind: "authenticated",
+        user: { activeBranch: { id: branchB.id } },
+      },
+      branchContextTransition: {
+        status: "idle",
+        notice: "context-reconciled",
+      },
+    });
+    stop();
+    harness.dispose();
+  });
+
+  it("recovers an uncertain context on focus when no cross-tab event arrives", async () => {
+    const harness = makeHarness();
+    const availableBranches = [branchA, branchB];
+    harness.currentUser.mockResolvedValueOnce(
+      user({ activeBranch: branchA, availableBranches }),
+    );
+    const stop = await start(harness.controller);
+    harness.selectBranchContext.mockRejectedValueOnce(new ApiError("timeout"));
+
+    await harness.controller.selectBranchContext(branchB.id);
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "unavailable", reason: "branch-context-unknown" },
+      branchContextTransition: { status: "uncertain" },
+    });
+
+    harness.currentUser.mockResolvedValueOnce(
+      user({ activeBranch: branchB, availableBranches }),
+    );
+    harness.focus();
+
+    await vi.waitFor(() =>
+      expect(harness.controller.getSnapshot()).toMatchObject({
+        state: {
+          kind: "authenticated",
+          user: { activeBranch: { id: branchB.id } },
+        },
+        branchContextTransition: {
+          status: "idle",
+          notice: "context-reconciled",
+        },
+      }),
+    );
+    expect(harness.selectBranchContext).toHaveBeenCalledTimes(1);
+    expect(harness.currentUser).toHaveBeenCalledTimes(2);
+    stop();
+    harness.dispose();
+  });
+
+  it("reconciles definitive CSRF and conflict failures without replaying the mutation", async () => {
+    const cases = [
+      new ApiError("http", { status: 403, code: "CSRF_TOKEN_INVALID" }),
+      new ApiError("http", { status: 409, code: "ACTIVE_BRANCH_UNAVAILABLE" }),
+    ];
+
+    for (const failure of cases) {
+      const harness = makeHarness();
+      const availableBranches = [branchA, branchB];
+      harness.currentUser.mockResolvedValueOnce(
+        user({ activeBranch: branchA, availableBranches }),
+      );
+      const stop = await start(harness.controller);
+      harness.selectBranchContext.mockRejectedValueOnce(failure);
+      harness.currentUser.mockResolvedValueOnce(
+        user({ activeBranch: branchA, availableBranches }),
+      );
+
+      await harness.controller.selectBranchContext(branchB.id);
+
+      expect(harness.selectBranchContext).toHaveBeenCalledTimes(1);
+      expect(harness.currentUser).toHaveBeenCalledTimes(2);
+      expect(harness.controller.getSnapshot()).toMatchObject({
+        state: { kind: "authenticated" },
+        branchContextTransition: { status: "failed", error: failure },
+      });
+      stop();
+      harness.dispose();
+    }
+  });
+
+  it("lets logout supersede a pending context request and ignores its late success", async () => {
+    const harness = makeHarness();
+    harness.currentUser.mockResolvedValueOnce(
+      user({ availableBranches: [branchA, branchB] }),
+    );
+    const stop = await start(harness.controller);
+    let finishSelection: (() => void) | undefined;
+    harness.selectBranchContext.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSelection = () => resolve(harness.identityApi.branchContext());
+        }),
+    );
+
+    const switchRequest = harness.controller.selectBranchContext(branchB.id);
+    await vi.waitFor(() =>
+      expect(harness.selectBranchContext).toHaveBeenCalledTimes(1),
+    );
+    await harness.controller.logout();
+    finishSelection?.();
+    await switchRequest;
+
+    expect(harness.logoutRequest).toHaveBeenCalledTimes(1);
+    expect(harness.currentUser).toHaveBeenCalledTimes(1);
+    expect(harness.controller.getSnapshot()).toMatchObject({
+      state: { kind: "anonymous" },
+      pendingAction: null,
+      branchContextTransition: { status: "idle" },
+    });
+    stop();
+    harness.dispose();
+  });
 });

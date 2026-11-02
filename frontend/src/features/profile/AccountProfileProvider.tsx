@@ -14,6 +14,7 @@ import type { ApiError } from "../../shared/api/errors";
 import { ApiError as SafeApiError } from "../../shared/api/errors";
 import type { StaffSelfProfile } from "../../shared/api/profile-contracts";
 import { useApiServices } from "../../shared/api/ApiServicesProvider";
+import { useContextChangeGuard } from "../branch-context/ContextChangeGuardProvider";
 import { useAuth } from "../auth/useAuth";
 import { accountAvatarQueryKey, accountProfileQueryKey } from "./profile-query";
 import {
@@ -108,12 +109,15 @@ export function AccountProfileProvider({ children }: PropsWithChildren) {
   const location = useLocation();
   const authRef = useRef(auth);
   authRef.current = auth;
+  const contextChangeGuard = useContextChangeGuard();
   const queryClient = useQueryClient();
   const { profileApi } = useApiServices();
   const [draft, setDraft] = useState<AccountProfileDraft | null>(null);
   const [writeError, setWriteError] = useState<ApiError | null>(null);
   const [saving, setSaving] = useState(false);
   const writeLock = useRef(false);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const lastActorId = useRef<string | null>(null);
   const lastRevalidationKey = useRef<string | null>(null);
 
@@ -161,6 +165,16 @@ export function AccountProfileProvider({ children }: PropsWithChildren) {
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+
+  useEffect(
+    () =>
+      contextChangeGuard.registerBlocker(
+        () =>
+          writeLock.current ||
+          Boolean(draftRef.current && isDirtyDraft(draftRef.current)),
+      ),
+    [contextChangeGuard],
+  );
 
   const currentProfile =
     canRead && profileQuery.data?.userId === userId ? profileQuery.data : null;
@@ -250,6 +264,8 @@ export function AccountProfileProvider({ children }: PropsWithChildren) {
       operation: () => Promise<T>,
     ): Promise<ProfileWriteOutcome<T>> => {
       if (writeLock.current) return { acquired: false };
+      const lease = contextChangeGuard.tryAcquireWrite();
+      if (!lease) return { acquired: false };
       writeLock.current = true;
       setSaving(true);
       try {
@@ -257,14 +273,16 @@ export function AccountProfileProvider({ children }: PropsWithChildren) {
       } finally {
         writeLock.current = false;
         setSaving(false);
+        lease.release();
       }
     },
-    [],
+    [contextChangeGuard],
   );
 
   const setName = useCallback(
     (field: "firstName" | "lastName", value: string) => {
-      if (!profile || saving) return;
+      if (!profile || saving || contextChangeGuard.isContextChangeActive())
+        return;
       setDraft((current) => {
         if (!current || current.userId !== profile.userId) {
           current = draftFromProfile(profile);
@@ -273,7 +291,7 @@ export function AccountProfileProvider({ children }: PropsWithChildren) {
       });
       setWriteError(null);
     },
-    [profile, saving],
+    [contextChangeGuard, profile, saving],
   );
 
   const discard = useCallback(() => {

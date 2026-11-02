@@ -1,4 +1,8 @@
-import { HomeOutlined } from "@ant-design/icons";
+import {
+  ApartmentOutlined,
+  HomeOutlined,
+  ShopOutlined,
+} from "@ant-design/icons";
 import { Menu } from "antd";
 import { NavLink, useLocation } from "react-router";
 
@@ -12,7 +16,14 @@ export function AppNavigation({
   onNavigate,
 }: AppNavigationProps) {
   const location = useLocation();
-  const selectedKey = location.pathname === "/" ? "/" : "";
+  const selectedKey =
+    location.pathname === "/"
+      ? "/"
+      : location.pathname === "/organizacion"
+        ? "/organizacion"
+        : location.pathname.startsWith("/sucursales")
+          ? "/sucursales"
+          : "";
 
   return (
     <nav aria-label="Navegación principal">
@@ -28,6 +39,34 @@ export function AppNavigation({
               </NavLink>
             ),
             title: "Inicio",
+          },
+          {
+            key: "/organizacion",
+            icon: <ApartmentOutlined aria-hidden="true" />,
+            label: (
+              <NavLink
+                aria-label="Organización"
+                onClick={onNavigate}
+                to="/organizacion"
+              >
+                Organización
+              </NavLink>
+            ),
+            title: "Organización",
+          },
+          {
+            key: "/sucursales",
+            icon: <ShopOutlined aria-hidden="true" />,
+            label: (
+              <NavLink
+                aria-label="Sucursales"
+                onClick={onNavigate}
+                to="/sucursales"
+              >
+                Sucursales
+              </NavLink>
+            ),
+            title: "Sucursales",
           },
         ]}
         mode="inline"

@@ -1,0 +1,895 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Coach Gym - F03 HTTP contracts",
+    "version": "v1",
+    "description": "Proyección de las diez operaciones H01-H10 de F03 desde Springdoc. Los esquemas conservan la forma exportada por el backend."
+  },
+  "servers": [{ "url": "/" }],
+  "paths": {
+    "/api/v1/organization": {
+      "get": {
+        "tags": ["Organization"],
+        "summary": "Get the canonical organization",
+        "description": "Returns the one server-selected organization. ADMIN receives the administrative detail projection; RECEPTIONIST receives the safe summary. No organization identifier or tenant selector is accepted.",
+        "operationId": "find",
+        "responses": {
+          "200": {
+            "description": "Organization returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The authenticated role is not allowed",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Canonical organization not found",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "sessionCookie": [] }]
+      }
+    },
+    "/api/v1/branches": {
+      "get": {
+        "tags": ["Gym branches"],
+        "summary": "List gym branches",
+        "description": "Returns a bounded, deterministic branch catalog. Filters are status, case-insensitive search over code/name/city, optional city and countryCode; sort is allowlisted and page size is limited to 100. ADMIN and RECEPTIONIST may read. No organization selector or branch scope is accepted.",
+        "operationId": "findAll_8",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "ACTIVE or INACTIVE",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "Case-insensitive search over code, name and city",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "city",
+            "in": "query",
+            "description": "Exact normalized city filter",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "Two-letter ISO 3166 country filter",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "format": "int32", "default": 0 }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "format": "int32", "default": 25 }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "CODE, NAME, CITY, CREATED_AT or UPDATED_AT",
+            "required": false,
+            "schema": { "type": "string", "default": "CODE" }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "description": "ASC or DESC",
+            "required": false,
+            "schema": { "type": "string", "default": "ASC" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Branch page returned",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BranchPageResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid filter, pagination or sort",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchPageResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchPageResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "The authenticated role is not allowed",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchPageResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "sessionCookie": [] }]
+      },
+      "post": {
+        "tags": ["Gym branches"],
+        "summary": "Create a gym branch",
+        "description": "Requires an authenticated, active ADMIN whose current persisted staff scope is ORGANIZATION, a matching server principal, and a valid CSRF token. Creates an ACTIVE branch under the server-selected canonical organization. Organization, status, initial marker, actor and timestamps are server controlled. No active branch selection or branch assignment is required.",
+        "operationId": "create_5",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateBranchRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Branch created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid branch request",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Active ADMIN with persisted ORGANIZATION scope and valid CSRF are required. Stable codes: ACCESS_DENIED, CSRF_TOKEN_INVALID.",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "Canonical organization not found",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "409": {
+            "description": "Branch code conflict",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation failed or persisted administration authority could not be verified.",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "sessionCookie": [] }]
+      }
+    },
+    "/api/v1/branches/{id}": {
+      "get": {
+        "tags": ["Gym branches"],
+        "summary": "Get a gym branch",
+        "description": "Returns one canonical branch. ADMIN and RECEPTIONIST may read; the branch identifier is not a tenant or assignment selector.",
+        "operationId": "findById_6",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Branch returned",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "The authenticated role is not allowed",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "Branch not found",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "sessionCookie": [] }]
+      },
+      "put": {
+        "tags": ["Gym branches"],
+        "summary": "Update a gym branch",
+        "description": "Requires an authenticated, active ADMIN whose current persisted staff scope is ORGANIZATION, a matching server principal, and a valid CSRF token. Updates allowlisted detail and contact fields with an expected optimistic-lock version. Code, organization, status, initial marker, actor and timestamps are server controlled. No active branch selection is required.",
+        "operationId": "update_9",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateBranchRequest" }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Branch updated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid branch request",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Active ADMIN with persisted ORGANIZATION scope and valid CSRF are required. Stable codes: ACCESS_DENIED, CSRF_TOKEN_INVALID.",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "Branch not found",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "409": {
+            "description": "Version conflict",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation failed or persisted administration authority could not be verified.",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "sessionCookie": [] }]
+      }
+    },
+    "/api/v1/branches/{id}/activate": {
+      "post": {
+        "tags": ["Gym branches"],
+        "summary": "Activate a gym branch",
+        "description": "Requires an authenticated, active ADMIN whose current persisted staff scope is ORGANIZATION, a matching server principal, and a valid CSRF token. Requires a reason and expected version. The target status is selected by this route; the initial-branch invariant remains enforced.",
+        "operationId": "activate_3",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BranchStatusChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Branch activated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid lifecycle request",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Active ADMIN with persisted ORGANIZATION scope and valid CSRF are required. Stable codes: ACCESS_DENIED, CSRF_TOKEN_INVALID.",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "Branch not found",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "409": {
+            "description": "Version or lifecycle conflict",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation failed or persisted administration authority could not be verified.",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "sessionCookie": [] }]
+      }
+    },
+    "/api/v1/branches/{id}/deactivate": {
+      "post": {
+        "tags": ["Gym branches"],
+        "summary": "Deactivate a gym branch",
+        "description": "Requires an authenticated, active ADMIN whose current persisted staff scope is ORGANIZATION, a matching server principal, and a valid CSRF token. Requires a reason and expected version. The target status is selected by this route; the only active initial branch cannot be deactivated.",
+        "operationId": "deactivate_5",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid" }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BranchStatusChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Branch deactivated",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid lifecycle request",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Active ADMIN with persisted ORGANIZATION scope and valid CSRF are required. Stable codes: ACCESS_DENIED, CSRF_TOKEN_INVALID.",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "404": {
+            "description": "Branch not found",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "409": {
+            "description": "Version or lifecycle conflict",
+            "content": {
+              "*/*": {
+                "schema": { "$ref": "#/components/schemas/BranchResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation failed or persisted administration authority could not be verified.",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "sessionCookie": [] }]
+      }
+    },
+    "/api/v1/me/branch-context": {
+      "get": {
+        "tags": ["Active branch context"],
+        "summary": "Get the authenticated branch context",
+        "description": "Returns the server-authoritative organization scope, current active branch and active branches available to the authenticated ADMIN or RECEPTIONIST. The selected branch never grants authorization by itself.",
+        "operationId": "get",
+        "responses": {
+          "200": {
+            "description": "Branch context returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "Password change required before reading operational context",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          },
+          "409": {
+            "description": "Selected branch is no longer available",
+            "content": {
+              "application/problem+json": {
+                "schema": { "$ref": "#/components/schemas/ApiProblemResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "sessionCookie": [] }]
+      },
+      "put": {
+        "tags": ["Active branch context"],
+        "summary": "Select an active branch",
+        "description": "Validates the branch against current active assignments and branch status before storing only its ID in the server-side session. Requires CSRF; the client-supplied ID is never trusted as authorization.",
+        "operationId": "select",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectActiveBranchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Branch context selected",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid branch selection",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Valid CSRF token required",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Branch is inactive or unauthorized",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffBranchContextResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "sessionCookie": [] }]
+      },
+      "delete": {
+        "tags": ["Active branch context"],
+        "summary": "Clear the active branch",
+        "description": "Clears only the server-side branch preference. It does not revoke any assignment and requires CSRF.",
+        "operationId": "clear",
+        "responses": {
+          "204": { "description": "Active branch cleared" },
+          "401": { "description": "Authentication required" },
+          "403": { "description": "Valid CSRF token required" }
+        },
+        "security": [{ "sessionCookie": [] }]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "OrganizationResponse": {
+        "type": "object",
+        "description": "Canonical organization. Contact and legal fields are returned only to ADMIN sessions.",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "code": { "type": "string" },
+          "legalName": { "type": "string" },
+          "brandName": { "type": "string" },
+          "supportEmail": { "type": "string" },
+          "supportPhone": { "type": "string" },
+          "defaultTimezone": { "type": "string" },
+          "defaultCurrency": { "type": "string" },
+          "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+          "version": { "type": "integer", "format": "int64" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "BranchPageResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/BranchResponse" }
+          },
+          "page": { "type": "integer", "format": "int32" },
+          "size": { "type": "integer", "format": "int32" },
+          "totalElements": { "type": "integer", "format": "int64" },
+          "totalPages": { "type": "integer", "format": "int32" }
+        }
+      },
+      "BranchResponse": {
+        "type": "object",
+        "description": "Canonical gym branch detail without future assignment or tenant fields.",
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "addressLine1": { "type": "string" },
+          "addressLine2": { "type": "string" },
+          "city": { "type": "string" },
+          "stateOrDepartment": { "type": "string" },
+          "postalCode": { "type": "string" },
+          "countryCode": { "type": "string" },
+          "phone": { "type": "string" },
+          "email": { "type": "string" },
+          "timezone": { "type": "string" },
+          "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+          "initialBranch": { "type": "boolean" },
+          "version": { "type": "integer", "format": "int64" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateBranchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Branch identity, address and contact fields. Organization, status, initial marker, actor and timestamps are server controlled.",
+        "properties": {
+          "code": { "type": "string", "maxLength": 32, "minLength": 0 },
+          "name": { "type": "string", "maxLength": 160, "minLength": 0 },
+          "addressLine1": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          },
+          "addressLine2": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          },
+          "city": { "type": "string", "maxLength": 120, "minLength": 0 },
+          "stateOrDepartment": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "postalCode": { "type": "string", "maxLength": 32, "minLength": 0 },
+          "countryCode": { "type": "string", "maxLength": 2, "minLength": 2 },
+          "phone": { "type": "string", "maxLength": 32, "minLength": 0 },
+          "email": { "type": "string", "maxLength": 254, "minLength": 0 },
+          "timezone": { "type": "string", "maxLength": 64, "minLength": 0 }
+        },
+        "required": ["code", "name"]
+      },
+      "ApiProblemResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "RFC 9457 error response with stable Coach Gym code and timestamp extensions.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "Problem type identifier."
+          },
+          "title": { "type": "string", "description": "HTTP reason phrase." },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "description": "HTTP status code."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Safe problem description."
+          },
+          "instance": {
+            "type": "string",
+            "format": "uri",
+            "description": "Request URI when available."
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable application error code."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Time the problem was created."
+          },
+          "correlationId": {
+            "type": "string",
+            "description": "Request correlation identifier when available."
+          }
+        },
+        "required": ["code", "detail", "status", "timestamp", "title", "type"]
+      },
+      "UpdateBranchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Editable branch detail and optimistic-lock version. Code, organization, status, initial marker, actor and timestamps are server controlled.",
+        "properties": {
+          "name": { "type": "string", "maxLength": 160, "minLength": 0 },
+          "addressLine1": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          },
+          "addressLine2": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 0
+          },
+          "city": { "type": "string", "maxLength": 120, "minLength": 0 },
+          "stateOrDepartment": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 0
+          },
+          "postalCode": { "type": "string", "maxLength": 32, "minLength": 0 },
+          "countryCode": { "type": "string", "maxLength": 2, "minLength": 2 },
+          "phone": { "type": "string", "maxLength": 32, "minLength": 0 },
+          "email": { "type": "string", "maxLength": 254, "minLength": 0 },
+          "timezone": { "type": "string", "maxLength": 64, "minLength": 0 },
+          "version": { "type": "integer", "format": "int64" }
+        },
+        "required": ["name", "version"]
+      },
+      "BranchStatusChangeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Reason and current branch version for activation or deactivation. The target status is selected by the endpoint.",
+        "properties": {
+          "reason": { "type": "string", "maxLength": 1000, "minLength": 0 },
+          "version": { "type": "integer", "format": "int64" }
+        },
+        "required": ["reason", "version"]
+      },
+      "StaffBranchContextResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "organizationId": { "type": "string", "format": "uuid" },
+          "scopeType": { "type": "string", "enum": ["ORGANIZATION", "BRANCH"] },
+          "activeBranch": {
+            "$ref": "#/components/schemas/NullableAuthorizedBranchSummary",
+            "description": "Present with null when no active branch is selected."
+          },
+          "availableBranches": {
+            "type": "array",
+            "description": "Non-null active branches available to the authenticated staff account.",
+            "items": { "$ref": "#/components/schemas/AuthorizedBranchSummary" }
+          }
+        },
+        "required": [
+          "activeBranch",
+          "availableBranches",
+          "organizationId",
+          "scopeType"
+        ]
+      },
+      "NullableAuthorizedBranchSummary": {
+        "anyOf": [
+          { "$ref": "#/components/schemas/AuthorizedBranchSummary" },
+          { "$ref": "#/components/schemas/OpenApiNullValue" }
+        ]
+      },
+      "AuthorizedBranchSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "organizationId": { "type": "string", "format": "uuid" },
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "timezone": { "type": "string" },
+          "initialBranch": { "type": "boolean" }
+        },
+        "required": [
+          "code",
+          "id",
+          "initialBranch",
+          "name",
+          "organizationId",
+          "timezone"
+        ]
+      },
+      "OpenApiNullValue": { "type": "null" },
+      "SelectActiveBranchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "branchId": { "type": "string", "format": "uuid" } },
+        "required": ["branchId"]
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "description": "Server-side authenticated\nsession established by\nPOST /api/v1/auth/login.\n",
+        "name": "JSESSIONID",
+        "in": "cookie"
+      }
+    }
+  }
+}

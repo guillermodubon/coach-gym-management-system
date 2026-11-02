@@ -42,6 +42,9 @@ describe("ThemeProvider", () => {
 
     expect(screen.getByText("dark:system")).toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    expect(document.documentElement).toHaveStyle({
+      "--cg-color-text-secondary": "#A1A1AA",
+    });
   });
 
   it("honors an explicit preference and toggles with an accessible label", async () => {
@@ -56,6 +59,9 @@ describe("ThemeProvider", () => {
     expect(screen.getByText("dark:dark")).toBeInTheDocument();
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("dark");
     expect(document.documentElement).toHaveStyle({ colorScheme: "dark" });
+    expect(document.documentElement).toHaveStyle({
+      "--cg-color-text-secondary": "#A1A1AA",
+    });
     expect(
       screen.getByRole("button", { name: "Activar tema claro" }),
     ).toBeInTheDocument();

@@ -2,7 +2,7 @@ import process from "node:process";
 import { log } from "node:console";
 import { writeFile, mkdir } from "node:fs/promises";
 import prettier from "prettier";
-import { projectF01, projectF02 } from "./scope.mjs";
+import { projectF01, projectF02, projectF03 } from "./scope.mjs";
 
 const argumentsList = process.argv.slice(2);
 let urlArgument;
@@ -10,8 +10,11 @@ let scope = "f01";
 let scopeSeen = false;
 for (const argument of argumentsList) {
   if (argument.startsWith("--scope=")) {
-    if (scopeSeen || !["--scope=f01", "--scope=f02"].includes(argument))
-      throw new Error("Elige un único scope: f01 o f02.");
+    if (
+      scopeSeen ||
+      !["--scope=f01", "--scope=f02", "--scope=f03"].includes(argument)
+    )
+      throw new Error("Elige un único scope: f01, f02 o f03.");
     scopeSeen = true;
     scope = argument.slice("--scope=".length);
   } else if (!urlArgument && !argument.startsWith("--")) {
@@ -41,7 +44,7 @@ const response = await fetch(source, {
 });
 if (!response.ok)
   throw new Error("No se pudo obtener OpenAPI del backend aislado.");
-const project = scope === "f01" ? projectF01 : projectF02;
+const project = { f01: projectF01, f02: projectF02, f03: projectF03 }[scope];
 const snapshot = project(await response.json());
 const directory = new URL("../../contracts/", import.meta.url);
 await mkdir(directory, { recursive: true });

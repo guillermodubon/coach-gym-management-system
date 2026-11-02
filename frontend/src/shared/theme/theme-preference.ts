@@ -60,6 +60,7 @@ export function applyThemeToDocument(
   root.style.colorScheme = mode;
   root.style.setProperty("--cg-color-primary", colors.primary);
   root.style.setProperty("--cg-color-text", colors.text);
+  root.style.setProperty("--cg-color-text-secondary", colors.textSecondary);
   root.style.setProperty("--cg-layout-background", colors.layout);
   root.style.setProperty("--cg-container-background", colors.container);
   root.style.setProperty("--cg-border-color", colors.border);

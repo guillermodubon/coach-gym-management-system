@@ -161,7 +161,7 @@ test("requires a server session, logs in once, and explicitly logs out", async (
       .evaluate((avatar) => getComputedStyle(avatar, "::after").content),
   ).toBe('"OR"');
   await expect(
-    page.getByRole("group", {
+    page.locator('[data-branch-context-control="header"]').getByRole("group", {
       name: "Ámbito de organización · Sin sucursal activa",
     }),
   ).toBeVisible();

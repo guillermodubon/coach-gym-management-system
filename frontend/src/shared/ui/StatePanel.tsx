@@ -9,6 +9,9 @@ export interface StatePanelProps {
   title: string;
   description?: string;
   action?: ReactNode;
+  headingId?: string;
+  headingLevel?: 1 | 2 | 3 | 4 | 5;
+  headingTabIndex?: number;
 }
 
 export function StatePanel({
@@ -16,6 +19,9 @@ export function StatePanel({
   title,
   description,
   action,
+  headingId,
+  headingLevel = 2,
+  headingTabIndex,
 }: StatePanelProps) {
   if (variant === "error") {
     return (
@@ -42,7 +48,15 @@ export function StatePanel({
       variant="outlined"
     >
       <div className="cg-state-panel-stack">
-        <Typography.Title level={2}>{title}</Typography.Title>
+        <Typography.Title
+          {...(headingId === undefined ? {} : { id: headingId })}
+          level={headingLevel}
+          {...(headingTabIndex === undefined
+            ? {}
+            : { tabIndex: headingTabIndex })}
+        >
+          {title}
+        </Typography.Title>
         {description ? (
           <Typography.Paragraph>{description}</Typography.Paragraph>
         ) : null}

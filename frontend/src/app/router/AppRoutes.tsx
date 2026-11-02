@@ -21,6 +21,12 @@ import { PublicIdentityBoundary } from "../../features/identity/PublicIdentityBo
 import { PasswordRecoveryRequestPage } from "../../features/identity/PasswordRecoveryRequestPage";
 import { PasswordRecoveryCompletionPage } from "../../features/identity/PasswordRecoveryCompletionPage";
 import { InvitationAcceptancePage } from "../../features/identity/InvitationAcceptancePage";
+import { OrganizationPage } from "../../features/organization/OrganizationPage";
+import { BranchCatalogPage } from "../../features/organization/BranchCatalogPage";
+import { BranchDetailPage } from "../../features/organization/BranchDetailPage";
+import { BranchEditorPage } from "../../features/organization/BranchEditorPage";
+import { BranchEditorProvider } from "../../features/organization/BranchEditorProvider";
+import { BranchStatusProvider } from "../../features/organization/BranchStatusProvider";
 import { usePublicIdentityRuntime } from "../../features/identity/PublicIdentityProvider";
 import { AuthenticatedShell } from "../layouts/AuthenticatedShell";
 import { RouteFocusManager } from "./RouteFocusManager";
@@ -47,8 +53,12 @@ function ApplicationRouteRoot() {
   return (
     <AccountProfileProvider>
       <ProfilePhotoProvider>
-        <RouteFocusManager />
-        <Outlet />
+        <BranchEditorProvider>
+          <BranchStatusProvider>
+            <RouteFocusManager />
+            <Outlet />
+          </BranchStatusProvider>
+        </BranchEditorProvider>
       </ProfilePhotoProvider>
     </AccountProfileProvider>
   );
@@ -126,6 +136,17 @@ export function createAppRouteObjects(): RouteObject[] {
           ),
           children: [
             { index: true, element: <HomePage /> },
+            { path: "organizacion", element: <OrganizationPage /> },
+            { path: "sucursales", element: <BranchCatalogPage /> },
+            {
+              path: "sucursales/nueva",
+              element: <BranchEditorPage mode="create" />,
+            },
+            {
+              path: "sucursales/:branchId/editar",
+              element: <BranchEditorPage mode="update" />,
+            },
+            { path: "sucursales/:branchId", element: <BranchDetailPage /> },
             { path: "mi-perfil", element: <ProfilePage /> },
             { path: "mi-cuenta", element: <AccountSettingsPage /> },
           ],

@@ -6,6 +6,7 @@ import { ApiServicesProvider } from "../shared/api/ApiServicesProvider";
 import { createQueryClient } from "../shared/api/query-client";
 import { ThemeProvider } from "../shared/theme/ThemeProvider";
 import { PublicIdentityProvider } from "../features/identity/PublicIdentityProvider";
+import { ContextChangeGuardProvider } from "../features/branch-context/ContextChangeGuardProvider";
 import {
   emptyPublicIdentityRuntime,
   type PublicIdentityRuntime,
@@ -23,7 +24,9 @@ export function AppProviders({
           <PublicIdentityProvider
             runtime={publicIdentityRuntime ?? emptyPublicIdentityRuntime}
           >
-            <AuthProvider queryClient={queryClient}>{children}</AuthProvider>
+            <ContextChangeGuardProvider>
+              <AuthProvider queryClient={queryClient}>{children}</AuthProvider>
+            </ContextChangeGuardProvider>
           </PublicIdentityProvider>
         </ThemeProvider>
       </ApiServicesProvider>

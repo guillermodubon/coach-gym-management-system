@@ -17,6 +17,15 @@ export const f02Operations = {
   "/api/v1/staff-invitations/accept": ["post"],
 };
 
+export const f03Operations = {
+  "/api/v1/organization": "get",
+  "/api/v1/branches": ["get", "post"],
+  "/api/v1/branches/{id}": ["get", "put"],
+  "/api/v1/branches/{id}/activate": ["post"],
+  "/api/v1/branches/{id}/deactivate": ["post"],
+  "/api/v1/me/branch-context": ["get", "put", "delete"],
+};
+
 function projectScope(source, title, description, operations) {
   if (!source?.openapi?.startsWith("3.") || !source.info?.version) {
     throw new Error("Se requiere un documento OpenAPI 3 válido.");
@@ -96,8 +105,18 @@ export function projectF02(source) {
   );
 }
 
+/** Project actual Springdoc output without strengthening backend schemas. */
+export function projectF03(source) {
+  return projectScope(
+    source,
+    "Coach Gym - F03 HTTP contracts",
+    "Proyección de las diez operaciones H01-H10 de F03 desde Springdoc. Los esquemas conservan la forma exportada por el backend.",
+    f03Operations,
+  );
+}
+
 export function validateSnapshot(snapshot, scope = "f01") {
-  const projectors = { f01: projectF01, f02: projectF02 };
+  const projectors = { f01: projectF01, f02: projectF02, f03: projectF03 };
   const project = projectors[scope];
   if (!project) throw new Error("El scope del contrato debe ser f01 o f02.");
   if (JSON.stringify(project(snapshot)) !== JSON.stringify(snapshot)) {

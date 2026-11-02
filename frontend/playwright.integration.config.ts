@@ -19,7 +19,9 @@ if (
   !process.env.CG_E2E_DB_PASSWORD ||
   !process.env.CG_E2E_INITIAL_BRANCH_ID ||
   !process.env.CG_E2E_SECOND_BRANCH_ID ||
-  !process.env.CG_E2E_SECOND_BRANCH_NAME
+  !process.env.CG_E2E_SECOND_BRANCH_NAME ||
+  !process.env.CG_E2E_INACTIVE_BRANCH_ID ||
+  !process.env.CG_E2E_INACTIVE_BRANCH_NAME
 ) {
   throw new Error(
     "Run this Playwright project only through test:e2e:integration.",
@@ -76,6 +78,11 @@ export default defineConfig({
     {
       name: "f02",
       testMatch: "f02.integration.spec.ts",
+      use: { browserName: "chromium" },
+    },
+    {
+      name: "f03",
+      testMatch: "f03.integration.spec.ts",
       use: { browserName: "chromium" },
     },
     {

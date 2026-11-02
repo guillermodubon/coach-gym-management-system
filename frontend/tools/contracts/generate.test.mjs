@@ -17,7 +17,7 @@ import { basename, dirname, join } from "node:path";
 import process from "node:process";
 import { test } from "node:test";
 
-const outputs = ["schema.d.ts", "f02-schema.d.ts"];
+const outputs = ["schema.d.ts", "f02-schema.d.ts", "f03-schema.d.ts"];
 
 async function createFixture(context) {
   const ownedRoot = await realpath(tmpdir());
@@ -39,7 +39,11 @@ async function createFixture(context) {
   for (const file of ["generate.mjs", "scope.mjs"]) {
     await copyFile(new URL(file, import.meta.url), join(tools, file));
   }
-  for (const file of ["f01.openapi.json", "f02.openapi.json"]) {
+  for (const file of [
+    "f01.openapi.json",
+    "f02.openapi.json",
+    "f03.openapi.json",
+  ]) {
     await copyFile(
       new URL(`../../contracts/${file}`, import.meta.url),
       join(root, "contracts", file),
@@ -123,6 +127,26 @@ test("check still validates F02 when generated files are absent", async (context
   assert.equal(result.status, 1);
   assert.ok(
     result.stderr.includes("Falta la operación get /api/v1/me/profile."),
+  );
+  assert.equal(await readFile(snapshot, "utf8"), invalid);
+  await assert.rejects(stat(fixture.generated), { code: "ENOENT" });
+});
+
+test("check still validates F03 when generated files are absent", async (context) => {
+  const fixture = await createFixture(context);
+  const snapshot = join(fixture.root, "contracts", "f03.openapi.json");
+  const document = JSON.parse(await readFile(snapshot, "utf8"));
+  delete document.paths["/api/v1/branches/{id}/activate"];
+  const invalid = JSON.stringify(document);
+  await writeFile(snapshot, invalid, "utf8");
+
+  const result = fixture.run("--check");
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 1);
+  assert.ok(
+    result.stderr.includes(
+      "Falta la operación post /api/v1/branches/{id}/activate.",
+    ),
   );
   assert.equal(await readFile(snapshot, "utf8"), invalid);
   await assert.rejects(stat(fixture.generated), { code: "ENOENT" });

@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { ApiClient } from "../../shared/api/client";
 import { clearPrivateData } from "../../shared/api/query-client";
+import { ApiError as SafeApiError } from "../../shared/api/errors";
 import type { ApiError } from "../../shared/api/errors";
 import { createIdentityApi } from "../../shared/api/identity";
 import type {
@@ -8,13 +9,22 @@ import type {
   LoginRequest,
   PasswordChangeResult,
 } from "../../shared/api/contracts";
+import type {
+  ContextChangeGuard,
+  ContextChangeLease,
+} from "../branch-context/context-change-guard";
+import { createBranchContextTransitionCoordinator } from "../branch-context/branch-context-transition";
+import type {
+  BranchContextTransitionTicket,
+  BranchContextTransitionNotice,
+} from "../branch-context/branch-context-transition";
 import { validateAuthority } from "./auth-model";
 import type { AuthSnapshot, AuthState, MutationTicket } from "./auth-model";
 import type { SessionEvents, VisibilityEvents } from "./session-events";
 
 type IdentityApi = ReturnType<typeof createIdentityApi>;
 type RevalidationReason =
-  "initial" | "focus" | "visible" | "manual" | "external";
+  "initial" | "focus" | "visible" | "manual" | "external" | "branch-context";
 
 export interface AuthControllerDependencies {
   apiClient: ApiClient;
@@ -23,6 +33,7 @@ export interface AuthControllerDependencies {
   now: () => number;
   visibilityEvents: VisibilityEvents;
   sessionEvents: SessionEvents;
+  contextChangeGuard: ContextChangeGuard;
 }
 
 export interface AuthController {
@@ -30,6 +41,10 @@ export interface AuthController {
   getSnapshot(): AuthSnapshot;
   start(): () => void;
   revalidate(reason: RevalidationReason): Promise<void>;
+  notifySessionChange(): void;
+  selectBranchContext(branchId: string): Promise<void>;
+  clearBranchContext(): Promise<void>;
+  reconcileBranchContext(): Promise<void>;
   beginCredentialAction(
     kind: "login" | "password",
   ): Promise<MutationTicket | null>;
@@ -55,6 +70,14 @@ export interface AuthController {
 
 const identityKey = ["private", "identity"] as const;
 const focusThrottleMs = 5_000;
+const branchIdPattern = /^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i;
+
+interface ActiveBranchContextAction {
+  readonly ticket: BranchContextTransitionTicket;
+  readonly lease: ContextChangeLease;
+  readonly abortController: AbortController;
+  reconciliationPromise?: Promise<void>;
+}
 
 function isHttpError(error: unknown, status: number, code?: string): boolean {
   return (
@@ -156,14 +179,18 @@ export function createAuthController({
   now,
   visibilityEvents,
   sessionEvents,
+  contextChangeGuard,
 }: AuthControllerDependencies): AuthController {
   const listeners = new Set<() => void>();
+  const branchContextTransition = createBranchContextTransitionCoordinator();
   let snapshot: AuthSnapshot = Object.freeze<AuthSnapshot>({
     state: { kind: "checking" },
     pendingAction: null,
     error: null,
     notice: null,
     privacyCovered: true,
+    contextEpoch: 0,
+    branchContextTransition: branchContextTransition.getSnapshot(),
     revision: 0,
   });
   let mounted = false;
@@ -176,6 +203,7 @@ export function createAuthController({
   let activeTicket: MutationTicket | undefined;
   let logoutSequence = 0;
   let activeLogout: number | undefined;
+  let activeBranchContextAction: ActiveBranchContextAction | undefined;
   let unsubscribeRuntime: (() => void) | undefined;
   let deferredRevalidation = false;
   let needsVisibleRevalidation = false;
@@ -366,6 +394,7 @@ export function createAuthController({
     user: Awaited<ReturnType<typeof identityApi.currentUser>>,
     generation: number,
     reason: RevalidationReason | "after-login",
+    options: { preserveBranchAction?: boolean } = {},
   ): Promise<void> {
     if (!generationIsCurrent(generation)) return;
     const validation = validateAuthority(user);
@@ -376,7 +405,10 @@ export function createAuthController({
     }
 
     const previousUser = validatedUser ?? stateUser(snapshot.state);
-    if (previousUser && !sameIdentity(previousUser, user)) {
+    const identityChanged = Boolean(
+      previousUser && !sameIdentity(previousUser, user),
+    );
+    if (identityChanged) {
       coverPrivateStateForCheck();
       await clearPrivateData(queryClient, apiClient);
       if (!generationIsCurrent(generation)) return;
@@ -390,10 +422,11 @@ export function createAuthController({
       state: immutable.passwordChangeRequired
         ? { kind: "password-required", user: immutable }
         : { kind: "authenticated", user: immutable },
-      pendingAction: null,
+      pendingAction: options.preserveBranchAction ? "branch-context" : null,
       error: null,
       notice: null,
-      privacyCovered: hidden,
+      privacyCovered: options.preserveBranchAction || hidden,
+      ...(identityChanged ? { contextEpoch: snapshot.contextEpoch + 1 } : {}),
     });
     if (reason === "after-login") sessionEvents.publish();
   }
@@ -412,6 +445,20 @@ export function createAuthController({
   }
 
   function revalidate(reason: RevalidationReason): Promise<void> {
+    if (reason === "focus") {
+      const currentTime = now();
+      if (currentTime - lastFocusAt < focusThrottleMs) return Promise.resolve();
+      lastFocusAt = currentTime;
+    }
+    if (
+      branchContextTransition.getSnapshot().status === "uncertain" &&
+      (reason === "focus" ||
+        reason === "visible" ||
+        reason === "manual" ||
+        reason === "external")
+    ) {
+      return reconcileBranchContext();
+    }
     if (
       snapshot.pendingAction !== null ||
       (manualOnlyRevalidation && reason !== "manual") ||
@@ -425,11 +472,6 @@ export function createAuthController({
     if (readPromise) {
       if (reason === "focus" || !backgroundFocusRead) return readPromise;
       invalidateRead();
-    }
-    if (reason === "focus") {
-      const currentTime = now();
-      if (currentTime - lastFocusAt < focusThrottleMs) return Promise.resolve();
-      lastFocusAt = currentTime;
     }
     const generation = ++readGeneration;
     const controller = new AbortController();
@@ -460,6 +502,305 @@ export function createAuthController({
     );
     readPromise = promise;
     return promise;
+  }
+
+  function isCurrentBranchContextAction(
+    action: ActiveBranchContextAction,
+  ): boolean {
+    return (
+      activeBranchContextAction === action &&
+      branchContextTransition.isCurrent(action.ticket) &&
+      !action.abortController.signal.aborted
+    );
+  }
+
+  function releaseBranchContextAction(action: ActiveBranchContextAction): void {
+    if (activeBranchContextAction === action) {
+      activeBranchContextAction = undefined;
+    }
+    action.lease.release();
+  }
+
+  function cancelActiveBranchContextAction(): void {
+    const action = activeBranchContextAction;
+    if (!action) return;
+    action.abortController.abort();
+    branchContextTransition.cancel(action.ticket);
+    releaseBranchContextAction(action);
+  }
+
+  function finishBranchContextOnSecurityState(
+    action: ActiveBranchContextAction,
+  ): void {
+    if (!isCurrentBranchContextAction(action)) return;
+    branchContextTransition.clear();
+    releaseBranchContextAction(action);
+    publish({
+      pendingAction: null,
+      branchContextTransition: branchContextTransition.getSnapshot(),
+    });
+    finishDeferredRevalidation();
+  }
+
+  async function markBranchContextUncertain(
+    action: ActiveBranchContextAction,
+    error: ApiError | null,
+    broadcast: boolean,
+  ): Promise<void> {
+    if (!isCurrentBranchContextAction(action)) return;
+    await clearPrivateData(queryClient, apiClient);
+    if (!isCurrentBranchContextAction(action)) return;
+    branchContextTransition.markUncertain(action.ticket, error);
+    manualOnlyRevalidation = true;
+    publish({
+      state: {
+        kind: "unavailable",
+        reason: "branch-context-unknown",
+        sessionMayExist: true,
+      },
+      pendingAction: null,
+      error,
+      notice: null,
+      privacyCovered: false,
+      branchContextTransition: branchContextTransition.getSnapshot(),
+    });
+    if (broadcast) sessionEvents.publish();
+    finishDeferredRevalidation();
+  }
+
+  function isSessionReconciliationFailure(error: unknown): boolean {
+    const apiError = safeApiError(error);
+    return Boolean(
+      apiError &&
+      (apiError.status === 401 ||
+        apiError.status === 403 ||
+        (apiError.status === 409 &&
+          apiError.code === "ACTIVE_BRANCH_UNAVAILABLE") ||
+        apiError.clientReason === "unsupported-authority"),
+    );
+  }
+
+  async function runBranchContextReconciliation(
+    action: ActiveBranchContextAction,
+    outcome: "success" | "failure" | "manual",
+    mutationError: ApiError | null = null,
+  ): Promise<void> {
+    if (!isCurrentBranchContextAction(action)) return;
+    branchContextTransition.setStatus(action.ticket, "reconciling");
+    const generation = ++readGeneration;
+    const readController = new AbortController();
+    readAbort = readController;
+    publish({
+      state: { kind: "checking" },
+      pendingAction: "branch-context",
+      error: null,
+      privacyCovered: true,
+      branchContextTransition: branchContextTransition.getSnapshot(),
+    });
+
+    try {
+      const user = await fetchUserWithBranchRetry(
+        combineSignals(action.abortController.signal, readController.signal),
+      );
+      if (!isCurrentBranchContextAction(action)) return;
+      await acceptUser(user, generation, "branch-context", {
+        preserveBranchAction: true,
+      });
+      if (!isCurrentBranchContextAction(action)) return;
+
+      const confirmedUser = stateUser(snapshot.state);
+      if (!confirmedUser) {
+        finishBranchContextOnSecurityState(action);
+        return;
+      }
+
+      if (outcome === "failure" && confirmedUser.id === action.ticket.actorId) {
+        branchContextTransition.fail(
+          action.ticket,
+          mutationError ?? new SafeApiError("invalid-response"),
+        );
+      } else {
+        const requestedBranchIsEffective =
+          action.ticket.operation === "select" &&
+          confirmedUser.activeBranch?.id === action.ticket.requestedBranchId;
+        const notice: BranchContextTransitionNotice =
+          outcome === "manual" ||
+          action.ticket.operation === "clear" ||
+          confirmedUser.id !== action.ticket.actorId
+            ? "context-reconciled"
+            : requestedBranchIsEffective
+              ? "context-confirmed"
+              : "effective-context-differs";
+        branchContextTransition.complete(action.ticket, notice);
+      }
+
+      releaseBranchContextAction(action);
+      publish({
+        pendingAction: null,
+        error:
+          outcome === "failure" && confirmedUser.id === action.ticket.actorId
+            ? mutationError
+            : null,
+        privacyCovered: hidden,
+        branchContextTransition: branchContextTransition.getSnapshot(),
+      });
+      finishDeferredRevalidation();
+    } catch (caught) {
+      if (!isCurrentBranchContextAction(action)) return;
+      if (isSessionReconciliationFailure(caught)) {
+        await handleReadError(caught, generation, "branch-context");
+        if (isCurrentBranchContextAction(action)) {
+          finishBranchContextOnSecurityState(action);
+        }
+        return;
+      }
+      await markBranchContextUncertain(
+        action,
+        safeApiError(caught) ?? mutationError,
+        false,
+      );
+    } finally {
+      if (readGeneration === generation && readAbort === readController) {
+        readAbort = undefined;
+      }
+    }
+  }
+
+  async function runBranchContextMutation(
+    operation: "select" | "clear",
+    requestedBranchId: string | null,
+  ): Promise<void> {
+    const user =
+      snapshot.state.kind === "authenticated" ? snapshot.state.user : null;
+    if (
+      !mounted ||
+      !user ||
+      hidden ||
+      !visibilityEvents.isVisible() ||
+      snapshot.pendingAction !== null ||
+      snapshot.privacyCovered ||
+      activeBranchContextAction
+    ) {
+      return;
+    }
+
+    if (operation === "select") {
+      if (
+        !requestedBranchId ||
+        !branchIdPattern.test(requestedBranchId) ||
+        !user.availableBranches.some(({ id }) => id === requestedBranchId)
+      ) {
+        return;
+      }
+      if (user.activeBranch?.id === requestedBranchId) {
+        branchContextTransition.setIdleNotice("context-unchanged");
+        publish({
+          branchContextTransition: branchContextTransition.getSnapshot(),
+        });
+        return;
+      }
+    }
+
+    const admission = contextChangeGuard.tryAcquireContextChange();
+    if (!admission.acquired) {
+      branchContextTransition.block(admission.reason);
+      publish({
+        branchContextTransition: branchContextTransition.getSnapshot(),
+      });
+      return;
+    }
+
+    invalidateRead();
+    const ticket = branchContextTransition.begin({
+      actorId: user.id,
+      contextEpoch: snapshot.contextEpoch,
+      previousBranchId: user.activeBranch?.id ?? null,
+      requestedBranchId,
+      operation,
+    });
+    if (!ticket) {
+      admission.lease.release();
+      return;
+    }
+
+    const action: ActiveBranchContextAction = {
+      ticket,
+      lease: admission.lease,
+      abortController: new AbortController(),
+    };
+    activeBranchContextAction = action;
+    publish({
+      pendingAction: "branch-context",
+      error: null,
+      notice: null,
+      privacyCovered: true,
+      branchContextTransition: branchContextTransition.getSnapshot(),
+    });
+
+    await clearPrivateData(queryClient, apiClient);
+    if (!isCurrentBranchContextAction(action)) return;
+
+    try {
+      if (operation === "select" && requestedBranchId) {
+        await identityApi.selectBranchContext(requestedBranchId, {
+          signal: action.abortController.signal,
+        });
+      } else {
+        await identityApi.clearBranchContext({
+          signal: action.abortController.signal,
+        });
+      }
+      if (!isCurrentBranchContextAction(action)) return;
+      sessionEvents.publish();
+      await runBranchContextReconciliation(action, "success");
+    } catch (caught) {
+      if (!isCurrentBranchContextAction(action)) return;
+      const error = safeApiError(caught);
+      if (
+        !error ||
+        error.kind === "cancelled" ||
+        error.kind === "network" ||
+        error.kind === "timeout" ||
+        error.kind === "invalid-response" ||
+        (error.status ?? 0) >= 500
+      ) {
+        await markBranchContextUncertain(action, error, true);
+        return;
+      }
+      await runBranchContextReconciliation(action, "failure", error);
+    }
+  }
+
+  function selectBranchContext(branchId: string): Promise<void> {
+    return runBranchContextMutation("select", branchId);
+  }
+
+  function clearBranchContext(): Promise<void> {
+    return runBranchContextMutation("clear", null);
+  }
+
+  function reconcileBranchContext(): Promise<void> {
+    const action = activeBranchContextAction;
+    if (
+      !action ||
+      !isCurrentBranchContextAction(action) ||
+      branchContextTransition.getSnapshot().status !== "uncertain"
+    ) {
+      return Promise.resolve();
+    }
+    if (action.reconciliationPromise) return action.reconciliationPromise;
+
+    const promise = runBranchContextReconciliation(action, "manual");
+    action.reconciliationPromise = promise;
+    return promise.finally(() => {
+      if (action.reconciliationPromise === promise) {
+        delete action.reconciliationPromise;
+      }
+    });
+  }
+
+  function notifySessionChange(): void {
+    sessionEvents.publish();
   }
 
   async function beginCredentialAction(
@@ -785,11 +1126,15 @@ export function createAuthController({
   }
 
   async function logout(): Promise<void> {
+    const contextTransitionActive = Boolean(activeBranchContextAction);
     if (
-      snapshot.pendingAction !== null ||
+      (snapshot.pendingAction !== null &&
+        !(
+          snapshot.pendingAction === "branch-context" && contextTransitionActive
+        )) ||
       now() < logoutRetryAt ||
       snapshot.state.kind === "anonymous" ||
-      snapshot.state.kind === "checking" ||
+      (snapshot.state.kind === "checking" && !contextTransitionActive) ||
       snapshot.state.kind === "signing-out"
     ) {
       return;
@@ -797,6 +1142,8 @@ export function createAuthController({
 
     const logoutId = ++logoutSequence;
     activeLogout = logoutId;
+    cancelActiveBranchContextAction();
+    branchContextTransition.clear();
     invalidateRead();
     manualOnlyRevalidation = true;
     publish({
@@ -805,6 +1152,8 @@ export function createAuthController({
       error: null,
       notice: null,
       privacyCovered: true,
+      contextEpoch: snapshot.contextEpoch + 1,
+      branchContextTransition: branchContextTransition.getSnapshot(),
     });
     hasConfirmedSession = false;
     validatedUser = null;
@@ -934,6 +1283,8 @@ export function createAuthController({
     return () => {
       if (!mounted) return;
       mounted = false;
+      cancelActiveBranchContextAction();
+      branchContextTransition.clear();
       invalidateRead();
       activeTicket = undefined;
       activeLogout = undefined;
@@ -950,6 +1301,10 @@ export function createAuthController({
     getSnapshot: () => snapshot,
     start,
     revalidate,
+    notifySessionChange,
+    selectBranchContext,
+    clearBranchContext,
+    reconcileBranchContext,
     beginCredentialAction,
     beginPublicIdentityAction,
     finishPublicIdentityAction,

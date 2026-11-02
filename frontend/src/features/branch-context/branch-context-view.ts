@@ -46,7 +46,7 @@ export function getBranchContextView(user: CurrentUser): BranchContextView {
         kind: "organization-with-branches",
         headline: "Ámbito de organización · Sin sucursal activa",
         description:
-          "Esta sesión tiene ámbito de organización. F01 no contiene operaciones que requieran elegir una sucursal.",
+          "Elige una sucursal cuando necesites trabajar con operaciones de una sede específica. La interfaz no selecciona una por su cuenta.",
         availableNames,
       };
     }
@@ -74,7 +74,7 @@ export function getBranchContextView(user: CurrentUser): BranchContextView {
   return {
     kind: "branch-without-selection",
     headline: "Sin sucursal activa",
-    description: `La sesión tiene ${count} ${count === 1 ? "sucursal" : "sucursales"} asignada${count === 1 ? "" : "s"}. La selección se incorpora en F03.`,
+    description: `La sesión tiene ${count} ${count === 1 ? "sucursal" : "sucursales"} asignada${count === 1 ? "" : "s"}. Elige la sucursal operativa para continuar.`,
     availableNames,
   };
 }

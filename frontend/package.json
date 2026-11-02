@@ -16,7 +16,7 @@
     "types:generate": "node tools/contracts/generate.mjs",
     "types:check": "node tools/contracts/generate.mjs --check",
     "contracts:capture": "node tools/contracts/capture.mjs",
-    "typecheck": "npm run types:generate && tsc --build --pretty false",
+    "typecheck": "npm run types:generate && tsc --build --force --pretty false",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",

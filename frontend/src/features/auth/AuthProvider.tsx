@@ -9,6 +9,7 @@ import type {
   PasswordChangeResult,
 } from "../../shared/api/contracts";
 import type { ApiError } from "../../shared/api/errors";
+import { useContextChangeGuard } from "../branch-context/ContextChangeGuardProvider";
 import {
   createBrowserSessionEvents,
   createBrowserVisibilityEvents,
@@ -41,6 +42,10 @@ export interface AuthContextValue extends AuthSnapshot {
   failPasswordChange(ticket: MutationTicket, error: ApiError): Promise<void>;
   logout(): Promise<void>;
   revalidate(): Promise<void>;
+  notifySessionChange(): void;
+  selectBranchContext(branchId: string): Promise<void>;
+  clearBranchContext(): Promise<void>;
+  reconcileBranchContext(): Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -50,6 +55,7 @@ export function AuthProvider({
   queryClient,
 }: PropsWithChildren<{ queryClient: QueryClient }>) {
   const { apiClient, identityApi } = useApiServices();
+  const contextChangeGuard = useContextChangeGuard();
   const [controller] = useState(() => {
     const controller = createAuthController({
       apiClient,
@@ -58,6 +64,7 @@ export function AuthProvider({
       now: () => Date.now(),
       visibilityEvents: createBrowserVisibilityEvents(),
       sessionEvents: createBrowserSessionEvents(),
+      contextChangeGuard,
     });
     return controller;
   });
@@ -96,6 +103,11 @@ export function AuthProvider({
         controller.failPasswordChange(ticket, error),
       logout: () => controller.logout(),
       revalidate: () => controller.revalidate("manual"),
+      notifySessionChange: () => controller.notifySessionChange(),
+      selectBranchContext: (branchId) =>
+        controller.selectBranchContext(branchId),
+      clearBranchContext: () => controller.clearBranchContext(),
+      reconcileBranchContext: () => controller.reconcileBranchContext(),
     }),
     [controller, snapshot],
   );

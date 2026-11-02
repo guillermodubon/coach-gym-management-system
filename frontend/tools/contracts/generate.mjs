@@ -11,6 +11,11 @@ const contracts = [
     snapshot: "f02.openapi.json",
     output: "f02-schema.d.ts",
   },
+  {
+    scope: "f03",
+    snapshot: "f03.openapi.json",
+    output: "f03-schema.d.ts",
+  },
 ];
 const checkOnly = process.argv.slice(2).includes("--check");
 if (process.argv.slice(2).some((argument) => argument !== "--check")) {
@@ -53,6 +58,6 @@ for (const contract of contracts) {
 
 log(
   checkOnly
-    ? "Contratos F01/F02 y tipos reproducibles comprobados sin modificarlos."
-    : "Tipos F01/F02 generados sin acceso a red.",
+    ? "Contratos F01/F02/F03 y tipos reproducibles comprobados sin modificarlos."
+    : "Tipos F01/F02/F03 generados sin acceso a red.",
 );

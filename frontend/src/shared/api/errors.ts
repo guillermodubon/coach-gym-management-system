@@ -29,6 +29,37 @@ const problems = {
     409,
     "El contexto de sucursal no está disponible.",
   ],
+  ORGANIZATION_NOT_FOUND: [404, "La organización no está disponible."],
+  ORGANIZATION_DATA_ACCESS_FAILED: [
+    500,
+    "No se pudo consultar la organización.",
+  ],
+  ORGANIZATION_ADMINISTRATION_UNAVAILABLE: [
+    500,
+    "No se pudo verificar la autoridad administrativa.",
+  ],
+  GYM_BRANCH_VALIDATION_FAILED: [
+    400,
+    "Revisa los datos o filtros de sucursal.",
+  ],
+  GYM_BRANCH_NOT_FOUND: [404, "La sucursal no está disponible."],
+  GYM_BRANCH_CODE_CONFLICT: [409, "Ya existe una sucursal con ese código."],
+  GYM_BRANCH_VERSION_CONFLICT: [
+    409,
+    "La sucursal cambió. Actualiza sus datos antes de continuar.",
+  ],
+  GYM_BRANCH_INITIAL_PROTECTED: [
+    409,
+    "No se puede desactivar la única sucursal inicial activa.",
+  ],
+  GYM_BRANCH_STATE_CONFLICT: [
+    409,
+    "La sucursal ya no admite ese cambio de estado.",
+  ],
+  GYM_BRANCH_DATA_ACCESS_FAILED: [
+    500,
+    "No se pudo completar la operación de sucursal. Comprueba su estado antes de repetirla.",
+  ],
   STAFF_PROFILE_VERSION_CONFLICT: [
     409,
     "El perfil cambió. Actualiza su estado antes de continuar.",

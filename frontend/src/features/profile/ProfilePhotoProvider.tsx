@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ApiError } from "../../shared/api/errors";
 import { ApiError as SafeApiError } from "../../shared/api/errors";
 import { useApiServices } from "../../shared/api/ApiServicesProvider";
+import { useContextChangeGuard } from "../branch-context/ContextChangeGuardProvider";
 import { useAuth } from "../auth/useAuth";
 import { useAccountProfile } from "./AccountProfileProvider";
 import { validateProfilePhotoFile } from "./profile-photo-validation";
@@ -108,6 +109,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
   const auth = useAuth();
   const authRef = useRef(auth);
   authRef.current = auth;
+  const contextChangeGuard = useContextChangeGuard();
   const account = useAccountProfile();
   const { profileApi } = useApiServices();
   const [stagedPhoto, setStagedPhoto] = useState<StagedPhoto | null>(null);
@@ -116,8 +118,21 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
   const [notice, setNotice] = useState<string | null>(null);
   const [photoGeneration, setPhotoGeneration] = useState(0);
   const [reconciliationRequired, setReconciliationRequired] = useState(false);
+  const stagedPhotoRef = useRef(stagedPhoto);
+  stagedPhotoRef.current = stagedPhoto;
+  const reconciliationRequiredRef = useRef(reconciliationRequired);
+  reconciliationRequiredRef.current = reconciliationRequired;
   const lastActorId = useRef<string | null>(null);
   const lastRevalidationKey = useRef<string | null>(null);
+
+  useEffect(
+    () =>
+      contextChangeGuard.registerBlocker(
+        () =>
+          Boolean(stagedPhotoRef.current) || reconciliationRequiredRef.current,
+      ),
+    [contextChangeGuard],
+  );
 
   const authenticatedUserId =
     auth.state.kind === "authenticated" ? auth.state.user.id : null;
@@ -178,6 +193,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (auth.pendingAction !== "password") return;
     setStagedPhoto(null);
+    stagedPhotoRef.current = null;
     setValidationError(null);
     setWriteError(null);
     setNotice(null);
@@ -191,6 +207,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
       const currentId = auth.state.user.id;
       if (lastActorId.current && lastActorId.current !== currentId) {
         setStagedPhoto(null);
+        stagedPhotoRef.current = null;
         setValidationError(null);
         setWriteError(null);
         setNotice(null);
@@ -203,6 +220,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
 
     lastActorId.current = null;
     setStagedPhoto(null);
+    stagedPhotoRef.current = null;
     setValidationError(null);
     setWriteError(null);
     setNotice(null);
@@ -225,6 +243,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
       if (
         !userId ||
         !account.profile ||
+        contextChangeGuard.isContextChangeActive() ||
         account.dirty ||
         account.saving ||
         reconciliationRequired
@@ -237,7 +256,9 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      setStagedPhoto({ file, userId });
+      const staged = { file, userId };
+      stagedPhotoRef.current = staged;
+      setStagedPhoto(staged);
       setValidationError(null);
       setWriteError(null);
       setNotice(null);
@@ -246,6 +267,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
       account.dirty,
       account.profile,
       account.saving,
+      contextChangeGuard,
       reconciliationRequired,
       userId,
     ],
@@ -254,6 +276,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
   const discardSelection = useCallback(() => {
     if (account.saving) return;
     setStagedPhoto(null);
+    stagedPhotoRef.current = null;
     setValidationError(null);
     setWriteError(null);
     setNotice(null);
@@ -305,6 +328,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
   const canSelect = Boolean(
     userId &&
     account.profile &&
+    !contextChangeGuard.isContextChangeActive() &&
     !account.saving &&
     !account.dirty &&
     !reconciliationRequired,
@@ -332,6 +356,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
         await profileApi.uploadPhoto(file, version);
         if (!currentActorIs(expectedUserId)) return false;
         setStagedPhoto(null);
+        stagedPhotoRef.current = null;
         setValidationError(null);
         const reconciled = await reconcileCanonicalProfile(expectedUserId);
         if (!currentActorIs(expectedUserId)) return false;
@@ -391,6 +416,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
         )
           return false;
         setStagedPhoto(null);
+        stagedPhotoRef.current = null;
         setValidationError(null);
         setPhotoGeneration((generation) => generation + 1);
         setWriteError(null);
@@ -448,6 +474,7 @@ export function ProfilePhotoProvider({ children }: PropsWithChildren) {
       selectedFileName: selectedFile?.name ?? null,
       selectedFileSize: selectedFile?.size ?? null,
       canSelect,
+      contextChangeGuard,
       canUpload,
       canRemove,
       selectFile,

@@ -1,7 +1,8 @@
 import { Card, Typography } from "antd";
 import { useAuth } from "../auth/useAuth";
 import { getAccountDisplayName } from "../account/account-labels";
-import { BranchContextSummary } from "./BranchContextSummary";
+import { BranchContextControl } from "../branch-context/BranchContextControl";
+import { BranchContextSummary } from "../branch-context/BranchContextSummary";
 import "./home.css";
 
 export function HomePage() {
@@ -25,6 +26,7 @@ export function HomePage() {
       </Card>
       <BranchContextSummary
         onRefresh={() => void auth.revalidate()}
+        selector={<BranchContextControl mode="home" />}
         user={user}
       />
     </div>
