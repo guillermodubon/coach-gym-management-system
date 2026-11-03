@@ -115,11 +115,9 @@ export function BranchEditorForm({
             label="Código de la sucursal"
             required
             validateStatus={
-              showErrors || values.code.length > 0
-                ? errors.code
-                  ? "error"
-                  : undefined
-                : undefined
+              errors.code && (showErrors || values.code.length > 0)
+                ? "error"
+                : ""
             }
             help={
               showErrors || values.code.length > 0 ? errors.code : undefined
@@ -148,9 +146,7 @@ export function BranchEditorForm({
               : undefined;
           return (
             <Form.Item
-              className={
-                field.fullWidth ? "cg-branch-editor-field--full" : undefined
-              }
+              className={field.fullWidth ? "cg-branch-editor-field--full" : ""}
               htmlFor={field.name}
               key={field.name}
               label={field.label}
@@ -158,7 +154,7 @@ export function BranchEditorForm({
                 field.name === "name" ||
                 (field.name === "timezone" && mode === "update")
               }
-              validateStatus={error ? "error" : undefined}
+              validateStatus={error ? "error" : ""}
               help={error}
             >
               <Input
@@ -175,7 +171,7 @@ export function BranchEditorForm({
                 onChange={(event) =>
                   onFieldChange(field.name, event.target.value)
                 }
-                type={field.name === "email" ? "text" : undefined}
+                type="text"
                 value={values[field.name]}
               />
             </Form.Item>
